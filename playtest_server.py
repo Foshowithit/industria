@@ -142,7 +142,24 @@ def main():
     Handler.quiet = args.quiet
 
     url = f"http://127.0.0.1:{args.port}/{args.page}?rec={args.label}"
-    httpd = Server(("127.0.0.1", args.port), Handler)
+    try:
+        httpd = Server(("127.0.0.1", args.port), Handler)
+    except OSError as exc:
+        # This used to escape as a bare traceback, which is dangerous rather
+        # than merely ugly: if the port is held by some *other* server (a plain
+        # `python3 -m http.server`, say), the game still loads and still plays,
+        # so the session looks like it is working — but nothing answers /__rec,
+        # so the recorder's POSTs 404 and the entire human session is lost with
+        # no error anywhere the facilitator would see. Fail loudly instead.
+        sys.exit(
+            f"\n  CANNOT START: port {args.port} is already in use ({exc}).\n\n"
+            f"  Do NOT run a session against whatever is already listening there.\n"
+            f"  The page may load and play normally while silently discarding every\n"
+            f"  event, because only THIS server answers /__rec.\n\n"
+            f"  Find the holder:  ss -ltnp | grep {args.port}\n"
+            f"  Then either stop it, or run on another port:\n"
+            f"      ./playtest.sh run {args.label} --port 8801\n"
+        )
 
     print(f"\n  INDUSTRIA playtest session — label {args.label!r}")
     print(f"  serving      : {REPO}")

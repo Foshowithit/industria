@@ -27,6 +27,26 @@ case "$1" in
     shift
     [ $# -ge 1 ] || { echo "need a label, e.g. ./playtest.sh run alice"; exit 1; }
     label="$1"; shift
+    # Pre-flight: refuse to start on a port something else already holds.
+    # A stray static server there still serves the game and still plays fine,
+    # so a session would look healthy while every event went nowhere. Losing a
+    # real human's session that way is unacceptable, so check before we open
+    # anything. (This actually happened during development.)
+    port=8799
+    prev=""
+    for a in "$@"; do
+      if [ "$prev" = "--port" ]; then port="$a"; fi
+      prev="$a"
+    done
+    if curl -sf -o /dev/null "http://127.0.0.1:${port}/__rec/status"; then
+      echo "  NOTE: a playtest server is already up on :${port} — reusing it."
+    elif ss -ltn 2>/dev/null | grep -q ":${port} "; then
+      echo "  CANNOT START: port ${port} is held by something that is NOT a playtest server." >&2
+      echo "  It may still serve the game, but /__rec would 404 and the session would be" >&2
+      echo "  recorded as nothing. Stop it, or pick another port:" >&2
+      echo "      ./playtest.sh run ${label} --port 8801" >&2
+      exit 1
+    fi
     exec python3 playtest_server.py --label "$label" --open "$@"
     ;;
 
@@ -66,14 +86,27 @@ case "$1" in
     started_srv=0
     if ! curl -sf -o /dev/null http://127.0.0.1:8799/index.html; then
       echo "  (starting a temporary server on :8799 for the gates)"
-      python3 playtest_server.py --label __verify --port 8799 \
-        --out "${TMPDIR:-/tmp}/industria-verify" --quiet &
+      # Detach it properly, or `verify` destroys itself:
+      #  * stdout/stderr go to a FILE. If the server inherits our stdout it holds
+      #    the pipe open, so the calling shell never sees EOF, appears to hang,
+      #    and gets reaped mid-check — which truncated this whole script into a
+      #    false "VERIFY: FAIL" with a truncation-only traceback.
+      #  * setsid puts it in its own process group so $! is the python process
+      #    itself. Backgrounding without it made $! the subshell, so the cleanup
+      #    kill below missed and every run leaked a server on :8799.
+      srv_log="${TMPDIR:-/tmp}/industria-verify-server.log"
+      setsid python3 playtest_server.py --label __verify --port 8799 \
+        --out "${TMPDIR:-/tmp}/industria-verify" --quiet \
+        >"$srv_log" 2>&1 &
       srv_pid=$!
       started_srv=1
       for _ in $(seq 40); do
         curl -sf -o /dev/null http://127.0.0.1:8799/index.html && break
         sleep 0.25
       done
+      if ! curl -sf -o /dev/null http://127.0.0.1:8799/index.html; then
+        echo "  WARNING: temporary server did not come up; see $srv_log" >&2
+      fi
     fi
     if [ -f acceptance/play_job.py ]; then
       python3 acceptance/play_job.py || fail=1

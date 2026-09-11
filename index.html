@@ -54,7 +54,13 @@
   #ev{left:50%;top:76px;transform:translateX(-50%);text-align:center;font-size:13px;color:var(--warn)}
   #ev div{margin:3px 0}
 
-  #log{left:16px;bottom:16px;width:min(430px,40vw);max-height:30vh;overflow:hidden;
+  /* #log is a bottom-left column; #talk is a centred column. Left uncapped they
+     CROSS, and #log paints later so it wins — measured 7808 px² of overlap at
+     1280x760 printing the log's long pass lines straight over the dialogue.
+     Cap the log's width just short of the dialogue's left edge so the two
+     columns can never meet. 50vw = half the #talk max-width (min(620px,86vw));
+     the 24px is the gutter. Verified 0 overlap at 1280/1366/1440/1920. */
+  #log{left:16px;bottom:16px;max-width:calc(50vw - min(310px,43vw) - 24px);max-height:30vh;overflow:hidden;
     display:flex;flex-direction:column-reverse;gap:2px;font-size:12px}
   #log div{color:var(--dim)}
   #log div b{color:var(--ink);font-weight:500}
@@ -805,8 +811,8 @@ function doCut() {
     `Measure it if you want to know where it actually is.`);
   if (rec.n === 1) toast(`<b>${info.colour_name} chip.</b> ${(info.t2_mm * 1000).toFixed(0)} µm thick ` +
     `— the dial said ${rec.bite_cmd_um.toFixed(0)}.`, 4600);
-  if (rec.n === 4) toast(`Every pass has cost you <b>${surplus.toFixed(1)} µm</b> more wall than the dial promised. ` +
-    `The surplus is a constant, not a percentage.`, 5200);
+  if (rec.n === 4) toast(`Every pass leaves the wall <b>${Math.abs(surplus).toFixed(1)} µm thicker</b> than the dial promised. ` +
+    `The surplus is a constant, not a percentage — the dial over-promises, so you must dial MORE than you want.`, 5200);
   if (phase === 'ARRIVE' || phase === 'MEASURE') phase = 'CUTTING';
 }
 function doInspect() {

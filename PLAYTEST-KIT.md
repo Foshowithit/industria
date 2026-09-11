@@ -196,6 +196,7 @@ passing. Either one alone is not enough.
 | Symptom | Fix |
 |---|---|
 | Browser doesn't open | Go to the URL the runner printed, by hand. |
+| **"CANNOT START: port 8799 is held by something that is NOT a playtest server"** | Exactly what it says. Some other server is on that port. It might still serve the game — but it does not accept the event log, so the session would be **recorded as nothing**. Stop it, or run with `--port 8801`. Never play a session against a port you did not start. |
 | "Nothing to measure with" | Genuine — they need to pick up the calipers. Do **not** tell them. Note it. |
 | No session file written | Check the label matched: `ls ~/industria-sessions/`. The runner prints the row count when it exits. |
 | Analysis says `UNSAMPLED` gaps | The heartbeat did not record during a gap. Rare; the timeline is still valid. |
