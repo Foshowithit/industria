@@ -22,6 +22,7 @@ vendored under `vendor/` and pinned by SHA-256. Open it on a plane.
 | `recorder.mjs` | The event log. Off unless the URL carries `?rec=…`, so the public build is unaffected. |
 | `analyse_session.py` | Reads a session file and reports what the player actually understood. |
 | `debrief-novice.md` / `debrief-machinist.md` | Post-session capture forms. |
+| `tools/causal-kernel.html` | **Physics workbench, not a player surface.** Drives `kernel.mjs` directly and shows the arithmetic behind each cut — why a number moved, not just what it is. Not linked from the game. |
 
 ### Running a playtest
 
