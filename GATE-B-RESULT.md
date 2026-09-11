@@ -224,3 +224,40 @@ before it.
 - This re-verification is of the build at `1351fa5`. **Uncommitted edits were in the working
   tree at the time** (`index.html` among them). If those ship, this addendum ages too, and
   the honest fix is to re-run rather than to extend the pin.
+
+---
+
+## A CORRECTION THE DELETED SENTENCE HAD BEEN HIDING (2026-09-11, `cad98a6`)
+
+Removing the pass-4 rule statement, as the design lead ordered, exposed that **the statement
+was wrong.** Measured across the full dial range, one fresh job per row:
+
+| dial µm | removed µm | surplus µm | surplus ÷ dial |
+|---|---|---|---|
+| 10 | 9.79 | −0.21 | −2.1 % |
+| 20 | 19.57 | −0.43 | −2.1 % |
+| 50 | 48.94 | −1.06 | −2.1 % |
+| 100 | 97.87 | −2.13 | −2.1 % |
+| 200 | 195.75 | −4.25 | −2.1 % |
+| 400 | 391.49 | −8.51 | −2.1 % |
+
+The surplus is **exactly proportional to the dial** — 2.1 % of it, at every size. The deleted
+toast asserted the opposite: *"The surplus is a constant, not a percentage."* It is a
+percentage and not a constant.
+
+The nuance the Part 1 note records is still true and is the likely origin of the error: over
+the *narrow band the dial actually offers* (10–400 µm), the percentage of a small dial is a
+small number, so `+0.4 µm at 80 µm` really does look like `~0 %` while a 1 µm bite really does
+produce a 247 % surplus — the ratio only blows up as the bite approaches zero. Someone
+generalised the middle of the curve into a constant rule and shipped it.
+
+**So the game spent this round teaching a false model, in text, to a player it had not yet
+asked to form any model at all.** The mechanic that replaced it shows the arithmetic
+(−0.21, −0.43, −1.06 …) and states nothing. A player reading those numbers can find the 2.1 %
+themselves; a player reading the old sentence would have learned "dial MORE than you want" —
+the right answer by the wrong method, on a range too narrow to expose the difference.
+
+This is worth recording as more than a bug fix. The §107 failure this project keeps
+circling — *players learn the sequence, not the relationship* — had been **implemented in the
+game's own copy**, and the fix was not to explain the relationship more clearly. It was to stop
+writing the conclusion down.
