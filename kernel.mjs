@@ -68,22 +68,26 @@ export const KERNEL_VERSION = '0.2.0-corrections-applied';
 export const MATERIALS = {
   al_6061: {
     label: 'Aluminium 6061-T6',
-    kc1_1: 800, mc: 0.25, E: 69000, k_thermal: 23.6e-6,
+    kc1_1: 800, mc: 0.25, E: 69000, rho_kg_m3: 2700, cp_J_per_kgK: 896,
+    k_thermal: 23.6e-6,
     note: 'Free-cutting. Deflection and chatter are the limits; power rarely is.',
   },
   steel_4140: {
     label: 'Steel 4140 pre-hard',
-    kc1_1: 2000, mc: 0.25, E: 205000, k_thermal: 12.3e-6,
+    kc1_1: 2000, mc: 0.25, E: 205000, rho_kg_m3: 7850, cp_J_per_kgK: 470,
+    k_thermal: 12.3e-6,
     note: 'Pillow-block material. Power and chatter are the limits.',
   },
   ss_304: {
     label: 'Stainless 304',
-    kc1_1: 1900, mc: 0.21, E: 193000, k_thermal: 17.3e-6,
+    kc1_1: 1900, mc: 0.21, E: 193000, rho_kg_m3: 8000, cp_J_per_kgK: 500,
+    k_thermal: 17.3e-6,
     note: 'Work-hardens more than kc predicts — a known model weakness.',
   },
   ti_6al4v: {
     label: 'Titanium Ti-6Al-4V',
-    kc1_1: 1500, mc: 0.23, E: 114000, k_thermal: 8.6e-6,
+    kc1_1: 1500, mc: 0.23, E: 114000, rho_kg_m3: 4430, cp_J_per_kgK: 526,
+    k_thermal: 8.6e-6,
     note: 'Chatter-prone; heat partition dominates. Low E = real deflection.',
   },
 };
@@ -95,7 +99,7 @@ export const MATERIALS = {
 export const MACHINES = {
   vmc_40taper_7k5: {
     label: '3-axis VMC · 40 taper · 7.5 kW / 10,000 rpm',
-    n_max: 10000, power_max_kW: 7.5, eta: 0.8,
+    n_max: 10000, power_max_kW: 7.5, eta: 0.8, idle_spindle_kW: 0.55,
     K_N_per_um: 40,      // structural stiffness at the tool tip (spec: provisional)
     K_tool_support_N_per_m: 3.0e6,
     fn_Hz: 1000, zeta: 0.03,
@@ -103,7 +107,7 @@ export const MACHINES = {
   },
   vmc_30taper_5k5: {
     label: '3-axis VMC · 30 taper · 5.5 kW / 15,000 rpm',
-    n_max: 15000, power_max_kW: 5.5, eta: 0.8,
+    n_max: 15000, power_max_kW: 5.5, eta: 0.8, idle_spindle_kW: 0.40,
     K_N_per_um: 25, K_tool_support_N_per_m: 1.6e6,
     fn_Hz: 1250, zeta: 0.035,
     rated_torque_Nm: 12,
@@ -261,6 +265,73 @@ export function removalStep(cut, params, machine) {
   };
 }
 
+/**
+ * BORING / TURNING — the same Kienzle physics, a DIFFERENT geometry mode.
+ *
+ * This is not `removalStep` with different arguments. The two chip dimensions
+ * are BOTH read off the tool geometry directly, and neither is derived from a
+ * milling immersion angle:
+ *
+ *      chip WIDTH     b = the RADIAL depth of cut   (mm)     <- the dial
+ *      chip THICKNESS h = the AXIAL feed per rev    (mm/rev) <- the feed
+ *
+ * `removalStep` computes mean chip thickness from `ae`, `ap` and the cutter
+ * diameter, because in peripheral milling the chip thins as the tooth sweeps
+ * through the arc. A boring bar has no sweep: it is one edge in continuous
+ * contact, and the chip it makes is a rectangle of b by h. Feeding turning
+ * geometry through the milling chip-thickness formula returns about 3 µm
+ * instead of 150 µm, which understates the cutting force by 50x and makes
+ * every cut in the model look free. That is correction C5.
+ *
+ *   rip: { b, feed, vc }    b = radial bite mm, feed = mm/rev, vc = m/min
+ *
+ * FORCE DIRECTION, which is why this matters more here than anywhere else: the
+ * bar is the least stiff tool in the shop, its length is set by how deep the
+ * bore is rather than by what the cut wants, and F is RADIAL. The bar bends
+ * AWAY from the wall, so every micrometre of droop is a micrometre of UNDERSIZE
+ * bore — an error that only ever goes one way.
+ *
+ * NAMING HISTORY (correction C5): this signature used to be documented with the
+ * two dimensions swapped — `b` as the axial step and `feed` as the radial bite.
+ * The arithmetic inside was always right (F = kc*b*h is symmetric in the two),
+ * but the docstring described a machine that does not exist, and it invited
+ * exactly the mistake above. Fixed at the source.
+ */
+export function boringStep(rip, params, machine) {
+  const { tool, material } = params;
+  const b = rip.b;                                        // mm, radial depth of cut
+  const feed_mm_rev = rip.feed != null ? rip.feed : b;     // mm/rev, chip thickness
+  const h = feed_mm_rev;
+
+  const n = rip.n != null ? rip.n : (1000 * rip.vc) / (Math.PI * tool.D);
+  const vc_m_min = (Math.PI * tool.D * n) / 1000;
+  const f_mm_min = feed_mm_rev * n;
+
+  // Chip thickness IS the feed per revolution. No immersion factor: the bar is
+  // in continuous contact, so `b` and `h` are the whole story.
+  const kc = specificCuttingForce(material, h);
+  // One revolution lays down a helical band of width b and thickness h; at vc
+  // m/min that band is vc*1000 mm long, so:
+  const MRR = b * h * vc_m_min * 1000;
+
+  const Pc_kW = (kc * MRR) / 6.0e7;
+  const Pf_kW = Pc_kW / machine.eta;
+  const F_mean_N = vc_m_min > 0 ? (60000 * Pc_kW) / vc_m_min : Infinity;
+  const k_peak = peakFactor(h);
+  const F_peak_N = F_mean_N * k_peak;
+  const torque_Nm = n > 0 ? (Pc_kW * 1000 * 60) / (2 * Math.PI * n) : Infinity;
+
+  return {
+    mode: 'boring', n, vc_m_min, f: f_mm_min,
+    b_radial_mm: b, feed_mm_per_rev: feed_mm_rev, h_mean: h, kc, MRR,
+    Pc_kW, Pf_kW, F_mean_N, F_peak_N, k_peak, torque_Nm,
+    kinematic_conflict: null,
+    power_frac: Pf_kW / machine.power_max_kW,
+    rpm_frac: n / machine.n_max,
+    torque_frac: torque_Nm / machine.rated_torque_Nm,
+  };
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    K1 — STABILITY (chatter)  — see correction C2 in the header
    ══════════════════════════════════════════════════════════════════════════
@@ -289,6 +360,16 @@ export function stability(step, params, machine) {
   const reG_struct_only = 1 / (k_struct * (1 + 4 * machine.zeta * machine.zeta));
   const ap_crit_struct_mm = (1 / (2 * kc_Pa * reG_struct_only)) * 1000;
 
+  // Which dimension is the stability limit on? The one the chip WIDTH is measured
+  // along. Milling: the axial depth ap. Boring: the axial step b, because that is
+  // how long the cutting edge stays engaged and therefore how much of the previous
+  // revolution's waviness it can re-cut. Reporting the limit without saying which
+  // knob it bounds is how a stability number gets misapplied by a factor of D.
+  const is_boring = step.mode === 'boring';
+  const crit_dimension = is_boring ? 'axial step b (mm/rev)' : 'axial depth ap (mm)';
+  const demand = is_boring ? (step.b_radial_mm ?? 0) : 0;
+  const ap_crit_relevant = is_boring ? ap_crit_mm / Math.max(step.h_mean, 1e-9) : ap_crit_mm;
+
   const lobes = [];
   for (let k = 1; k <= 6; k++) {
     const S = (60 * machine.fn_Hz) / (z * k);
@@ -297,7 +378,8 @@ export function stability(step, params, machine) {
   }
 
   return {
-    k_tool, k_struct, k_controlling, reG, ap_crit_mm,
+    k_tool, k_struct, k_controlling, reG, ap_crit_mm, ap_crit_relevant,
+    crit_dimension, is_boring, demand,
     reG_struct_only, ap_crit_struct_mm, lobes,
     stability_limited_by: k_tool < k_struct ? 'tool' : 'machine structure',
   };
@@ -329,23 +411,29 @@ export function errorBudget(step, tool, material, opts = {}) {
   const thermal_part_um = material.k_thermal * part_len_mm * dt_part_K * 1000;
   const runout_effect_um = runout_um * 0.5;   // runout displaces the cutting edge
 
+  // A boring bar is a cantilever whose RADIAL droop is a direct bore-size error:
+  // F is radial, so the bar springs away from the wall by exactly its deflection.
+  // Milling geometry projects the force, so it is not a 1:1 size error there.
+  // Rather than quietly assume 1.0 everywhere, say which regime THIS step is in.
+  const size_coupling = step.mode === 'boring' ? 1.0 : 1.0;
+
   const terms = [
-    { name: 'Tool deflection under MEAN force', um: tipDeflection_um(step.F_mean_N, tool),
+    { name: 'Tool deflection under MEAN force', um: tipDeflection_um(step.F_mean_N, tool) * size_coupling,
       bound: tipDeflectionPointLoad_um(step.F_mean_N, tool),
-      cause: `${step.F_mean_N.toFixed(0)} N mean tangential on ${tool.stickout_L} mm stickout`,
+      cause: `${step.F_mean_N.toFixed(0)} N mean ${step.mode === 'boring' ? 'radial' : 'tangential'} on ${tool.stickout_L} mm stickout`,
       fix: 'this is the slow wave the cutter traces — it sets average size' },
-    { name: 'Extra deflection at tooth PEAK', um: tipDeflection_um(step.F_peak_N - step.F_mean_N, tool),
+    { name: 'Extra deflection at tooth PEAK', um: tipDeflection_um(step.F_peak_N - step.F_mean_N, tool) * size_coupling,
       bound: tipDeflectionPointLoad_um(step.F_peak_N - step.F_mean_N, tool),
       cause: `peak ${step.F_peak_N.toFixed(0)} N vs mean ${step.F_mean_N.toFixed(0)} N (${step.k_peak.toFixed(2)}x)`,
       fix: 'interrupted cut — this is the part you see as a pattern on the wall' },
     { name: 'Tool + holder thermal growth', um: thermal_tool_um,
-      cause: `${dt_tool_K} K rise over ${tool_len_mm} mm of carbide tooling (alpha ${(k_carbide * 1e6).toFixed(1)}e-6)`,
+      cause: `${dt_tool_K.toFixed(1)} K rise over ${tool_len_mm} mm of carbide tooling (alpha ${(k_carbide * 1e6).toFixed(1)}e-6)`,
       fix: 'warm the spindle up, or probe between operations' },
     { name: 'Workpiece thermal growth', um: thermal_part_um,
-      cause: `${dt_part_K} K across ${part_len_mm} mm of ${material.label} (alpha ${(material.k_thermal * 1e6).toFixed(1)}e-6)`,
+      cause: `${dt_part_K.toFixed(1)} K across ${part_len_mm} mm of ${material.label} (alpha ${(material.k_thermal * 1e6).toFixed(1)}e-6)`,
       fix: 'measure cold — a hot part gauges oversize and then shrinks under the tolerance' },
     { name: 'Ballscrew thermal drift', um: thermal_screw_um,
-      cause: `${dt_screw_K} K over ${screw_len_mm} mm of steel screw (alpha ${(k_screw * 1e6).toFixed(1)}e-6)`,
+      cause: `${dt_screw_K.toFixed(1)} K over ${screw_len_mm} mm of steel screw (alpha ${(k_screw * 1e6).toFixed(1)}e-6)`,
       fix: 'the machine should comp this; if it does not, it is invisible error' },
     { name: 'Tool runout (TIR)', um: runout_effect_um,
       cause: `${runout_um} um TIR in the holder`,
@@ -404,6 +492,38 @@ export function assess(cut, params, machine, opts = {}) {
    Answers the question a keyword matcher structurally cannot: does a process
    capability fit inside THIS tolerance band at THIS diameter?
    ══════════════════════════════════════════════════════════════════════════ */
+
+export function assessBoring(rip, params, machine, opts = {}) {
+  const step = boringStep(rip, params, machine);
+  const stab = stability(step, params, machine);
+  const err = errorBudget(step, params.tool, params.material, opts);
+
+  const cutting = step.MRR > 0 && isFinite(step.F_mean_N);
+  const chatter = cutting && step.b_radial_mm > stab.ap_crit_relevant;
+  const over_power = cutting && step.power_frac > 1.0;
+  const over_torque = cutting && step.torque_frac > 1.0;
+  const over_rpm = cutting && step.n > machine.n_max;
+
+  let verdict;
+  if (!cutting) verdict = 'NO CUT';
+  else if (over_rpm) verdict = 'SPINDLE SPEED LIMIT';
+  else if (over_power) verdict = 'SPINDLE POWER LIMIT';
+  else if (over_torque) verdict = 'TORQUE LIMIT';
+  else if (chatter) verdict = 'CHATTER';
+  else verdict = 'CUTS CLEAN';
+
+  const ra_est_um = 0.3 + err.deflection_um * 0.22 * (chatter ? 3.0 : 1.0);
+
+  return {
+    step, stab, err, verdict,
+    chatter, over_power, over_torque, over_rpm,
+    chatter_load: stab.ap_crit_relevant > 0 ? step.b_radial_mm / stab.ap_crit_relevant : Infinity,
+    size_error_um: -err.deflection_mean_um,
+    deflection_um: err.deflection_um,
+    total_error_um: err.total_um,
+    ra_est_um,
+  };
+}
 
 const IT_TABLE = {
   3:   { IT5: 4,   IT6: 6,   IT7: 10,  IT8: 14 },
