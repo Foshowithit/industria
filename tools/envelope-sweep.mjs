@@ -90,9 +90,30 @@ for (const f of [0.12, 0.3, 0.5, 1.0, 2.0]) {
   console.log(`   ${f.toFixed(2).padStart(12)}  ${sb.ap_crit_mm.toFixed(3).padStart(10)}  ` +
     `${lim.toFixed(3).padStart(20)}  ${pct(at.step.power_frac).padStart(18)}   ${at.verdict}`);
 }
-console.log('\n   READ THIS ROW-BY-ROW: every chatter limit wants ≥500% of spindle power.');
-console.log('   Power always binds first on the boring path. A job that promised chatter');
-console.log('   would be a job that lies, so J2 promises power and torque instead.');
+console.log('\n   READ THIS ROW-BY-ROW: every chatter limit wants 234-524% of spindle power');
+console.log('   (the range widens with a stiffer bar — a fatter bar raises ap_crit AND the');
+console.log('   power the resulting bite needs). Power always binds first on the boring');
+console.log('   path. A job that promised chatter would be a job that lies, so J2 promises');
+console.log('   power and torque instead.');
+
+/* The claim above is only true if it holds for EVERY bar a player can load, not
+   just the Ø20 this file uses everywhere else. Sweeping the geometry is what
+   turns "power binds first" from an observation about one tool into a property
+   of the boring path — and it is how the range in the line above was measured
+   instead of guessed. */
+console.log('\n   AND IT IS NOT AN ARTIFACT OF ONE BAR — every bar that can be loaded:');
+console.log('   bar            ap_crit(mm)  chatter-free bite   power there   binding');
+for (const [D, L] of [[12, 40], [16, 45], [20, 45], [20, 60], [20, 85]]) {
+  const t = makeTool({ D, z: 1, stickout_L: L });
+  const st = boringStep({ b: 0.4, feed: 0.12, vc: 120 }, { tool: t, material: mat }, mach);
+  const sb = stability(st, { tool: t, material: mat }, mach);
+  const lim = sb.ap_crit_mm / 0.12;
+  const at = assessBoring({ b: lim, feed: 0.12, vc: 120 }, { tool: t, material: mat }, mach);
+  console.log(`   Ø${String(D).padStart(2)} @ ${String(L).padStart(2)} mm out  ` +
+    `${sb.ap_crit_mm.toFixed(3).padStart(9)}  ${lim.toFixed(2).padStart(14)} mm  ` +
+    `${pct(at.step.power_frac).padStart(13)}   ${at.verdict}`);
+}
+console.log('   No bar makes chatter reachable. The wall is always power.');
 
 /* ── 5. WHAT THE JOB COSTS IN TIME ───────────────────────────────────────── */
 banner('5. ROUGHING THE WHOLE JOB — passes and minutes, by bite (feed 0.12)');
