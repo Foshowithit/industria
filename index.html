@@ -26,6 +26,13 @@
   #tr{top:14px;right:16px;text-align:right;font-size:12px;color:var(--dim)}
   #tr b{color:var(--ink);font-weight:500}
   #tr .band{color:var(--ink)}
+  /* the shop floor, as four counts. Never a verdict, never a diameter. */
+  #tr .floor{margin-top:7px;padding-top:6px;border-top:1px solid #2a333d;
+    font-size:11px;line-height:1.5;text-align:right}
+  #tr .floor s{text-decoration:none;color:var(--dim)}
+  #tr .floor b{font-weight:500}
+  #tr .floor .vanout{color:var(--warn)}
+  #tr .floor .vandone{color:var(--bad)}
 
   /* the hover label — the only thing that tells you a thing is a thing */
   #look{left:50%;top:calc(50% + 26px);transform:translateX(-50%);text-align:center;font-size:13px}
@@ -116,6 +123,17 @@
   <div>GAUGE <b id="hGauge">—</b></div>
   <div>BAND <b class="band" id="hBand">—</b></div>
   <div style="margin-top:5px" id="hMoney">—</div>
+  <!-- ── ROUND 9: THE FLOOR, ON SCREEN AND NOT IN A LEDGER ───────────────
+       The pass condition says the new state must be observable WITHOUT
+       reading a ledger. `#hFloor` is the compromise that keeps that honest:
+       it is not a ledger — it is not a list of charges, and it never shows a
+       verdict, a diameter or a score. It is four COUNTS of physical objects
+       (castings in the crate, parts on the rack, parts in the bin, parts
+       already collected) plus the van's own deadline. Every one of those
+       numbers is also a thing you can walk up to and look at, and if this
+       line and the scene ever disagreed, the scene is right and this is the
+       bug. It is capped at two rows so it can never become a dashboard. -->
+  <div id="hFloor" class="floor"></div>
 </div>
 
 <div class="hud" id="look"><span class="nm" id="lkName"></span><div class="act" id="lkAct"></div></div>
@@ -161,11 +179,25 @@ const REC = RECmod.isRecording() ? RECmod : null;
 const $ = (id) => document.getElementById(id);
 const cl = (v, a, b) => Math.min(b, Math.max(a, v));
 
+/** How many castings the crate DRAWS, which is not the same as how many it
+ *  holds once one is on the table. The crate object is the shop's, so the
+ *  count is the shop's count and the machine does not borrow from it. */
+function crateMeta() {
+  const n = GAME ? GAME.stock_on_hand : 3;
+  return { shown: cl(n, 0, 3), n };
+}
+
 /* ── STATE ──────────────────────────────────────────────────────────────── */
 let GAME = null;                       // the kernel's game state
 const clocks = { world_min: 0, job_min: 0, job_taken: false };
 let START_SHIFT_MIN = 355;             // 05:55
 const SEEN = { any: false, measured: false, corrected: false };  // §53 layers
+/* Round 9. `GONE_SENT` is a cached fact, not a second source of truth: the
+   van takes a part out of the shop and the part register then holds it as
+   GONE, which is invisible to a shelf. The page keeps one boolean so a
+   sentence about the bay still reads correctly after the rack is empty, and
+   it is written only by `courierBeat()`, only from the courier's own result. */
+let GONE_SENT = false;
 const CARRIED = { calipers: false, parallels: false, traveler: false };
 /* The ONLY diameter the player is ever allowed to see. Gauge resolution is
    finite and the reading goes stale the moment you cut — both by design. */
@@ -345,6 +377,134 @@ function buildPartMesh(dia_mm, depth_mm) {
   return PART.mesh;
 }
 buildPartMesh(36, 30);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ROUND 9 — THE FLOOR THE PART MOVES ACROSS
+   ══════════════════════════════════════════════════════════════════════════
+   Five objects, and each one exists because a verdict has to LAND somewhere.
+   A part cannot be "shipped" into a variable: it has to go and stand next to
+   the roll-up door where the driver can pick it up. It cannot be "scrapped"
+   into a message: it has to be in a bin. There has to be a place the casting
+   came from, or "another blank" is a number rather than a walk.
+
+   THE ONE DESIGN RULE, and it is deliberate. These objects carry PRESENCE
+   and COUNT. They do not carry SIZE. A rack that rendered each finished bore
+   to its true diameter, or a bin whose part visibly measured 0.02 mm small,
+   would hand the player the one number this game exists to withhold (§R1
+   truth-leak gate: the true bore is never rendered, before or after). A
+   machinist cannot see a 4 µm difference across a shop floor either — they
+   read it on a gauge, and the gauge is in your hand. So a part on the rack
+   looks like a part on the rack, and only the gauge says whether it fits.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* The colour of finished metal, and the colour of a part nobody wants. */
+const M_PART_GOOD = new THREE.MeshStandardMaterial({ color: 0x8f979f, roughness: 0.42, metalness: 0.82 });
+const M_PART_DEAD = new THREE.MeshStandardMaterial({ color: 0x6d6357, roughness: 0.78, metalness: 0.55 });
+const M_CRATE     = new THREE.MeshStandardMaterial({ color: 0x6b5637, roughness: 0.98, metalness: 0 });
+
+/** One casting, as an object you could pick up. Presence only — see above. */
+function partObject(parent, x, y, z, dead = false) {
+  const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g);
+  /* A Ø124 × 30 housing: a squat ring with a bore through it. The bore is
+     rendered, because a hole is what a bearing housing IS — its DIAMETER is
+     not, because that is the measurement, and the measurement is yours. */
+  const rO = 0.062, rI = 0.020;
+  const shape = new THREE.Shape(); shape.absarc(0, 0, rO, 0, Math.PI * 2, false);
+  const hole = new THREE.Path(); hole.absarc(0, 0, rI, 0, Math.PI * 2, true); shape.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.030, bevelEnabled: false, curveSegments: 24 });
+  geo.rotateX(-Math.PI / 2); geo.translate(0, 0.030, 0);
+  const m = new THREE.Mesh(geo, dead ? M_PART_DEAD : M_PART_GOOD);
+  m.castShadow = m.receiveShadow = true; g.add(m);
+  return g;
+}
+
+/* ── (1) THE HOLDING FIXTURE — the parallels the part sits on, and the one
+   object in the shop that answers "is there a part on the table?" ───────── */
+const FIXTURE = new THREE.Group();
+FIXTURE.position.set(-0.1, 1.30, 0.35); cell.add(FIXTURE);
+const fixtureParallels = new THREE.Group(); FIXTURE.add(fixtureParallels);
+for (const sx of [-0.075, 0.075]) box(0.05, 0.014, 0.09, M.steel, sx, -0.012, 0, fixtureParallels);
+/* the two step clamps, thrown back off the part when it comes out */
+const clampL = box(0.05, 0.02, 0.05, M.brass, -0.12, 0.012, 0, FIXTURE);
+const clampR = box(0.05, 0.02, 0.05, M.brass,  0.12, 0.012, 0, FIXTURE);
+fixtureParallels.visible = false; clampL.visible = clampR.visible = false;
+
+/* ── (2) THE BLANK CRATE — castings come from here, and you can count it ── */
+const CRATE = new THREE.Group(); CRATE.position.set(3.4, 0, -5.3); scene.add(CRATE);
+box(0.86, 0.5, 0.62, M_CRATE, 0, 0.25, 0, CRATE);
+box(0.92, 0.05, 0.68, M.wood, 0, 0.52, 0, CRATE);
+box(0.08, 0.34, 0.62, M_CRATE, -0.42, 0.68, 0, CRATE);
+box(0.08, 0.34, 0.62, M_CRATE,  0.42, 0.68, 0, CRATE);
+box(0.86, 0.30, 0.06, M_CRATE, 0, 0.66, -0.29, CRATE);
+const CRATE_STACK = new THREE.Group(); CRATE_STACK.position.set(0, 0.86, 0); CRATE.add(CRATE_STACK);
+/* Up to three castings are drawn in the crate. Their count is the only thing
+   that changes about this object; nothing re-sizes. */
+const crateParts = [];
+for (let i = 0; i < 3; i++) {
+  const p = partObject(CRATE_STACK, (i % 2 ? 0.19 : -0.19), (i > 1 ? 0.031 : 0), (i > 1 ? 0.02 : -0.02));
+  crateParts.push(p);
+}
+
+/* ── (3) THE FINISHED RACK — where an accepted part waits for the van ─────
+   Next to the roll-up door, because that is where a rack goes. */
+const RACK = new THREE.Group(); RACK.position.set(5.2, 0, -13.2); scene.add(RACK);
+box(0.08, 1.05, 0.08, M.dark, -1.0, 0.53, -0.32, RACK);
+box(0.08, 1.05, 0.08, M.dark,  1.0, 0.53, -0.32, RACK);
+box(0.08, 1.05, 0.08, M.dark, -1.0, 0.53,  0.32, RACK);
+box(0.08, 1.05, 0.08, M.dark,  1.0, 0.53,  0.32, RACK);
+box(2.2, 0.05, 0.8, M.steel, 0, 0.55, 0, RACK);       // the shelf
+box(2.2, 0.05, 0.8, M.steel, 0, 1.02, 0, RACK);       // the shelf above
+for (const s of [0.55, 1.02]) box(2.2, 0.10, 0.04, M.warn, 0, s + 0.12, -0.42, RACK);
+/* A painted board: the drop the van is on. Speech and paint only, no meter. */
+box(0.70, 0.44, 0.03, new THREE.MeshStandardMaterial({ color: 0x2b3138, roughness: 0.9 }),
+    0, 1.55, -0.40, RACK);
+box(0.62, 0.02, 0.035, M.warn, 0, 1.70, -0.40, RACK);
+box(0.40, 0.02, 0.035, new THREE.MeshStandardMaterial({ color: 0xc9cdd2, roughness: 1 }),
+    0, 1.44, -0.40, RACK);
+const RACK_SLOT_X = [-0.72, -0.24, 0.24, 0.72];
+const rackObjects = RACK_SLOT_X.map((x) => {
+  const p = partObject(RACK, x, 0.578, 0, false); p.visible = false; return p;
+});
+
+/* ── (4) THE SCRAP BIN — and the material really is gone ──────────────── */
+const SCRAPBIN = new THREE.Group(); SCRAPBIN.position.set(-2.6, 0, -9.4); scene.add(SCRAPBIN);
+box(0.8, 0.62, 0.62, M.rust, 0, 0.34, 0, SCRAPBIN);
+box(0.86, 0.06, 0.68, M.dark, 0, 0.67, 0, SCRAPBIN);
+const scrapObjects = [];
+for (let i = 0; i < 4; i++) {
+  /* Dead parts go in on their side, at an angle, the way you throw one in. */
+  const p = partObject(SCRAPBIN, (i % 2 ? 0.13 : -0.13), 0.50, (i > 1 ? 0.1 : -0.1), true);
+  p.rotation.z = (i % 2 ? 1 : -1) * 1.35; p.rotation.y = i * 0.7;
+  p.visible = false; scrapObjects.push(p);
+}
+
+/* ── (5) THE COURIER'S SLOT ON THE APRON, OUTSIDE THE DOOR ────────────────
+   A painted bay and a board, past the roll-up door, in the world's own
+   -Z. It is outside the shop on purpose: the van is not part of the shop,
+   it is the thing the shop is on the clock for. */
+const APRON = new THREE.Group(); APRON.position.set(5.4, 0, -17.4); scene.add(APRON);
+const bayMark = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 5.4), M.aisle);
+bayMark.rotation.x = -Math.PI / 2; bayMark.position.y = 0.008; bayMark.receiveShadow = true;
+APRON.add(bayMark);
+box(0.10, 2.0, 0.10, M.dark, -1.6, 1.0, -1.6, APRON);
+box(0.70, 0.40, 0.04, new THREE.MeshStandardMaterial({ color: 0x1f2a33, roughness: 0.9 }),
+    -1.6, 2.0, -1.6, APRON);
+box(0.60, 0.02, 0.045, M.steel, -1.6, 2.13, -1.6, APRON);
+box(0.36, 0.02, 0.045, M.steel, -1.6, 1.93, -1.6, APRON);
+/* The van itself, dark and unlit, parked down the yard until its hour comes.
+   It has been in the world all along; round 9 is when it starts moving. */
+const VAN = new THREE.Group(); VAN.position.set(5.4, 0, -22.5); VAN.rotation.y = 0.0; scene.add(VAN);
+const M_VAN = new THREE.MeshStandardMaterial({ color: 0x4a5560, roughness: 0.62, metalness: 0.25 });
+box(2.2, 1.0, 4.6, M_VAN, 0, 0.95, 0, VAN);          // box body
+box(2.05, 0.72, 1.5, M_VAN, 0, 0.80, 2.9, VAN);      // cab
+const vanW = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.5), M.glass);
+vanW.position.set(0, 1.55, 2.28); VAN.add(vanW);
+for (const [wx, wz] of [[-1.0, 1.9], [1.0, 1.9], [-1.0, -1.5], [1.0, -1.5]]) {
+  const w = cyl(0.32, 0.32, 0.16, M.dark, 16); w.rotation.z = Math.PI / 2;
+  w.position.set(wx, 0.32, wz); VAN.add(w);
+}
+box(2.1, 0.06, 0.5, M.warn, 0, 0.60, -2.36, VAN);    // the rear step, painted
+VAN.visible = false;                                  // it comes when it comes
 
 /* ── THE REST OF THE SHOP — inhabited (§49), and not all of it about you ── */
 /* a second machine running someone else's job, cooling tower, blower */
@@ -767,8 +927,94 @@ for (const [id, mesh, lbl] of [['bar12', BOARDS.bar12, 'Ø12'], ['bar16', BOARDS
   }, () => true);
 }
 
-/* ── MACHINE CONTROL — only what the kernel actually models ─────────────── */
-const DIALS = [10, 20, 50, 100, 200, 400];
+/* ── ROUND 9 VERBS — the floor the part moves across ──────────────────────
+   Every one of these reads the PHYSICAL state and says what is there. None of
+   them reports a diameter, a band position, or a "score": the rack is a rack,
+   the bin is a bin, and the only instrument in the shop that measures a bore
+   is the one in your hand. */
+
+add(CRATE, 'Casting crate — Ø40 housings, as-cast', 'count them', () => {
+  const n = GAME.stock_on_hand;
+  const r = crateMeta();
+  say('You', n > 0
+    ? `${n} casting${n === 1 ? '' : 's'} in the crate. Ø${GAME.job.start_hole_dia_mm} as-cast bore, ` +
+      `${GAME.job.depth_mm} deep. Same drawing, same material.`
+    : 'The crate is empty. Whatever happens now, it happens without another casting.');
+  logLine(n > 0
+    ? `Crate: <b>${n}</b> casting${n === 1 ? '' : 's'} left. Each one is ${GAME.job.start_hole_dia_mm} mm as-cast.`
+    : 'The crate is <b>empty</b>.');
+  if (n > 0 && !SEEN.crate) {
+    SEEN.crate = true;
+    setTimeout(() => say('Earl', `\u201cThat's the crate. ${W.hhmm(G.arrivalMin(GAME.job))} is the van. ` +
+      `You get one casting in the machine at a time and there are ${n} in there. Do the arithmetic.\u201d`), 1200);
+  }
+}, () => true);
+
+add(RACK, 'Finished-part rack — by the roll-up door', 'check it', () => {
+  const rack = G.rackParts(GAME);
+  const send = rack.filter((p) => p.disposition === 'SEND');
+  const rework = rack.filter((p) => p.disposition === 'REWORK');
+  say('You', rack.length === 0
+    ? 'Empty. Four slots, nothing on them.'
+    : rack.map((p) => `${p.id} — ${p.disposition === 'SEND'
+        ? 'in spec, traveller signed, waiting for the van'
+        : 'over the top of the band, flagged for the customer to rework'}`).join('<br>'));
+  logLine(`Rack: <b>${rack.length}</b>/${GAME.rack_slots} slots — ` +
+    (rack.length ? rack.map((p) => `${p.id} (${p.disposition})`).join(', ')
+                 : 'empty') + '.');
+  logLine(`Van books ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}. ` +
+    (GAME.courier.left
+      ? (send.length || GONE_SENT ? 'It has been and gone — with the part.'
+                                  : 'It has been and gone — <b>with nothing</b>.')
+      : `${W.hhmm(G.departsMin(GAME.job))} is when it stops mattering what you are about to do.`));
+}, () => true);
+
+add(SCRAPBIN, 'Scrap bin — rust, dents, dead parts', 'look in it', () => {
+  const bin = G.binParts(GAME);
+  say('You', bin.length === 0
+    ? 'Empty, apart from the dents. Nothing of yours in there yet.'
+    : bin.map((p) => `${p.id} — ${p.under_um ? p.under_um.toFixed(1) + ' µm under.' : 'dead.'}`).join('<br>'));
+  logLine(bin.length === 0
+    ? 'Scrap bin: empty.'
+    : `Scrap bin: <b>${bin.length}</b> — ${bin.map((p) => p.id).join(', ')}. ` +
+      `That metal does not come back.`);
+}, () => true);
+
+add(FIXTURE, 'Holding fixture — parallels and two strap clamps', 'look at the setup', () => {
+  const p = GAME.part.mounted ? G.currentPart(GAME) : null;
+  const on = GAME.part.mounted;
+  say('You', on
+    ? `A casting is clamped on the parallels — ${p ? p.id : 'the current part'}. ` +
+      `Your dial is zeroed to THIS face and THIS bore.`
+    : 'Nothing on the parallels. The clamps are thrown back clear of the table, ' +
+      'and the dial reference died with the last part.');
+  logLine(on
+    ? `Fixture: <b>${p ? p.id : 'part'}</b> clamped. Dial reference is this bore.`
+    : 'Fixture: <b>empty</b>. Clamps thrown back. Touch off again — the old datum is gone.');
+}, () => true);
+
+add(APRON, 'Loading bay — one drop on the ticket', 'read the board', () => {
+  const until = G.departsMin(GAME.job) - GAME.clock_min;
+  const rack = G.rackParts(GAME);
+  say('Booked', `HALLAM COURIERS — PPI-PUMP-1<br>One collection: Halvorsen Pumps, ` +
+    `Ø${GAME.job.nominal_mm} ${GAME.job.grade} bearing housing.<br>` +
+    `Window ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}. ` +
+    `The driver does not wait.`);
+  logLine(GAME.courier.left
+    ? (rack.some((p) => p.disposition === 'SEND') || GONE_SENT
+        ? `Bay: collected at ${W.hhmm(GAME.courier.departed_at)}. A part went out.`
+        : `Bay: left at ${W.hhmm(GAME.courier.departed_at)} with nothing on the rack.`)
+    : `Bay: booked ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}. ` +
+      `${until >= 0 ? until.toFixed(0) + ' min of production left.' : 'The window has closed.'}`);
+}, () => true);
+
+add(VAN, 'Hallam Couriers — the 10:30 drop', 'look at it', () => {
+  say('You', GAME.courier.left
+    ? 'Tail-lift up, back doors shut, pulling out past the yard.'
+    : 'Diesel idling on the apron. Somebody is checking a clipboard against the drop list.');
+}, () => GAME.courier.arrived);
+
+
 let biteCmd_um = 0, stickout = 45;
 
 /* ── ROUGHING IS A DECISION, NOT A BUTTON (round 2) ─────────────────────────
@@ -785,6 +1031,12 @@ let biteCmd_um = 0, stickout = 45;
  * feed — which is the true statement about this physics (MRR = b·h·vc) and it
  * is already in the kernel. Nothing tells the player that. They find it by
  * having a move turned down. */
+/* How much metal roughing deliberately leaves on the RADIUS for the finish
+   pass, in µm. 40 µm is a real allowance on a 16 µm-wide IT6 band: it is far
+   more than the thermal drift and the surplus combined, so the finish pass is
+   always a genuine decision and never a formality. See the note in `doRough`
+   for why this replaced a fixed 8 µm offset. */
+const FINISH_ALLOWANCE_UM = 40;
 const ROUGH_BITES_MM = [0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0, 4.0];
 const ROUGH_FEEDS_MM_REV = [0.08, 0.12, 0.20, 0.30, 0.50];
 let roughBite_mm = 0.3;      /* the old hard-wired value, kept as the default */
@@ -806,6 +1058,11 @@ let roughFeed_mm_rev = 0.12; /* ditto */
  * evidence." What is gone is the interpretation. No "Notice that…", no
  * "Therefore…", no statement of the rule. */
 const PREDICTIONS = [10, 20, 50, 100, 200, 400];
+/* The FINISHING dial — small, fine, one-directional. Kept as its own ladder
+   even though it looks like PREDICTIONS, because one is a COMMAND to the
+   machine and the other is the player's stated BELIEF about what that command
+   will do, and the whole point is that they are allowed to disagree. */
+const DIALS = [10, 20, 50, 100, 200, 400];
 let predicted_um = null;
 const MACHINE_NEAR = new THREE.Vector3(0, 1.6, -7);
 
@@ -828,6 +1085,9 @@ function handleMachineKeys(e) {
   if (e.code === 'KeyW') return;  // W is also walk-forward; warm-up is Shift+W via panel
   if (e.code === 'KeyV') doWarmUp();
   if (e.code === 'Enter') doInspect();
+  /* F is "fetch a casting" — the only verb that can undo a dead part, and it
+     costs a real walk, real setup minutes and the stock itself. */
+  if (e.code === 'KeyF') doFetchBlank();
   if (e.code === 'KeyR') doRough();
   /* Round 2 roughing controls. `[`/`]` = bite, `-`/`=` = feed. Bound only at
      the machine, like every other machining verb — a feed change made from
@@ -887,6 +1147,13 @@ function machinePanel() {
    kernel's own wall-clock advance is discarded (else it is counted twice).
    NOTE: GAME is the STATE object; the functions live on the module G. */
 let opMin = 0;
+/* ROUND 9. The lowest minute the job clock is allowed to be at. State changes
+   in the game layer (fetching a casting, a re-setup) cost REAL minutes, and
+   those costs are applied to `GAME.clock_min` inside game.mjs — where they can
+   be unit-tested — rather than here. The frame loop recomputes the clock from
+   `clocks.job_min + opMin` every tick, so without this floor it would hand
+   every one of those minutes straight back on the next frame. */
+let clockFloorMin = 0;
 function kernelJob(fn, ...args) {
   const before = GAME.clock_min;
   const out = fn(GAME, ...args);
@@ -967,8 +1234,7 @@ function doWarmUp() {
  * make, and handing it over would replace the round's mechanic with arithmetic
  * the game did for them. It reports the load on the move that was ASKED for,
  * which is what a load meter does, and stops. */
-function refusalText(bite, feed, env, why, did_um) {
-  const pct = (x) => `${(x * 100).toFixed(0)}%`;
+function refusalText(bite, feed, env, why, did_um, extra_min = 0) {
   const blade = `bite <b>${bite.toFixed(2)} mm</b> at feed <b>${feed.toFixed(2)} mm/rev</b>`;
   let head;
   if (why === 'SPINDLE POWER LIMIT') head = '<b>Not enough spindle.</b>';
@@ -978,31 +1244,100 @@ function refusalText(bite, feed, env, why, did_um) {
   else if (why === 'NO STOCK') head = '<b>Nothing there to cut.</b>';
   else if (why === 'RUBBING') head = '<b>Rubbing, not cutting.</b>';
   else head = `<b>Refused: ${why}.</b>`;
-  const load = env && env.ok
-    ? `<br>That move wants <b>${pct(env.power_frac)}</b> of spindle power and ` +
-      `<b>${pct(env.torque_frac)}</b> of torque at ${env.F_mean_N.toFixed(0)} N` +
-      (did_um > 0 ? `. The last pass took ${did_um.toFixed(1)} µm.` : '.')
-    : '';
-  toast(`${head} ${blade} — ${why.toLowerCase()}.${load}`, 7000);
-  logLine(`Roughing refused: <b>${why}</b> on ${blade}.`);
+  /* ── WHAT A REFUSAL IS ALLOWED TO SAY ─────────────────────────────────
+     It says WHICH limit stopped it. It does NOT say how far past the limit
+     the command was, because that number — "wants 159 % of spindle power" —
+     is the exact free oracle this round removes: it told the player precisely
+     where the wall was, for any hypothetical, at no cost, without ever making
+     a cut. The wall is still findable; it is found by cutting, which is the
+     mechanic. The reason it is refused is still named, because a machinist
+     who trips an interlock can see which lamp lit. */
+  const cost = extra_min > 0
+    ? `<br><span style="color:#e05a4e">Asking again cost ${extra_min} min on the drive.</span>`
+    : '<br><span style="color:#8b98a6">First time, so no time lost. Try a different setting.</span>';
+  toast(`${head} ${blade} — ${why.toLowerCase()}.${cost}`, 7000);
+  logLine(`Roughing refused: <b>${why}</b> on ${blade}.` +
+    (extra_min > 0 ? ` <b>${extra_min} min</b> lost to the drive.` : ''));
 }
 
-/* ── THE LOAD METER ─────────────────────────────────────────────────────────
+/* ── THE LOAD METER, AND THE ONE ROUND 9 CHANGE TO WHAT IT WILL ANSWER ──────
  * WHY THIS EXISTS, GIVEN ROUND 1'S RULE ABOUT NOT SHOWING NUMBERS. The
  * difference is that this is not a measurement of the PART — it is a
  * measurement of the MACHINE, and a machinist without a load meter is not being
  * asked to infer anything, he is being asked to guess. Every machine in the
- * shop has one and the operator glances at it constantly.
+ * shop has one and the operator glances at it constantly. It also cannot leak
+ * the round-1 secret: that one is a diameter, and nothing here is derived from
+ * the true bore or from the surplus.
  *
- * It also cannot leak the round-1 secret. That one is a diameter; this is a
- * fraction of rated spindle power over a COMMANDED bite. Nothing here is
- * derived from the true bore or from the surplus, so the player still cannot
- * learn from it what the dial really removes — which is the thing they are
- * supposed to find out by cutting. */
+ * ── WHAT CHANGED, AND WHY THE OLD GATE IS GONE ────────────────────────────
+ * Round 8 measured an INFORMATIONAL EXPLOIT, and the design lead's ruling on
+ * it is the reason this function is now shaped the way it is:
+ *
+ *   "Don't solve free refusal by attaching an arbitrary penalty just because
+ *    spam is bad... if it is an interlock rejecting an impossible command
+ *    before motion, then zero metal and perhaps essentially zero machine
+ *    consequence may actually be correct. In that case the problem is not
+ *    physics; it is that the player receives unlimited high-quality
+ *    information for free. Solve THAT informational exploit."
+ *
+ * That is exactly what was happening. `envelope()` is a pure function of the
+ * COMMANDED bite, so this meter answered any hypothetical for free, instantly,
+ * and exactly — an unlimited oracle that told the player which side of the
+ * wall a move was on without ever making it. The refusal itself was fine. The
+ * oracle was not.
+ *
+ * A REAL INTERLOCK IS A HARDWARE LIMIT. An axis drive does not answer an
+ * interrogative; it feeds back and it faults. So:
+ *
+ *   • With no cut on record for a setting, the meter shows the CERTIFIED
+ *     RANGE of the setting itself — the bite and feed the shop says the
+ *     machine will take — and NOTHING about what that move would draw. That
+ *     is a specification plate, which every machine really has, and it is the
+ *     genuinely free information. It cannot be interrogated for an answer to
+ *     "will THIS move be refused", because it does not know what this move is.
+ *   • UNTIL THE PLAYER HAS COMMITTED, the bars for an untried setting show
+ *     the move that was ACTUALLY MADE most recently at that setting, or read
+ *     `—` if there is none. The meter reports; it does not predict.
+ *   • Attempting a refused move is FREE the first time, because a machinist
+ *     who trips an interlock once has learned something real and should not be
+ *     charged for it. Doing it AGAIN costs a minute on the drive, each time —
+ *     which is a real cost to a clock the courier is watching, and it is
+ *     charged in TIME, not in invented machine damage. Nothing here claims a
+ *     servo was harmed. See `refusalMinutes()` in people.mjs.
+ *
+ * THE NET EFFECT: the wall can still be found, and it is still found by
+ * cutting — which is the mechanic this game is named for. What is gone is the
+ * free, exact, unlimited answer to a question the player was never willing to
+ * act on.
+ */
 function loadMeterHTML() {
   if (!GAME || !GAME.tool) return '';
-  const env = G.envelope(GAME, { bite_mm: roughBite_mm, feed_mm_rev: roughFeed_mm_rev, vc: 120 });
-  if (!env || !env.ok) return '';
+  const key = `${roughBite_mm.toFixed(2)}/${roughFeed_mm_rev.toFixed(2)}`;
+  const tried = DRIVE_TRIED[key];
+  /* NOT YET TRIED — or asked for and REFUSED, which is the same thing to this
+     meter. `tried.last` is null whenever the drive has answered a setting only
+     with a refusal (see `noteDriveAttempt`: a refused move records trouble, and
+     deliberately no load). Guarding on `tried` alone therefore crashed the page
+     the moment a player tried an impossible setting and then stepped back onto
+     it: `tried` was truthy, `last` was null, and reading `power_frac` off null
+     took the whole frame loop down. A refused setting must fall through to the
+     plate exactly as an untried one does — that is not a nicety, it is the
+     whole point of not inventing a reading. */
+  if (!tried || !tried.last) {
+    /* The specification PLATE. These are ratings off the machine's own data,
+       not a computation about the move you are asking for, so showing them
+       leaks nothing the operator could not read off the door. */
+    const m = GAME.mach;
+    const plate = m
+      ? `Machine rated ${m.power_max_kW.toFixed(1)} kW / ${m.rated_torque_Nm.toFixed(0)} N·m ` +
+        `to ${m.n_max} rpm — no cut recorded at this setting.`
+      : 'No cut recorded at this setting.';
+    const bar = (label) => `<div class="lm"><i>${label}</i>` +
+      `<span class="lmt"><b style="width:0%"></b></span><em>—</em></div>`;
+    return bar('power') + bar('torque') + bar('rpm') + bar('chatter') +
+      `<div class="lmsub">bite ${roughBite_mm.toFixed(2)} feed ${roughFeed_mm_rev.toFixed(2)}<br>${plate}</div>`;
+  }
+  /* TRIED: the meter reports the last REAL cut at this setting. */
   const bar = (label, frac) => {
     const p = Math.max(0, Math.min(1, frac)) * 100;
     const over = frac > 1;
@@ -1010,10 +1345,43 @@ function loadMeterHTML() {
       `<span class="lmt"><b style="width:${p.toFixed(0)}%;background:${over ? '#c8452f' : frac > 0.85 ? '#c8962f' : '#69a84f'}"></b></span>` +
       `<em${over ? ' class="over"' : ''}>${(frac * 100).toFixed(0)}%</em></div>`;
   };
-  return bar('power', env.power_frac) + bar('torque', env.torque_frac) +
-    bar('rpm', env.rpm_frac) + bar('chatter', env.chatter_frac) +
-    `<div class="lmsub">${env.F_mean_N.toFixed(0)} N · sag ${env.sag_um.toFixed(1)} µm · ` +
-    `${env.cut_min.toFixed(2)} min/pass · bite ${roughBite_mm.toFixed(2)} feed ${roughFeed_mm_rev.toFixed(2)}</div>`;
+  const t = tried.last;
+  return bar('power', t.power_frac) + bar('torque', t.torque_frac) +
+    bar('rpm', t.rpm_frac) + bar('chatter', t.chatter_frac) +
+    `<div class="lmsub">${t.F_mean_N.toFixed(0)} N · sag ${t.sag_um.toFixed(1)} µm · ` +
+    `${t.cut_min.toFixed(2)} min/pass<br>` +
+    `<span style="opacity:.7">bite ${roughBite_mm.toFixed(2)} feed ${roughFeed_mm_rev.toFixed(2)} — ` +
+    `${tried.n} attempt${tried.n === 1 ? '' : 's'}${tried.refused && tried.refused_n ? `, ${tried.refused_n} refused` : ''}</span></div>`;
+}
+
+/* WHAT THE DRIVE HAS ACTUALLY BEEN ASKED. Keyed by setting, because that is
+   the only way "has this move been tried" is a question with one answer. A
+   REFUSED attempt records the drive's trouble, never a load — there was no
+   cut, so there is no reading, and inventing one here is exactly the
+   manufactured mechanic the design lead rejected. */
+const DRIVE_TRIED = {};
+function noteDriveAttempt(bite, feed, env, refused) {
+  const key = `${bite.toFixed(2)}/${feed.toFixed(2)}`;
+  const e = DRIVE_TRIED[key] || (DRIVE_TRIED[key] = { n: 0, refused_n: 0, refused: false, last: null });
+  e.n += 1;
+  if (refused) { e.refused = true; e.refused_n += 1; }
+  /* A READING IS ONLY EVER A CUT THAT HAPPENED.
+     `env.ok` is NOT the test, and believing it was is what leaked a full load
+     reading — `power 159% torque 119% 4757 N` — for a 4 mm bite at 0.5 mm/rev
+     that the machine had just REFUSED. `envelope()` returns `ok:true` for every
+     well-formed question it can compute an answer to, including impossible
+     ones, because `ok` there means "I understood the question", not "the
+     machine will do it". The field that means the latter is `would_cut`, and it
+     is set from the same `assessBoring` call that the refusal itself comes
+     from, so the two cannot disagree.
+
+     This is the difference between a load meter and an oracle. A meter reads a
+     cut; an oracle answers hypotheticals. Handing the player `power_frac` and
+     `F_mean_N` for a move they have not made is the whole informational exploit
+     the design lead ruled against — you would never need to risk a cut again,
+     you would just dial until the preview said 99 %. */
+  if (env && env.would_cut && !refused) e.last = env;
+  return e;
 }
 function refreshLoadMeter() {
   const el = document.querySelector('[data-lmhost]');
@@ -1052,7 +1420,22 @@ function doRough() {
   if (!g.tool) { if (REC) REC.refusal('rough', 'NO_TOOL', { clock_min: g.clock_min }); return say('You', 'Load a bar first — they\u2019re on the board.'); }
   g.machine.spindle_on = true;
   if (g.machine.edgeR_cold_mm === null) doTouchOff();
-  /* leave a real allowance: roughing is repeats, not decisions (§77) */
+  /* ── LEAVE A REAL ALLOWANCE. "REAL" IS THE WHOLE WORD. ────────────────────
+     This used to be `band_high_mm - 0.008`, which LOOKS like an allowance and
+     is not one. The realised bite runs hot by the surplus — that is the
+     mechanic — so a 0.25 mm roughing pass removes measurably more than it
+     commands, and the run sailed 3.4 µm PAST its own target and straight into
+     the band. The measured consequence: roughing finished the part, the
+     finish pass was skipped, and J1 was ACCEPTED without the player ever
+     making the one decision the round measures. A roughing routine that
+     silently completes the job is the same class of lie as a ship that does
+     not unmount the part.
+     So the allowance is now derived from what the job actually needs: enough
+     that the finish pass has something to do, expressed in the units of the
+     band the part must land in. `FINISH_ALLOWANCE_UM` is a radius figure, the
+     same convention the dial uses, and it is deliberately larger than the
+     thermal growth plus the surplus a typical finish pass carries — the part
+     is left ROUGHED, which is what roughing is for. */
   const diaBefore = g.part.holeDia_cold_mm;
   /* ── ROUND 2: ROUGHING IS NO LONGER A FIXED MOVE ─────────────────────────
    * On J1 this was hard-wired to 0.3 mm at 0.12 mm/rev and it was the right
@@ -1068,7 +1451,8 @@ function doRough() {
      rather than a bare "no". `envelope` uses assessBoring — the same function
      the cut refuses on — so the preview and the refusal cannot disagree. */
   const env = G.envelope(g, { bite_mm: bite, feed_mm_rev: feed, vc: 120 });
-  const r = kernelJob(G.roughTo, { target_dia_mm: g.job.band_high_mm - 0.008,
+  const roughTarget = g.job.band_high_mm - 2 * (FINISH_ALLOWANCE_UM / 1000);
+  const r = kernelJob(G.roughTo, { target_dia_mm: roughTarget,
     bite_mm: bite, feed_mm_rev: feed, vc: 120 });
   if (!r || !r.ok || !r.passes.length) {
     /* THE PUSHBACK. A refused roughing pass now says which limit stopped it and
@@ -1082,7 +1466,38 @@ function doRough() {
         detail: r && r.detail ? r.detail : 'roughTo returned no passes',
         pass_index: g.history.length });
     const did = r && r.last ? r.last.bite_realised_um : 0;
-    refusalText(bite, feed, env, why, did);
+    /* ── THE PRICE OF ASKING TWICE ────────────────────────────────────────
+       The FIRST trip of an interlock is free, and that is deliberate: it is
+       real information, honestly obtained, and charging for it would punish
+       a player for exploring. Every REPEAT of the same refused move costs the
+       drive a minute, because there is nothing left to learn from it — a
+       machinist who asks a machine the same question five times is not
+       learning, he is looking for a different answer, and the clock is the
+       thing that makes that a decision rather than a free re-roll.
+       NOTHING HERE DAMAGES A MACHINE. See `refusalMinutes` in people.mjs and
+       the design-lead ruling quoted above the load meter. */
+    const drv = noteDriveAttempt(bite, feed, env, true);
+    const extra = P.refusalMinutes(drv.refused_n - 1);
+    if (extra > 0) {
+      g.clock_min += extra;
+      g.state_clock_floor = g.clock_min;
+      opMin += extra;
+      clockFloorMin = Math.max(clockFloorMin, g.clock_min);
+      g.drive.refusals += 1; g.drive.trouble_min += extra;
+      if (!SEEN.explained) {
+        SEEN.explained = true;
+        logLine(`<b>The drive is not an oracle.</b> ${P.REFUSAL_WHY}`);
+      }
+      logLine(`Same move asked again — <b>${extra} min</b> on the drive. ` +
+        `The machine still says no, and now it has cost you ` +
+        `${g.drive.trouble_min} min of a clock the van is watching.`);
+    }
+    refusalText(bite, feed, env, why, did, extra);
+    /* A refusal is a real thing that happened to this setting, so the meter has
+       to be redrawn — but it will redraw to the PLATE, not to a load, because
+       `noteDriveAttempt` records no reading for a move that never cut. That is
+       the informational exploit being closed and not a display bug. */
+    refreshLoadMeter();
     return;
   }
   if (r.truncated) {
@@ -1093,8 +1508,12 @@ function doRough() {
       `not at the target. Take the rest off.`, 5200);
   }
   if (REC) {
+    /* The recorded target is the target the run ACTUALLY used. It used to be a
+       re-derived `band_high - 0.008` that no longer matched what `roughTo` was
+       asked for — a session file that misreports the player's own command is
+       worse than no session file, because it is believed. */
     REC.action('rough', { clock_min: g.clock_min, passes: r.passes.length,
-      minutes: r.minutes, target_dia_mm: g.job.band_high_mm - 0.008,
+      minutes: r.minutes, target_dia_mm: roughTarget,
       coldDia_before_mm: diaBefore, coldDia_after_mm: g.part.holeDia_cold_mm });
     /* Roughing is REPEATS, so each pass gets its own `cut` row: the surplus
        relationship is only discoverable if every pass is on the record. */
@@ -1108,6 +1527,13 @@ function doRough() {
     void prevClock;
     REC.action('rough_done', { clock_min: g.clock_min, dialR_um: r.passes[r.passes.length - 1].edge_coldR_mm * 1000 });
   }
+  noteDriveAttempt(bite, feed, env, false);
+  /* The cut just happened, so the meter's reading for this setting has just
+     changed from "no cut recorded" to a real one. Without this line the plate
+     stayed on screen until the player happened to nudge the bite or the feed,
+     which made the meter look like it never learned anything — the exact
+     opposite of the point. */
+  refreshLoadMeter();
   const last = r.passes[r.passes.length - 1];
   chipsFromPass(last, g.mat);
   if (audioReady) { AUD.cutEnter('mine', { tooth_Hz: 60, gain: 0.3 }); AUD.chipFall(1); }
@@ -1181,18 +1607,38 @@ function doCut() {
   if (phase === 'ARRIVE' || phase === 'MEASURE') phase = 'CUTTING';
 }
 function doInspect() {
+  /* ROUND 9. Inspection is no longer a settlement — it is the moment the part
+     LEAVES THE MACHINE and lands somewhere. Money still moves here (the
+     invoice is raised the moment the inspector signs), but what the round is
+     about is that `unmount()` has run: the part is now an object on a shelf or
+     in a bin, and the machine is empty.
+     A part can only be inspected ONCE, because there is only one part on the
+     table and afterwards there is none. The failure this replaces was
+     measured: three identical ACCEPTED charges, £1850 -> £3700 -> £5550, all
+     at clock 484.6328, because nothing physical had changed between them. */
+  if (!GAME.part.mounted) {
+    say('You', 'There is nothing in the machine. The parallels are bare.');
+    if (REC) REC.refusal('inspect', 'NO_PART_ON_THE_TABLE', { clock_min: GAME.clock_min });
+    return;
+  }
   const v = G.inspect(GAME);
   const r = kernelJob(G.ship);
+  if (r && r.ok === false) {
+    say('You', r.why === 'NO_PART_ON_THE_TABLE' ? 'Nothing on the table to inspect.'
+      : `The machine would not do it: ${r.why}`);
+    if (REC) REC.refusal('inspect', r.why, { clock_min: GAME.clock_min });
+    return;
+  }
   /* NOW the truth may be shown — the part has left your hands. */
   revealed = {
-    true_mm: GAME.part.holeDia_cold_mm,
-    err_um: (GAME.part.holeDia_cold_mm - GAME.job.nominal_mm) * 1000,
-    read_mm: lastRead ? lastRead.mm : GAME.part.holeDia_cold_mm,
+    true_mm: r.dia,
+    err_um: (r.dia - GAME.job.nominal_mm) * 1000,
+    read_mm: lastRead ? lastRead.mm : r.dia,
     gauge_err_um: lastRead ? (lastRead.mm - lastRead.coldDia_at_measure) * 1000 : 0,
   };
   if (audioReady) AUD.clack({ gain: 0.6, pitch: 700, kind: 'steel' });
   if (REC) {
-    REC.shipEvent({ verdict: v.verdict, true_cold_mm: GAME.part.holeDia_cold_mm,
+    REC.shipEvent({ verdict: v.verdict, true_cold_mm: r.dia,
       last_reading_mm: lastRead ? lastRead.mm : null, job: GAME.job,
       net: r.net, late: r.late, passes: r.passes, shots: r.shots,
       clock_min: GAME.clock_min });
@@ -1203,35 +1649,227 @@ function doInspect() {
        ship event itself, rather than waiting for the observer to notice. */
     openShipWindow();
   }
-  if (v.verdict === 'ACCEPTED') {
-    say('Earl', "\u201cThat's in. Put it on the bench, I'll get it on the van.\u201d");
+  syncFloor();
+  if (r.outcome === 'ACCEPTED') {
+    say('Earl', "\u201cThat's in. Get it on the rack by the door — the van's the van, " +
+      "it doesn't come to you.\u201d");
     toast(`<b>ACCEPTED.</b> ${r.net >= 0 ? '+' : ''}£${r.net}` +
-      (r.late ? ' — past the courier' : '') + `<br>` + revealLine(), 10000);
-    logLine(`<b>ACCEPTED</b> at ${G.hhmm(GAME.clock_min)}. ${r.note}`);
-    phase = 'DONE';
-  } else {
-    say('Earl', v.verdict === 'UNDERSIZE — SCRAP'
-      ? "\u201cIt's under. There's no putting metal back in a hole.\u201d"
-      : "\u201cIt's over. You can still take more out — it's not scrap yet.\u201d");
+      (r.late ? ' — the window has closed' : '') + `<br>` + revealLine(), 10000);
+    logLine(`<b>ACCEPTED</b> at ${G.hhmm(GAME.clock_min)}. ${r.note} ` +
+      `Part <b>${r.part_id}</b> is on the rack, slot ${G.rackParts(GAME).length} of ${GAME.rack_slots}.`);
+    phase = 'RACKED';
+  } else if (r.outcome === 'SCRAP') {
+    say('Earl', "\u201cIt's under. There's no putting metal back in a hole.\u201d");
     toast(`<b>${v.verdict}</b> — band ${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}.` +
       `<br>` + revealLine(), 10000);
-    logLine(`<b>${v.verdict}</b> — ${r.note}`);
+    logLine(`<b>${v.verdict}</b> — ${r.note} ` +
+      `Part <b>${r.part_id}</b> is in the scrap bin and ${GAME.stock_on_hand} castings are left in the crate.`);
+    phase = 'SCRAPPED';
+    /* HE WALKS OVER. Twenty minutes after the part was scrapped, Mr. Achebe
+       has tried to fit a bearing into it and failed, and the man from the
+       assembly bay is standing at your machine. The page only SCHEDULES this;
+       the clock decides when it lands, so it lands in real time whether you
+       are at the machine or across the shop. */
+    scheduleAchebe();
+  } else {
+    say('Earl', "\u201cIt's over. You can still take more out — it's not scrap yet.\u201d");
+    toast(`<b>${v.verdict}</b> — band ${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}.` +
+      `<br>` + revealLine(), 10000);
+    logLine(`<b>${v.verdict}</b> — ${r.note} Part <b>${r.part_id}</b> is on the rack, ` +
+      `flagged to the customer for rework.`);
+    phase = 'RACKED';
   }
   SEEN.corrected = true;
   /* The way out. On the public build the session lives in this browser and
      nowhere else, so the player is the only one who can hand it over. Offered
      as a TOAST and not a dialogue on purpose: the field manual makes the five
      seconds after shipping the strongest signal in the round, and a modal
-     asking for a file would cover it. This sits in the corner and waits. */
-  if (REC) offerSessionDownload();  /* Was the part OVER? Then it is still in your hands and you may cut again —
-     that is not a second part, and counting it as one would poison the single
-     most valuable number in the file. */
-  if (REC && v.verdict !== 'UNDERSIZE — SCRAP') {
-    partStillLive = !v.inSpec;
-  }
+     asking for a file would kill it. This sits in the corner and waits. */
+  if (REC) offerSessionDownload();
+  /* Was the part OVER? Then it is still live work and a fresh casting can be
+     cut — but that is a DIFFERENT casting, so it must not be recorded as the
+     same part twice. */
+  if (REC) partStillLive = (r.outcome === 'RECOVERABLE');
 }
 /* ── THE SECOND PART — the one question the whole round exists to answer ──── */
 let endedOnce = false, firstEndAt = null, partStillLive = false, secondPartSeen = false;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ROUND 9 — FETCHING ANOTHER CASTING, AND THE FLOOR FOLLOWING ALONG
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Put the next casting in the machine. This is a WALK and a WAIT, and the
+ *  clock is charged for both — a recovery that cost nothing would be free
+ *  recovery, and this round is about consequences that land. */
+function doFetchBlank() {
+  if (GAME.part.mounted) {
+    say('You', 'There is already a casting in the machine.');
+    return;
+  }
+  if (GAME.stock_on_hand < 1) {
+    say('Earl', "\u201cCrate's empty. Nothing left to put in it.\u201d");
+    logLine('No castings left in the crate. There is no recovery from this one.');
+    if (REC) REC.refusal('fetch_blank', 'NO_STOCK_IN_STORES', { clock_min: GAME.clock_min });
+    return;
+  }
+  /* WHAT THE RECOVERY COSTS DEPENDS ON WHAT WENT WRONG, and `mountBlank`
+     decides that from the register rather than from the page. A scrap part was
+     never finished out of the jaws, so its replacement goes back on the SAME
+     setup: cheap. A part that has had a finish cut costs a re-clamp and a
+     re-datum. See `chargeRecovery()` in game.mjs — that asymmetry is the
+     reason this game would rather you were over than under. */
+  /* Read the REGISTER, not the summary object. The register is where a part's
+     disposition actually lives (it is what `rackParts()` and the rack mesh are
+     derived from), and `finished` is a settlement record that carries money and
+     timing but not the disposition. Asking the wrong one silently downgraded
+     every rework recovery to the cheap scrap path — a bug that made the
+     expensive recovery cost the cheaper one's price. */
+  const req = GAME.part_register.filter((p) => p.disposition === 'REWORK');
+  const reason = req.length ? 'REWORK' : 'SCRAP';
+  const r = G.mountBlank(GAME, { reason });
+  if (!r.ok) { say('Earl', `\u201c${r.detail}\u201d`); return; }
+  /* Adopt the game layer's clock cost. Without this the frame loop would hand
+     the minutes straight back on the very next tick. */
+  if (GAME.state_clock_floor > clocks.job_min + opMin) opMin = GAME.state_clock_floor - clocks.job_min;
+  GAME.clock_min = clocks.job_min + opMin;
+  clockFloorMin = Math.max(clockFloorMin, GAME.state_clock_floor);
+
+  buildPartMesh(GAME.job.start_hole_dia_mm, GAME.job.depth_mm);
+  lastRead = null; predicted_um = null; biteCmd_um = 0; revealed = null;
+  if (audioReady) AUD.clack({ gain: 0.45, pitch: 1100 });
+  syncFloor();
+  toast(`<b>${r.part.id}</b> in the machine. ${GAME.job.start_hole_dia_mm} mm as-cast, and the ` +
+    `machine is not cold any more.<br>Cost ${r.cost.minutes.toFixed(1)} min` +
+    (r.cost.cost ? ` and £${r.cost.cost}` : '') + ` · ${GAME.stock_on_hand} castings left.`, 6500);
+  logLine(`Clamped <b>${r.part.id}</b> on the parallels. ` +
+    (r.cost.scrap ? 'Same setup, insert untouched.'
+                  : '<b>New setup</b> — parallels, clamps and a fresh touch-off.') +
+    ` Touch off before you cut: the datum from the last part died with it.`);
+  if (!earlSaid.second_blank) {
+    earlSaid.second_blank = true;
+    setTimeout(() => say('Earl', P.EARL_LINES.second_blank[0] + ' ' + P.EARL_LINES.second_blank[1]), 1600);
+  }
+  phase = 'MEASURE';
+}
+
+/** Mr. Achebe's bench decides when he comes over — the clock, not the page. */
+let achebeDue = null;
+function scheduleAchebe() { if (achebeDue === null) achebeDue = GAME.proof.at_min; }
+
+/** Called every frame. Lands the assembly proof when its minute arrives. */
+function achebeBeat() {
+  if (achebeDue === null || GAME.clock_min < achebeDue) return;
+  achebeDue = null;
+  say('Mr. Achebe', P.OTHERS.achebe.lines_after[0] + '<br>' + P.OTHERS.achebe.lines_after[1]);
+  logLine(`<b>Mr. Achebe, assembly bench 3:</b> the Ø${W.AXIS_DIA_MM} axis stopped ` +
+    `halfway into ${GAME.finished ? GAME.finished.part_id : 'your last part'}. ` +
+    `He walked it over to show you.`);
+  toast(`The verdict is not a number any more — <b>it is the part in his hand</b>.<br>` +
+    `A Ø${W.AXIS_DIA_MM} bearing that will not go in.`, 9000);
+  if (REC) REC.action('achebe_proof', { at_min: GAME.clock_min,
+    part_id: GAME.finished ? GAME.finished.part_id : null });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE 10:30 COURIER — the sentence the brief has carried all along
+   ══════════════════════════════════════════════════════════════════════════
+   J1's brief has said "before the courier leaves at 10:30" since it was
+   written, and until now that courier was fiction: `deadline_min` was money
+   arithmetic and nothing physical happened at 10:30. It happens now.
+
+   THREE BEATS, each a real event in the world rather than a message:
+     arrival  the van backs onto the apron and is visible out the door
+     loading  the driver is at the rack. What is on it is what he takes
+     gone     he pulls out. If the rack was empty, Halvorsen has no housing
+              and their pump line stays down — a fact about THEIR factory
+   The DECISION is `G.courierDepart(GAME)`, in the game layer, where it can be
+   unit-tested. This function only animates it and says it out loud.
+   ──────────────────────────────────────────────────────────────────────── */
+let courierPhase = 'PARKED';    // PARKED -> WAITING -> LOADING -> GONE
+
+function courierBeat(now_min, dt_real_s) {
+  const arrive = G.arrivalMin(GAME.job), leave = G.departsMin(GAME.job);
+  /* ── the van arrives ─────────────────────────────────────────────────── */
+  if (courierPhase === 'PARKED' && now_min >= arrive - 2) {
+    courierPhase = 'WAITING';
+    VAN.visible = true;
+    GAME.courier.arrived = true;
+    logLine(`<b>${W.hhmm(arrive)}</b> — a diesel on the apron. Hallam's van is backing up ` +
+      `to the roll-up door.`);
+    toast(`<b>${W.hhmm(arrive)}</b> — the van is here. He books until ` +
+      `${W.hhmm(leave)} and then he goes, loaded or not.`, 7000);
+    logLine(`Booked window ${W.hhmm(arrive)}–${W.hhmm(leave)}. ` +
+      `Anything not on the rack by ${W.hhmm(leave)} is not on the van.`);
+  }
+  /* ── the van creeps onto the bay, then the driver walks in ───────────── */
+  if (courierPhase === 'WAITING') {
+    VAN.position.z += (20.4 - VAN.position.z) * Math.min(1, dt_real_s * 0.9);
+    if (now_min >= leave - 6) {
+      courierPhase = 'LOADING';
+      logLine('The driver is at the rack with a clipboard, counting slots.');
+      say('Hallam driver', G.rackParts(GAME).some((p) => p.disposition === 'SEND')
+        ? P.OTHERS.hallam.lines[0] : P.OTHERS.hallam.lines[1]);
+    }
+  }
+  /* ── he goes. This is the moment the round turns on ──────────────────── */
+  if (courierPhase === 'LOADING' && now_min >= leave) {
+    courierPhase = 'GONE';
+    const d = G.courierDepart(GAME);
+    if (d.ok) {
+      GONE_SENT = !!d.loaded;
+      syncFloor();
+      if (d.loaded) {
+        say('Earl', P.EARL_LINES.courier_satisfied[0] + ' ' + P.EARL_LINES.courier_satisfied[1]);
+        logLine(`<b>${W.hhmm(d.at)}</b> — van gone with <b>${d.loaded.id}</b> on it. ` +
+          `Halvorsen's pump line can be built.`);
+        toast(`<b>Collected ${d.loaded.id}.</b> Halvorsen has their housing.<br>` +
+          `One drop, one part, off your floor.`, 9000);
+      } else {
+        say('Earl', P.EARL_LINES.courier_missed[0] + ' ' + P.EARL_LINES.courier_missed[1]);
+        logLine(`<b>${W.hhmm(d.at)}</b> — van gone with <b>nothing</b>. ` +
+          `Halvorsen Pumps gets no housing and their pump line stays down.`);
+        toast(`<b>The van left with nothing.</b><br>` +
+          `Nobody is coming back for it today. There are ` +
+          `${GAME.stock_on_hand} castings in the crate and the deadline has passed.`, 11000);
+      }
+      if (REC) REC.action('courier_depart', { at_min: d.at,
+        loaded: d.loaded ? d.loaded.id : null, dependency: d.dependency });
+    }
+  }
+  /* ── it pulls away ───────────────────────────────────────────────────── */
+  if (courierPhase === 'GONE' && VAN.visible) {
+    VAN.position.z -= dt_real_s * 5.5;
+    if (VAN.position.z < -32) VAN.visible = false;
+  }
+}
+
+/** The physical floor, brought into line with the register.
+ *  THIS IS THE ONLY FUNCTION THAT MOVES PARTS BETWEEN MESHES, and it derives
+ *  from the register every time rather than tracking state of its own — so a
+ *  part cannot be rendered in two places, and a part that is nowhere renders
+ *  nowhere. */
+function syncFloor() {
+  if (!GAME) return { on_table: null, rack: 0, bin: 0 };
+  const on = !!GAME.part.mounted;
+  const p = on ? G.currentPart(GAME) : null;
+  /* (1) the fixture: parallels and clamps appear only when a casting is clamped */
+  fixtureParallels.visible = on;
+  clampL.visible = clampR.visible = on;
+  /* (2) the crate: count only, never size */
+  const { shown } = crateMeta();
+  crateParts.forEach((o, i) => { o.visible = i < shown; });
+  /* (3) the rack: presence only, slot by slot */
+  const rack = G.rackParts(GAME);
+  rackObjects.forEach((o, i) => {
+    const r = rack[i];
+    o.visible = !!r;
+    if (r) o.children[0].material = r.disposition === 'SEND' ? M_PART_GOOD : M_PART_DEAD;
+  });
+  /* (4) the bin */
+  const bin = G.binParts(GAME);
+  scrapObjects.forEach((o, i) => { o.visible = i < bin.length; });
+  return { on_table: p ? p.id : null, rack: rack.length, bin: bin.length };
+}
 
 /* ── THE POST-SHIP WINDOW (field manual §6) ──────────────────────────────────
  * The manual: "After they ship, say nothing for five seconds... Do they look
@@ -1424,8 +2062,17 @@ function frame(now) {
        DECISION, never for taking a long time to UNDERSTAND something. Nothing
        below may punish the player for being new. */
     W.advanceClocks(clocks, dtReal);
+    if (clocks.job_min + opMin < clockFloorMin) opMin = clockFloorMin - clocks.job_min;
     GAME.clock_min = clocks.job_min + opMin;
     if (clocks.world_min < GAME.clock_min) clocks.world_min = GAME.clock_min;
+
+    /* ── ROUND 9 — the two things on this floor that happen on THEIR clock ──
+       Neither of these is a message. The van arrives because it is booked to
+       arrive, and it leaves with whatever is standing on the rack when it
+       does. Mr. Achebe walks over twenty minutes after a part is scrapped,
+       because that is how long it takes him to try a bearing and give up. */
+    courierBeat(GAME.clock_min, dtReal);
+    achebeBeat();
 
     /* §104 beats — keyed to YOUR clock, not the world's */
     for (const b of BEATS) if (!b.done && GAME.clock_min >= b.at) { b.done = true; b.run(); }
@@ -1526,6 +2173,22 @@ function frame(now) {
       : 'not measured';
     $('hBand').textContent = `${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}`;
     $('hMoney').innerHTML = `ON THE DAY <b>£${GAME.money}</b>` + (FPS ? ` <span style="opacity:.45">${FPS.toFixed(0)}fps</span>` : '');
+    /* ── THE FLOOR, as counts of objects. See the note beside #hFloor. ──── */
+    {
+      const rack = G.rackParts(GAME), bin = G.binParts(GAME), gone = G.goneParts(GAME);
+      const until = G.departsMin(GAME.job) - GAME.clock_min;
+      const van = GAME.courier.left
+        ? `<span class="vandone">van gone${gone.length ? ', 1 collected' : ', nothing on it'}</span>`
+        : (until <= 0
+            ? '<span class="vanout">van leaving</span>'
+            : `<span class="${until < 10 ? 'vanout' : ''}">van ${G.hhmm(G.departsMin(GAME.job))}` +
+              ` — ${until.toFixed(0)} min</span>`);
+      $('hFloor').innerHTML =
+        `<div><s>crate</s> <b>${GAME.stock_on_hand}</b> · <s>table</s> ` +
+        `<b>${GAME.part.mounted ? (G.currentPart(GAME) || {}).id || 'part' : 'empty'}</b></div>` +
+        `<div><s>rack</s> <b>${rack.length}</b>/${GAME.rack_slots} · <s>bin</s> <b>${bin.length}</b></div>` +
+        `<div>${van}</div>`;
+    }
 
     /* ── THE RECORDER'S ONE TIMER ──────────────────────────────────────────
        2 Hz. Cheap enough to be invisible, dense enough that a hesitation is
@@ -1625,6 +2288,56 @@ window.INDUSTRIA = {
     return spec.id;
   },
   warm: doWarmUp, touch: doTouchOff, vibe: (n) => vibrate(n),
+  /* ── ROUND 9 — THE FLOOR, FOR THE FOUR-HISTORY TEST ─────────────────────
+     `floor` is the whole point of the round's verification: it reports what
+     an observer sees WITH THE MACHINE HIDDEN. It calls the game layer's own
+     `floorObservables()`, so the acceptance harness and the game cannot
+     disagree about what happened — there is one derivation and both read it.
+     `syncFloor` is called first so the meshes are brought level with the
+     register before anything is read. */
+  floor: () => { syncFloor(); return G.floorObservables(GAME); },
+  /* The meshes, as opposed to the state. Asserted separately and on purpose:
+     a part that is on the rack in the register but invisible in the scene is
+     exactly the class of lie this round exists to remove, and only a check
+     that reads BOTH can catch it. */
+  floorMeshes: () => {
+    syncFloor();
+    return {
+      crate_drawn: crateParts.filter((o) => o.visible).length,
+      rack_drawn: rackObjects.filter((o) => o.visible).length,
+      bin_drawn: scrapObjects.filter((o) => o.visible).length,
+      fixture_clamps: !!(clampL.visible && clampR.visible),
+      parallel_bars: !!fixtureParallels.visible,
+      part_mesh_in_cell: !!(PART.mesh && PART.mesh.parent === cell),
+      part_mesh_visible: !!(PART.mesh && PART.mesh.visible),
+      van_visible: !!VAN.visible, van_z: +VAN.position.z.toFixed(2),
+    };
+  },
+  /* The lifecycle verbs, exposed so the gate drives the shipped functions. */
+  fetchBlank: doFetchBlank,
+  ship: doInspect,
+  /* Push the clock forward WITHOUT playing. This is a test rig, not a cheat:
+     the four-history fork needs a history that is accepted AND late, and the
+     only other way to produce one is to sit through twenty real minutes of
+     job clock. It moves `clocks.job_min` and the floor together, exactly as
+     elapsed time would, and it is called out in the receipt. */
+  advanceTo: (min) => {
+    if (!GAME) return null;
+    const want = Math.max(GAME.clock_min, min);
+    clocks.job_min = want - opMin;
+    clockFloorMin = Math.max(clockFloorMin, want);
+    GAME.clock_min = want;
+    if (clocks.world_min < want) clocks.world_min = want;
+    return GAME.clock_min;
+  },
+  courier: () => ({ ...GAME.courier, rack: G.rackParts(GAME).map((p) => p.id),
+    bin: G.binParts(GAME).map((p) => p.id),
+    until_min: +(G.untilCourier_min(GAME)).toFixed(2) }),
+  /* Force the courier resolution. Same function the frame loop calls, so the
+     forced path and the played path cannot diverge. */
+  courierNow: () => { const d = G.courierDepart(GAME); if (d.ok) { GONE_SENT = !!d.loaded; syncFloor(); } return d; },
+  register: () => GAME.part_register.map((p) => ({ ...p })),
+  blankStock: () => GAME.stock_on_hand,
   /* The recorder, reachable from the runner so a session can be closed out
      cleanly with a real verdict instead of a truncated file. Null on the
      public build, because `?rec` was not in the URL. */

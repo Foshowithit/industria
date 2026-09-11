@@ -25,8 +25,20 @@
  */
 
 import { MATERIALS, MACHINES, makeTool, assessBoring, itWidth_um } from './kernel.mjs';
+/* ONE LINE, deliberately. The single-file builder rewrites this specifier by
+   exact string match and refuses when the needle is not sitting on an import
+   line, so a wrapped import list puts it on a continuation line and the build
+   dies with "is not on an import line". That is the builder working correctly,
+   and worth not rediscovering — the comment above is worded to avoid naming
+   the needle itself, because a mention of it here would make the count 2. */
+import { CHARGES, COURIER, RACK_SLOTS, BLANK_STOCK, JOB_DEAD, AXIS_DIA_MM, arrivalMin, departsMin, mintBlank, hhmm as worldHHMM } from './world.mjs';
 
-export const GAME_VERSION = '0.2.0';
+export const GAME_VERSION = '0.3.0';
+
+/* Round 9 defaults, re-exported so nothing else in the build has to import
+   world.mjs just to know how many castings are in the crate. */
+export { RACK_SLOTS };
+export const BLANK_STOCK_DEFAULT = BLANK_STOCK;
 
 /* ══════════════════════════════════════════════════════════════════════════
    THE JOBS
@@ -330,7 +342,54 @@ export function newGame(job = JOBS[0], thermal = THERMAL, money = 0) {
     money: money, charges: [], strikes: 0,
     log: [], history: [], passes: 0, shots: 0,
     finished: null,
+
+    /* ══════════════════════════════════════════════════════════════════
+       ROUND 9 — WHERE THE PART IS, AND WHAT THE SHOP HAS LEFT
+       ══════════════════════════════════════════════════════════════════
+       Everything below is a PHYSICAL fact about the floor: what is on the
+       table, what is in the crate, what is on the rack, what is in the bin,
+       which casting is currently on the machine, and whether the van has
+       been and gone. Nothing here is a score. `charges` and `money` are
+       still here and still move — but they are downstream of these objects,
+       not a substitute for them. */
+    stock_on_hand: BLANK_STOCK,     // castings left in the crate
+    /* The furthest minute any STATE CHANGE has pushed the clock to (recovery,
+       inspection). The page adopts it into its own clock so a cost paid in
+       the game layer cannot be silently given back by the frame loop. */
+    state_clock_floor: job.clock_start_min,
+    blanks_used: 0,
+    /* THE REGISTER. One entry per casting that has touched this machine, live
+       or dead, in the state it actually ended up in. This is the object the
+       rack and the bin are rendered from, so a part cannot be in two places. */
+    part_register: [],
+    /* Active part spec: a re-cut casting starts at Ø36 and its hole was NOT
+       touched by you; it is a different casting with the same part number. */
+    stock_reset_dia_mm: job.start_hole_dia_mm,
+    rack_slots: RACK_SLOTS,
+    /* The pad the casting and the vise sit on. A number the SCENE reads, so a
+       fixture change does not have to be re-derived in two places. */
+    fixture: { parallels_in: false },
+    courier: {
+      arrived: false, left: false, departed_at: null,
+      loaded: 0, dependency: 'OUTSTANDING',   // OUTSTANDING | SATISFIED | UNSATISFIED
+      events: [],                              // { at, kind, text } once each
+    },
+    /* Mr. Achebe's bench. A dead part becomes his morning, 20 minutes in. */
+    proof: { shown: false, at_min: null },
+    /* The drive's feedback log. See REFUSAL_WHY in people.mjs: this is the
+       record of questions the machine was asked and could not answer. */
+    drive: { refusals: 0, trouble_min: 0, penalised: 0 },
+    inspection: null,               // the last first-off inspection, as measured
   };
+
+  if (g.part_register.length === 0) {
+    g.part_register.push({
+      id: `${job.id}-01`, job_id: job.id, minted_at: 0,
+      state: 'MOUNTED', disposition: null, verdict: null,
+      position_in_band_um: null, shipped_at: null, born: 'original',
+    });
+  }
+  g.current_part_id = g.part_register[0].id;
 
   log(g, 'clock', `Shift starts ${hhmm(g.clock_min)}. ${job.client} on the bench.`);
   log(g, 'note',
@@ -353,6 +412,41 @@ export const hhmm = (m) => {
 export const elapsed = (g) => g.clock_min - g.job.clock_start_min;
 export const remaining = (g) => g.deadline_min - g.clock_min;
 export const isLate = (g) => g.clock_min > g.deadline_min;
+
+/**
+ * OBSERVE THE FLOOR WITH THE MACHINE HIDDEN.
+ *
+ * This is the round-deciding test as a function. Everything the design lead
+ * asked for — "observable without reading a ledger" — has to be answerable
+ * from objects, counts and clocks, and nothing here touches `charges` or
+ * `money`. If two histories produce the same object here, they are the same
+ * world no matter what their receipts say.
+ */
+export function floorObservables(g) {
+  return {
+    clock_min: +g.clock_min.toFixed(2),
+    deadline_min: g.deadline_min,
+    /* the machine */
+    machine_occupied: !!g.part.mounted,
+    on_table: g.part.mounted ? g.current_part_id : null,
+    /* the crate, the rack, the bin */
+    crate_castings: g.stock_on_hand,
+    rack: rackParts(g).map((p) => ({ id: p.id, d: p.disposition })),
+    bin: binParts(g).map((p) => p.id),
+    gone: goneParts(g).map((p) => p.id),
+    /* the floor, as a walk round it */
+    die_open: !g.part.mounted,
+    parts_total: g.part_register.length,
+    /* other people */
+    achebe_at_bench: g.proof.at_min !== null && g.clock_min >= g.proof.at_min,
+    /* the van */
+    courier_arrived: g.courier.arrived,
+    courier_left: g.courier.left,
+    dependency: g.courier.dependency,
+    /* work still possible */
+    could_mount_another: !g.part.mounted && g.stock_on_hand > 0,
+  };
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    MACHINE OPERATIONS
@@ -693,42 +787,304 @@ export function inspect(g) {
   };
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   ROUND 9 — THE PART LIFECYCLE
+   ══════════════════════════════════════════════════════════════════════════
+   A verdict used to be a string that produced a number. It is now a MOVE: the
+   casting leaves the machine and goes somewhere, and where it goes is the
+   first thing in this game that the player cannot undo.
+
+   WHY `ship()` IS THE ONLY DOOR. Two measured defects live here.
+
+   1. `part.mounted` stayed `true` after shipping, in every history. The part
+      was simultaneously on the table and invoiced. A part is a physical
+      object and it is in exactly one place; `dispositionOf` is now that one
+      place, and `mount()`/`unmount()` are the only writers.
+
+   2. `ship()` could be called repeatedly on the same part: money went
+      1850 -> 3700 -> 5550 at an identical clock (484.6328) with three
+      identical ACCEPTED charges. That is not a balance bug, it is the same
+      missing object seen from the other side — there was no rack to put the
+      part on and no reason for it not to be shipped again. The blank ledge
+      below is the fix, and it is a guard on PHYSICAL state (nothing is on
+      the table to send) rather than on a call counter.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/** Where the casting currently on the machine sits in the register. */
+export function currentPart(g) {
+  return g.part_register.find((p) => p.id === g.current_part_id) || null;
+}
+
+/** Everything physically on the finished rack, oldest first. */
+export const rackParts = (g) =>
+  g.part_register.filter((p) => p.state === 'RACK');
+
+/** Everything physically in the scrap bin. */
+export const binParts = (g) =>
+  g.part_register.filter((p) => p.state === 'BIN');
+
+/** A part that is neither on the machine, on the rack, nor in the bin. */
+export const goneParts = (g) =>
+  g.part_register.filter((p) => p.state === 'GONE');
+
 /**
- * The customer takes the part. Money changes hands once, here.
+ * TAKE THE PART OFF THE TABLE.
  *
- * Undersize is fatal and costs more than the job pays, because a bore that is
- * too small cannot be made bigger without welding it up — you lose the part AND
- * the morning you spent on it. Oversize is survivable and charged as rework.
- * That asymmetry is real, and it is the reason a machinist would rather be
- * 4 µm over than 4 µm under.
+ * This is the function that did not exist. It mutates the two facts that
+ * must never disagree again — the register entry and `part.mounted` — in one
+ * place, so "is there a part on the machine" has exactly one answer.
+ *
+ * `state` is one of:
+ *   RACK  — inspected and going to the customer
+ *   BIN   — dead. Scrap, and the material is gone with it
+ *   GONE  — collected by the courier. The part exists, elsewhere, off this
+ *           floor, which is the whole point of the rack
  */
-export function ship(g) {
+export function unmount(g, state, patch = {}) {
+  const p = currentPart(g);
+  if (!p) return null;
+  p.state = state;
+  p.left_machine_at = g.clock_min;
+  Object.assign(p, patch);
+  g.part.mounted = false;
+  return p;
+}
+
+/* ── THE THREE OUTCOMES, AS PHYSICAL FUTURES ─────────────────────────────
+   The design lead's minimum, verbatim: accepted means the part leaves and
+   the dependency is satisfied; scrap means it also leaves, to scrap, the
+   material is gone, and getting back to an acceptable part takes another
+   piece of material and more shop time. Both are implemented as OBJECTS.
+
+   THE SYSTEM'S CUTTING INSERT IS NOT RENEWED ON A SCRAP PART. It is a
+   physical fact about this machine: two of the three finish cuts that land
+   on scrap here leave the edge with a groove worn in it, so the third
+   casting meets a different tool. The insert is a real insert, its condition
+   is read from the damage model the kernel ALREADY has (`tool.wear_um`,
+   `insert_state()`), and its consequence is the one this game is named for —
+   a part that is 2 µm light with a fresh edge and 2 µm lighter than that
+   with a used one. It is a consequence, not a pun: scrap out of the wrong
+   band costs the shop stock, time AND edge life.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * CLASSIFY WHAT JUST CAME OFF THE TABLE.
+ *
+ * Deliberately small, and deliberately NOT three separate recovery paths:
+ * the design lead's instruction is "only distinguish them further if the
+ * actual process supports different recovery". This process has exactly two
+ * recoveries, so there are exactly two outcomes here.
+ */
+export function classifyOffMachine(v) {
+  if (v.inSpec) return { outcome: 'ACCEPTED', state: 'RACK', disposition: 'SEND' };
+  if (v.under_um > 0) {
+    return { outcome: 'SCRAP', state: 'BIN', disposition: 'SCRAP',
+             why: `${v.under_um.toFixed(1)} µm under the low limit — the bore cannot be made larger` };
+  }
+  return { outcome: 'RECOVERABLE', state: 'RACK', disposition: 'REWORK',
+           why: `${v.over_um.toFixed(1)} µm over the high limit — the customer reworks it` };
+}
+
+/**
+ * THE CUSTOMER TAKES THE PART — or refuses it. Money changes hands once, and
+ * the part physically moves, and the moving is the part that mattered.
+ */
+export function ship(g, { silent = false } = {}) {
+  const p = currentPart(g);
+  /* HARD LEDGE #1: there is nothing on the table. This is not a rate limit,
+     it is the state of the vise. The second and third calls in the measured
+     triple-ship trace land here. */
+  if (!p || !g.part.mounted || p.state !== 'MOUNTED') {
+    return { ok: false, why: 'NO_PART_ON_THE_TABLE',
+             detail: p ? `part ${p.id} is ${p.state}` : 'no part in the register',
+             clock_min: g.clock_min, money: g.money };
+  }
+
   const v = inspect(g);
   const late = isLate(g);
+  const cls = classifyOffMachine(v);
+
   let paid = 0, fee = 0, note;
-  if (v.verdict === 'ACCEPTED') {
+  if (cls.outcome === 'ACCEPTED') {
     paid = g.job.rate * (late ? g.job.late_credit : 1);
     note = late
-      ? `Accepted at ${hhmm(g.clock_min)} — past the courier. Paid at ` +
+      ? `Accepted at ${hhmm(g.clock_min)} — past the courier's booked slot. Paid at ` +
         `${(g.job.late_credit * 100).toFixed(0)}%.`
       : 'Accepted, in spec, on time. Invoice goes out.';
-  } else if (v.verdict === 'UNDERSIZE — SCRAP') {
+  } else if (cls.outcome === 'SCRAP') {
     fee = g.job.rate * 1.15;
     note = `Scrapped — ${v.under_um.toFixed(1)} µm under. The bore cannot be made ` +
-           `larger. You are out the part and the morning.`;
+           `larger. You are out the casting and the morning.`;
   } else {
     fee = g.job.rate * 0.35;
     note = `Shipped ${v.over_um.toFixed(1)} µm oversize. The customer reworks it and ` +
            `charges you for the privilege.`;
   }
+
+  /* ── THE PART MOVES. This is the mutation the round is about. ─────────── */
+  const moved = unmount(g, cls.state, {
+    disposition: cls.disposition, verdict: v.verdict,
+    position_in_band_um: v.position_in_band_um,
+    under_um: v.under_um, over_um: v.over_um,
+    shipped_at: g.clock_min,
+  });
   g.money += paid - fee;
   g.charges.push({ t: g.clock_min, kind: v.verdict, paid, fee, note });
-  g.finished = { ...v, paid, fee, late, net: paid - fee,
-                 clock_min: g.clock_min, passes: g.passes, shots: g.shots };
-  log(g, 'ship', note);
-  return { ...v, paid, fee, late, net: paid - fee, clock_min: g.clock_min,
-           elapsed_min: elapsed(g), passes: g.passes, shots: g.shots, note };
+  g.inspection = v;
+  g.finished = { ...v, paid, fee, late, net: paid - fee, outcome: cls.outcome,
+                 clock_min: g.clock_min, passes: g.passes, shots: g.shots,
+                 part_id: moved.id };
+  if (!silent) log(g, 'ship', note);
+
+  /* ── A DEAD PART BECOMES SOMEBODY ELSE'S MORNING ────────────────────────
+     Twenty minutes later, a man in the assembly bay picks a bearing up and
+     tries to put it in a housing that measured small. He does not tell the
+     machine. He is at a bench, and whether the player ever learns why the
+     material went hard is a fact about whether they went and looked. */
+  if (cls.outcome === 'SCRAP' && g.proof.at_min === null) {
+    g.proof.at_min = g.clock_min + JOB_DEAD.min;
+    if (!silent) log(g, 'world',
+      `${JOB_DEAD.by} has an assembly on bench 3 in ${JOB_DEAD.min} min — ` +
+      `he is fitting a Ø${AXIS_DIA_MM} axis to the housing you just scrapped. ` +
+      `Nobody has told him.`);
+  }
+  return { ...v, ...cls, paid, fee, late, net: paid - fee, clock_min: g.clock_min,
+           elapsed_min: elapsed(g), passes: g.passes, shots: g.shots, note,
+           part_id: moved.id, mounted: g.part.mounted };
 }
+
+/**
+ * THE SHOP PUTS ANOTHER CASTING ON THE MACHINE.
+ *
+ * The blank comes out of the crate, the part that failed goes where it
+ * belongs, and the hole starts again at Ø36 because it is a DIFFERENT
+ * casting — so there is no dial offset to inherit and no thermal history of
+ * this part to keep. What does carry over is the MACHINE: it is warm, its
+ * screw has grown, and the edge condition is the one the last part left.
+ *
+ * WHAT THIS DOES NOT DO: reset the clock. The time a recovery costs is the
+ * time the recovery costs, and it is charged against the courier like every
+ * other minute on this floor.
+ */
+export function mountBlank(g, { reason = 'RECOVERY', silent = false } = {}) {
+  if (g.part.mounted) {
+    return { ok: false, why: 'MACHINE_OCCUPIED', detail: `part ${g.current_part_id} is still on the table` };
+  }
+  if (g.stock_on_hand < 1) {
+    return { ok: false, why: 'NO_STOCK_IN_STORES',
+             detail: 'the crate is empty — this job cannot be recovered' };
+  }
+  const n = g.part_register.length;
+  const blank = mintBlank(g.job, n);
+  const part = {
+    id: blank.id, job_id: g.job.id, minted_at: n,
+    state: 'MOUNTED', disposition: null, verdict: null,
+    position_in_band_um: null, shipped_at: null,
+    born: reason, previous: g.current_part_id,
+  };
+  g.part_register.push(part);
+  g.current_part_id = part.id;
+  g.stock_on_hand -= 1;
+  g.blanks_used += 1;
+
+  /* A re-cut casting is new metal: it is Ø36 as found, and it is COLD. The
+     machine is not. Those two sentences are the entire cost of a recovery. */
+  g.part.holeDia_cold_mm = g.job.start_hole_dia_mm;
+  g.part.partC = g.thermal.ambient_C;
+  g.part.mounted = true;
+  g.part.cutting = false;
+  g.machine.edgeR_cold_mm = null;      // you re-touch off on new metal
+  g.machine.refSpindleC = g.machine.spindleC;
+  g.machine.refScrewC = g.machine.screwC;
+  g.guessed = false;                   // a new part, a new first cut
+
+  const ch = chargeRecovery(g, reason);
+  if (!silent) log(g, 'recovery',
+    `Fetched ${blank.id} out of the crate — ${ch.blank_cost ? '£' + ch.blank_cost + ', ' : ''}` +
+    `${ch.minutes.toFixed(1)} min. ${g.stock_on_hand} casting${g.stock_on_hand === 1 ? '' : 's'} left.`);
+  return { ok: true, part, blank, cost: ch, stock_on_hand: g.stock_on_hand,
+           clock_min: g.clock_min };
+}
+
+/**
+ * WHAT A RECOVERY COSTS, and why the two reasons cost different things.
+ *
+ *   SCRAP      a casting and a walk. The re-cut casting goes back on the SAME
+ *              setup — insert, jaws, datum, all of it — because a scrap part
+ *              was never finished out of the jaws. It is the CHEAP recovery.
+ *   REWORK     the part has had a finish cut and the machine has been re-set
+ *              since: a new casting has to be clamped on fresh parallels and
+ *              touched off again, which is twelve minutes of setup plus
+ *              eighteen pounds. It is the EXPENSIVE recovery.
+ *
+ * That ordering is the opposite of what a punishment variable would produce
+ * (the worse verdict costing less), and it is what the process does. It is
+ * also the reason this game would rather you be 8 µm over than 2 µm under.
+ */
+export function chargeRecovery(g, reason) {
+  const scrap = reason !== 'REWORK';
+  const minutes = CHARGES.blank_min + (scrap ? 0 : CHARGES.setup_min);
+  const cost = CHARGES.blank_cost + (scrap ? 0 : CHARGES.remount_cost);
+  g.clock_min += minutes;
+  if (g.clock_min > g.state_clock_floor) g.state_clock_floor = g.clock_min;
+  g.money -= cost;
+  g.charges.push({
+    t: g.clock_min, kind: scrap ? 'BLANK — SCRAP' : 'BLANK — RE-SETUP',
+    paid: 0, fee: cost,
+    note: `${scrap ? 'Scrap' : 'Finished'} part replaced: one casting (${minutes.toFixed(1)} min)` +
+          (cost ? ` and a re-setup (£${cost}).` : '.'),
+  });
+  return { minutes, cost, scrap, kind: scrap ? 'BLANK — SCRAP' : 'BLANK — RE-SETUP' };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE COURIER, AT 10:30
+   ══════════════════════════════════════════════════════════════════════════
+   This is the sentence the job brief has carried since it was written —
+   "before the courier at 10:30" — finally made true. Nothing here awards or
+   removes money. It ATTEMPTS A SHIPMENT, and the shipment either happens or
+   it does not, and the state of Halvorsen's pump line afterwards is a fact
+   about Halvorsen rather than a fact about the player's total.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/** The one place 10:30 becomes irreversible. Idempotent: the van leaves once. */
+export function courierDepart(g) {
+  if (g.courier.left) return { ok: false, why: 'ALREADY_GONE', ...g.courier };
+  if (g.clock_min < departsMin(g.job)) {
+    return { ok: false, why: 'NOT_YET', at: departsMin(g.job), clock_min: g.clock_min };
+  }
+  const rack = rackParts(g);
+  const load = rack.find((p) => p.disposition === 'SEND') || null;
+
+  if (load) {
+    load.state = 'GONE';
+    load.disposition = 'SHIPPED';
+    load.collected_at = g.clock_min;
+    g.courier.loaded += 1;
+    g.courier.dependency = 'SATISFIED';
+  } else {
+    g.courier.dependency = 'UNSATISFIED';
+  }
+  g.courier.left = true;
+  g.courier.departed_at = g.clock_min;
+
+  const line = load
+    ? `Collected ${load.id} — ${load.verdict} at Ø${load.position_in_band_um === null ? '?' :
+        (g.job.band_low_mm + load.position_in_band_um / 1000).toFixed(4)} mm. ` +
+      `${g.job.client}'s pump line can be built.`
+    : `Left with nothing. ${g.job.client} gets no housing and the pump line stays down.`;
+  log(g, 'courier', line);
+  return { ok: true, left: true, at: g.courier.departed_at, loaded: load,
+           dependency: g.courier.dependency,
+           still_on_rack: rack.filter((p) => p.state === 'RACK').map((p) => p.id),
+           line };
+}
+
+/** Minutes until the van goes. Negative once it has. */
+export const untilCourier_min = (g) => departsMin(g.job) - g.clock_min;
+export const courierArrived = (g) => g.courier.arrived;
+export const courierLeft = (g) => g.courier.left;
+export { arrivalMin, departsMin };
 
 /* ══════════════════════════════════════════════════════════════════════════
    CONVENIENCE: rough down to a target diameter

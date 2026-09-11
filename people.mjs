@@ -215,6 +215,31 @@ export const EARL_LINES = {
   after_first_ship: [
     "You made a part. There's four thousand on the order.",
   ],
+
+  /* ── ROUND 9: THE RACK, AND WHAT HE SAYS ABOUT IT ─────────────────────
+     He reacts to OBJECTS, not to a score. Every line below is selected by a
+     predicate over what is physically standing in the shop, so the same
+     sentence cannot be said in two different worlds. */
+  /* The requested blank arrives — and it is the same casting he showed you. */
+  second_blank: [
+    "Crate's behind you. Same casting, same drawing, same everything.",
+    "One thing's different: machine's warm now, and it moved on you once already.",
+  ],
+  /* Nothing on the rack and 10:30 already happened. He does not shout; the
+     morning is simply over and he is the one who has to make the call. */
+  courier_missed: [
+    "Van's gone.",
+    "I'm calling Halvorsen. There's nothing on that rack and their line is down all weekend.",
+  ],
+  /* A part in the scrap bin is a thing that happened, not a number. */
+  scrap_in_bin: [
+    "Bin. Don't leave it on the bench, somebody'll pick it up and measure it.",
+  ],
+  /* A part on the rack and the van not yet in: the good case, said flatly. */
+  courier_satisfied: [
+    "That's on the rack, so that's off my floor.",
+    "Van takes it, we're square. Next one's the same casting.",
+  ],
 };
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -246,6 +271,35 @@ export const OTHERS = {
   ray: {
     name: 'Ray', role: 'maintenance',
     lines: [ "That beeping's been going since Tuesday. I'll get to it." ],
+  },
+  /* ── ROUND 9: THE TWO PEOPLE A DEAD PART BECOMES ABOUT ────────────────
+     §108's second anti-goal is "a machine-control emulator with no living
+     world". A bearing housing that measures small is not an accounting
+     event: it is twenty minutes of somebody else's morning in the assembly
+     bay, and then a man walking across the shop to tell you about it. This
+     is the world's half of the consequence and it is deliberately NOT a
+     system — it is two people with jobs. */
+  achebe: {
+    name: 'Mr. Achebe', role: 'assembly, bench 3',
+    /* He says these AT HIS BENCH. The player finds him there, or does not,
+       and the machine never reports them. */
+    lines: [
+      "Forty-millimetre axis. It should drop in.",
+      "It is not dropping in.",
+    ],
+    /* And he comes over. The only person in this game who walks to you. */
+    lines_after: [
+      "That housing is small. I got the bearing halfway and it stopped.",
+      "It's not scrap to me until it's scrap on paper, so tell me what you want to do.",
+    ],
+  },
+  hallam: {
+    name: 'Hallam driver', role: 'courier',
+    /* He is a van and a timetable. He does not console anybody. */
+    lines: [
+      "One drop on this ticket. Where is it?",
+      "Right. Nothing to load. I'll mark it one short and go.",
+    ],
   },
 };
 
@@ -344,6 +398,51 @@ export function earlReply(topic, times_asked = 0) {
   if (topic.id === 'done') return [...(EARL_LINES[topic.lines] ?? [])];
   return [...(EARL_LINES[topic.lines] ?? [])];
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ROUND 9 — THE ONE SENTENCE THIS ROUND IS ALLOWED TO PUT IN HIS MOUTH
+   ══════════════════════════════════════════════════════════════════════════
+   There is exactly one line here and it is deliberately the weakest possible
+   form of help, because the alternative was measured and rejected.
+
+   THE PROBLEM IT FIXES, and it is the round's second named defect: a refused
+   command used to leave the game state byte-identical to never having tried
+   it. That is correct — the interlock rejects an impossible move before any
+   metal moves, so zero metal and zero machine consequence is the physics.
+   The design lead's ruling is explicit that the fix is NOT a penalty (an
+   invented machine-damage cost is exactly the unsupported mechanic this
+   project has been policing), and that what must be solved is the FREE
+   ORACLE: the player could ask the machine any question at all, as many
+   times as they liked, and get a perfectly accurate answer — a load-meter
+   number for a move they had not made and were not going to make.
+
+   The real interlock is a HARDWARE limit. An axis drive does not answer an
+   interrogative, it feeds back and it faults. So the feedback is now shut
+   behind a decision the player has already made: the machine will tell you
+   what a move cost, and it will not tell you what a move WOULD cost. The
+   second and later attempts at the same refused move each cost the drive
+   another minute of trouble-shooting — and the FIRST one is free, because a
+   machinist who trips an interlock once has learned something real and
+   should not be charged for it.
+
+   The evidence gate that used to guard this number has been retired WITH the
+   exploit it guarded: there is no percentage to leak, because the meter no
+   longer reports a hypothetical. See the note beside it in index.html. */
+
+/** A refused move, as a drive sees it. `n` counts how many times this exact
+ *  move has already been asked for in this session. */
+export const REFUSAL_MIN = 1;
+
+export function refusalMinutes(n) {
+  return n <= 0 ? 0 : REFUSAL_MIN * n;
+}
+
+/** Where the number came from, in plain words, put on the screen once — at
+ *  the moment the player first asks a question the machine cannot answer. */
+export const REFUSAL_WHY =
+  "A load meter reads a CUT. Servos feed back, they do not answer questions — " +
+  "there is nothing to read until the command is out. Asking for a move the " +
+  "machine will refuse costs the drive a minute of trouble-shooting, each time.";
 
 /** Impatience, keyed to MINUTES LATE rather than to a nag timer. A man does not
  *  get impatient on a schedule; he gets impatient when the job is late. */

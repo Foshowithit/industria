@@ -425,3 +425,212 @@ export function daylight(clock_min) {
     lamp_K: h < 7 ? 4200 : h < 17 ? 5000 : 3800,
   };
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE PART LIFECYCLE — where a part physically IS, and who takes it away
+   ══════════════════════════════════════════════════════════════════════════
+   ROUND 9. The shop floor used to be one machine and one casting: you bored
+   it and money happened. `game.mjs` now models STOCK (blanks), a FINISHED
+   rack, a SCRAP bin, and the COURIER whose departure at 10:30 is the first
+   event in this game that nobody can talk back to. Everything here is the
+   PURE half of that: what a shelf looks like, when the van comes, and what
+   the shop does when a part turns out dead. No three.js, no DOM — so the
+   same arithmetic can be unit-tested and, more importantly, so the page
+   cannot grow its own second copy of it. Same discipline as the kernel.
+
+   ADVISORY ONLY. machine_execution = false.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── THE COURIER ──────────────────────────────────────────────────────────
+   J1's brief has said "before the courier at 10:30" since it was written and
+   that courier has been fiction: `deadline_min` was enforced as money and
+   nothing else. A van is a van. It arrives, it is loaded, and it leaves,
+   and what is standing on the rack at the moment it leaves is what Halvorsen
+   gets. Times are MINUTES OF DAY, the same units as `job.deadline_min`. */
+export const COURIER = {
+  courier: 'Hallam Couriers',
+  /* How long the van actually stands on the apron. It books an hour, the
+     driver knocks off at the booked time, and a van that leaves a third of
+     an hour early is not a mechanic — it is what a booked slot means. */
+  window_min: 20,
+  /* After the deadline he is still in the yard, still working through the
+     drop, and takes another hour to clear the round. His radio message to
+     the dispatcher is "one short" and the booking PPI-PUMP-1 goes red. */
+  booked_start_min: 10 * 60 + 30,
+  booked_end_min:   11 * 60 + 30,
+};
+
+/* WHY ONE OF THESE IS NOT DERIVED AND THE OTHER IS.
+   `arrives_min` is the booked slot: `job.deadline_min` is the booking, and a
+   literal copy of it in this file would be a second source of truth for one
+   fact — the exact failure this project has already shipped twice (the
+   duplicated "which limit binds" derivation, the deleted rule statement).
+   So it is a PARAMETER, and the one caller passes the job's own number.
+   The window and the late departure are properties of THIS vehicle, not of
+   any job, so they belong here and `game.mjs` reads them. */
+export const arrivalMin = (job, courier = COURIER) => job.deadline_min;
+export const departsMin = (job, courier = COURIER) =>
+  arrivalMin(job, courier) + courier.window_min;
+
+/* What his day looks like around the two hours that matter. Pure text — the
+   shop says these things out loud and they are the only warning the player
+   gets that a van exists at all. */
+export function courierSchedule(job, courier = COURIER) {
+  const at = arrivalMin(job, courier), gone = departsMin(job, courier);
+  return [
+    { at: at - 40, kind: 'eta',
+      text: `Dispatch: ${courier.courier} booked window ${hhmm(at)} — ${hhmm(gone)}. They do not wait.` },
+    { at: at - 2, kind: 'arriving',
+      text: `A diesel on the apron. ${courier.courier} is backing up to the roll-up door.` },
+    { at, kind: 'loading',
+      text: `${courier.courier} loading. Finished rack, then he is gone at ` +
+            `${hhmm(gone)}${job.client ? ' — ' + job.client + "'s round is the whole morning." : '.'}` },
+    /* The last entry is a PLACEHOLDER: what he says at the booked time
+       depends on what is standing on the rack, and the rack is not known
+       until the moment arrives — see `depart()`. Leaving it out entirely
+       would let the page invent its own line at the one beat of the round
+       that must not be invented. */
+    { at: gone, kind: 'departed', text: '', spoken_by: 'depart' },
+  ];
+}
+
+/* ── THE SHOP'S STORES ────────────────────────────────────────────────────
+   A casting is a real object with a weight and a price. These are ORDER-OF-
+   MAGNITUDE numbers for a 30 mm-deep Ø40 housing in 4140, and they are
+   labelled as such rather than dressed up as measured — the standing rule in
+   this project is that a number nobody can defend is worse than no number. */
+export const CHARGES = {
+  blank_cost: 42,       /* stock per casting, £ */
+  blank_min: 1.5,       /* walking to the crate and back, machine-idle minutes */
+  setup_min: 12,        /* insert change, re-clamp, re-datum: the time a
+                           second blank on the SAME setup does not cost */
+  /* ON A FINISHED PART. This is the one place in this file where the world
+     computes a CONSEQUENCE, and it is deliberately a CONSEQUENCE and not a
+     punishment: a new blank cannot be re-datumed on the original face once a
+     finish cut has skimmed it, so the second setup costs money as well as
+     time. It is applied to the part classes that HAVE had a finish cut
+     (accepted, oversize, undersize) and never to a scrap part, which was
+     never finished — a scrap part is caught on the same setup it was cut on
+     and costs one blank and a walk. Scrap parts are therefore the CHEAP
+     recovery, which is the opposite of what a punishment variable would do
+     and is what the process actually does. */
+  remount_cost: 18,
+};
+
+/* Castings on the floor at the start of the shift. Three is not a tuning
+   knob: it is what fits in one crate, and the crate is a thing in the shop
+   you can walk up to and count. */
+export const BLANK_STOCK = 3;
+
+/**
+ * A fresh blank, as an OBJECT rather than a counter.
+ *
+ * The identity (`J1-02`) is handed out here so the crate, the rack, the bin
+ * and the courier's manifest all key the same casting by the same name. A
+ * bare integer would work; a name is what a human writes on a card, and it
+ * is also what makes "which part is on the rack" a question with one answer.
+ */
+export function mintBlank(job, n = 0) {
+  return {
+    id: `${job.id}-${String(n + 1).padStart(2, '0')}`,
+    job_id: job.id,
+    material: job.material,
+    start_hole_dia_mm: job.start_hole_dia_mm,
+    minted_at: n,
+  };
+}
+
+/** The crate you can see: how much stock is on the floor. */
+export const crateCountFor = (load, stock = 3) =>
+  Math.max(0, Math.min(stock, stock - load));
+
+/**
+ * The rack, as an observer sees it. `slots` is the physical capacity of the
+ * rack next to the roll-up door — a real limit, so "the rack is full" can
+ * stop a shipment on its own rather than being a message.
+ */
+export const RACK_SLOTS = 4;
+
+export function rackView(finished = [], stock = RACK_SLOTS) {
+  return {
+    slots: stock,
+    used: finished.length,
+    free: Math.max(0, stock - finished.length),
+    parts: finished.map((p) => ({ id: p.id, verdict: p.verdict, since_min: p.shipped_at })),
+  };
+}
+
+/* ── WHAT THE SHOP DOES WHEN A PART TURNS OUT DEAD ────────────────────────
+   §108's second anti-goal is "a machine-control emulator with no living
+   world". The world's half of a part outcome is that OTHER PEOPLE have to
+   deal with it, and the first thing that happens when a bearing housing
+   measures 0.02 mm small is that somebody in the assembly bay tries to put a
+   bearing in it. That is Mr. Achebe's job and he is at the bench, not at
+   the machine, and his day is now different because of what you did.
+   ──────────────────────────────────────────────────────────────────────── */
+export const JOB_DEAD = {
+  min: 20,       /* minutes on the bench before he gives up and walks over */
+  by: 'Mr. Achebe',
+  department: 'assembly',
+};
+
+/** The proof that the part is real: a bearing that will not go in. */
+export const AXIS_DIA_MM = 40;
+
+export function assemblyProof(axis_dia_mm = AXIS_DIA_MM) {
+  return { axis_dia_mm, tried: 1, verdict: 'WILL NOT ENTER', at_bench: JOB_DEAD.by };
+}
+
+/**
+ * The shop requests another blank out of stores.
+ *
+ * `recovery` is where the part failure LEAVES you, and this function is the
+ * only place that decides it. Note the shape: it returns a CAUSE and the
+ * blank it hands over, not a penalty. `why_blocked` can stop the whole thing
+ * — a shop with no stock cannot recover from anything, and that is a fact
+ * about the shop rather than a fine.
+ */
+export function requestBlank(load, opts = {}) {
+  const {
+    stock_on_hand = 3, walk_min = CHARGES.blank_min,
+    reason = 'SCRAP', part_id = null, blocked = null,
+  } = opts;
+  if (blocked) return { ok: false, why: blocked, reason, part_id };
+  if (stock_on_hand < 1) return { ok: false, why: 'NO_STOCK_IN_STORES', reason, part_id };
+  return {
+    ok: true, reason, part_id,
+    walk_min, stock_after: load.stock - 1,
+  };
+}
+
+/* ── WHAT THE COURIER EVENT LEAVES BEHIND ─────────────────────────────────
+   `depart()` is the single point where 10:30 becomes a fact. It is written
+   as a pure function of the rack so that the page cannot disagree with it:
+   the page ANIMATES this decision, it does not make it. */
+export function depart({ job, clock_min, finished = [], courier = COURIER, load = null }) {
+  const at = arrivalMin(job, courier);
+  const gone = departsMin(job, courier);
+  if (clock_min < gone) return { ok: false, why: 'NOT_YET', at, gone };
+  const accepted = finished.filter((p) => p && p.disposition === 'SEND');
+  const sent = accepted.length ? accepted[0] : null;
+  return {
+    ok: true, at, gone,
+    departed_with: sent ? { id: sent.id, verdict: sent.verdict } : null,
+    left_behind: finished.filter((p) => !sent || p.id !== sent.id)
+      .map((p) => ({ id: p.id, disposition: p.disposition, verdict: p.verdict })),
+    /* THE DEPENDENCY. Halvorsen's pump line is down and it stays down until a
+       housing that fits goes out of that door. Nothing in this return value
+       is a score: it is the state of somebody else's factory. */
+    dependency: sent ? 'SATISFIED' : 'UNSATISFIED',
+    note: sent
+      ? `${job.client} gets one housing — ${sent.id}. The pump line can be built on Monday.`
+      : `${job.client} gets nothing. No housing, no pump, and the line stays down.`,
+  };
+}
+
+/** 24-hour clock, minutes -> "10:30". Lives here so the world and the page
+ *  cannot print the same minute two different ways. */
+export function hhmm(min) {
+  const m = ((Math.round(min) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}

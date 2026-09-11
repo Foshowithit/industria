@@ -64,8 +64,16 @@ const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const MODULES = [
   { id: 'three',    file: 'vendor/three/three.module.min.js', deps: [] },
   { id: 'kernel',   file: 'kernel.mjs',   deps: [] },
-  { id: 'game',     file: 'game.mjs',     deps: [['./kernel.mjs', 'kernel']] },
   { id: 'world',    file: 'world.mjs',    deps: [] },
+  /* WORLD IS A DEPENDENCY OF GAME, AND THAT IS THE POINT OF ROUND 9.
+     The part lifecycle — the crate, the rack, the bin, the courier — has ONE
+     definition and it lives in world.mjs. `game.mjs` reads the shop's
+     constants and the job's own booked slot from there instead of keeping a
+     second copy of 10:30. A second copy of one fact is the exact failure
+     this project has already shipped once, in the two independent
+     derivations of "which limit binds". */
+  { id: 'game',     file: 'game.mjs',     deps: [['./kernel.mjs', 'kernel'],
+                                                 ['./world.mjs', 'world']] },
   { id: 'people',   file: 'people.mjs',   deps: [] },
   { id: 'audio',    file: 'audio.mjs',    deps: [] },
   { id: 'recorder', file: 'recorder.mjs', deps: [] },
