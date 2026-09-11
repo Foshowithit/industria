@@ -115,6 +115,11 @@ import * as G from './game.mjs';
 import * as W from './world.mjs';
 import * as P from './people.mjs';
 import { createAudio } from './audio.mjs';
+/* Playtest instrumentation. Dark unless the URL asks for it (`?rec=1`), so the
+   public build behaves exactly as before — see recorder.mjs and PLAYTEST-KIT.md.
+   Every call below is a no-op returning early when `REC` is null. */
+import * as RECmod from './recorder.mjs';
+const REC = RECmod.isRecording() ? RECmod : null;
 
 /* ══════════════════════════════════════════════════════════════════════════
    INDUSTRIA — the floor.
@@ -482,6 +487,7 @@ let stepAccum = 0;
 /* ── HUD ────────────────────────────────────────────────────────────────── */
 function toast(html, ms = 4200) {
   const d = document.createElement('div'); d.innerHTML = html; $('ev').appendChild(d);
+  if (REC) REC.hint({ kind: 'toast', who: null, text: html, is_question: false });
   setTimeout(() => { d.style.transition = 'opacity .5s'; d.style.opacity = '0'; setTimeout(() => d.remove(), 520); }, ms);
 }
 let talkTimer = null;
@@ -490,14 +496,17 @@ function say(who, text, options) {
   t.innerHTML = `<div class="who">${who}</div><div class="say">${text}</div>`;
   if (options) for (const [label, fn] of options) {
     const b = document.createElement('div'); b.className = 'opt'; b.textContent = label;
-    b.onclick = () => { t.innerHTML = ''; fn(); }; t.appendChild(b);
+    b.onclick = () => { t.innerHTML = ''; if (REC) REC.choice(label, { who }); fn(); }; t.appendChild(b);
   }
+  if (REC) REC.hint({ kind: 'say', who, text, is_question: !!options,
+                      options: options ? options.map((o) => o[0]) : null });
   clearTimeout(talkTimer);
   if (!options) talkTimer = setTimeout(() => { t.innerHTML = ''; }, 5400);
 }
 function logLine(html) {
   const d = document.createElement('div'); d.innerHTML = html;
   const L = $('log'); L.prepend(d); L.children[0].classList.add('new');
+  if (REC) REC.hint({ kind: 'log', who: null, text: html, is_question: false });
   while (L.children.length > 9) L.lastChild.remove();
 }
 
@@ -605,8 +614,8 @@ function handleMachineKeys(e) {
   if (!atMachine && !CARRIED.calipers) return;
   const d = 'Digit1 Digit2 Digit3 Digit4 Digit5 Digit6'.split(' ');
   const i = d.indexOf(e.code);
-  if (i >= 0) { biteCmd_um = DIALS[i]; toast(`Dial set to <b>${biteCmd_um} µm</b> on the radius.`, 1800); return; }
-  if (e.code === 'Digit0') { biteCmd_um = 0; return; }
+  if (i >= 0) { biteCmd_um = DIALS[i]; if (REC) REC.action('set_dial', { dial_um: biteCmd_um, key: e.code, clock_min: GAME ? GAME.clock_min : null }); toast(`Dial set to <b>${biteCmd_um} µm</b> on the radius.`, 1800); return; }
+  if (e.code === 'Digit0') { biteCmd_um = 0; if (REC) REC.action('set_dial', { dial_um: 0, key: 'Digit0' }); return; }
   if (e.code === 'KeyC') doCut();
   if (e.code === 'KeyM') doMeasure();
   if (e.code === 'KeyT') doTouchOff();
@@ -658,6 +667,7 @@ function kernelJob(fn, ...args) {
 }
 function needCalipers() {
   if (CARRIED.calipers) return true;
+  if (REC) REC.refusal('measure', 'NO_CALIPERS', { clock_min: GAME.clock_min });
   say('You', 'Nothing to measure with. The calipers are on the bench by the machine.');
   return false;
 }
@@ -668,6 +678,12 @@ function doMeasure() {
   const r = kernelJob(G.measure, { samples: 3, seed: 7 });
   lastRead = { mm: r.reading_mm, sigma_um: r.sigma_um, partC: r.partC,
                at_min: GAME.clock_min, coldDia_at_measure: r.coldDia_mm };
+  if (REC) REC.measurement({
+    reading_mm: r.reading_mm, sigma_um: r.sigma_um, hotDia_mm: r.hotDia_mm,
+    coldDia_mm: r.coldDia_mm, partC: r.partC, job: GAME.job,
+    seq_index: GAME.shots, clock_min: GAME.clock_min,
+    tool: GAME.tool ? GAME.tool.label : null,
+  });
   const bore = W.boreGeometry(GAME, G.partGrowth_um);
   const off = r.reading_mm - GAME.job.nominal_mm;
   logLine(`Gauge says <b>Ø${r.reading_mm.toFixed(4)}</b> mm at ${r.partC.toFixed(1)} °C ` +
@@ -681,23 +697,30 @@ function doMeasure() {
 }
 function doTouchOff() {
   const g = GAME;
-  if (!g.tool) return say('You', 'No bar in the spindle.');
+  if (!g.tool) { if (REC) REC.refusal('touch_off', 'NO_TOOL', { clock_min: g.clock_min }); return say('You', 'No bar in the spindle.'); }
   /* the datum is set ONCE, in the cold frame, and never re-referenced */
   if (g.machine.edgeR_cold_mm === null) {
     g.machine.edgeR_cold_mm = g.part.holeDia_cold_mm / 2;
     GAME.machine.refSpindleC = g.machine.spindleC;
     GAME.machine.refScrewC = g.machine.screwC;
+    if (REC) REC.action('touch_off', { clock_min: g.clock_min, first: true,
+      coldDia_mm: g.part.holeDia_cold_mm });
     logLine('<b>Touch-off.</b> Dial zeroed on the wall as it stands. Every number from ' +
       'here is relative to this datum.');
     say('You', 'The bar just kissed the wall. Dial is zero here.');
-  } else toast('Already touched off.', 1600);
+  } else { if (REC) REC.action('touch_off', { clock_min: g.clock_min, first: false }); toast('Already touched off.', 1600); }
 }
 function doWarmUp() {
   const g = GAME;
-  if (g.machine.spindle_on) return toast('Already running.', 1600);
+  if (g.machine.spindle_on) { if (REC) REC.refusal('warm_up', 'ALREADY_RUNNING', { clock_min: g.clock_min }); return toast('Already running.', 1600); }
   const b4 = { s: g.machine.spindleC, r: g.machine.screwC, p: g.part.partC };
   kernelJob(G.warmUp, 20);
   g.machine.spindle_on = true;
+  if (REC) REC.action('warm_up', { clock_min: g.clock_min, minutes: 20,
+    spindleC_before: b4.s, spindleC_after: g.machine.spindleC,
+    screwC_before: b4.r, screwC_after: g.machine.screwC,
+    partC_before: b4.p, partC_after: g.part.partC,
+    edgeOffset_um: G.edgeOffset_um(g) });
   logLine(`Spindle run <b>20 min</b>. Spindle ${b4.s.toFixed(1)} → ${g.machine.spindleC.toFixed(1)} °C, ` +
     `part ${b4.p.toFixed(1)} → ${g.part.partC.toFixed(1)} °C. ` +
     `Thermal edge offset now <b>${G.edgeOffset_um(g).toFixed(1)} µm</b>.`);
@@ -707,13 +730,34 @@ function doWarmUp() {
 }
 function doRough() {
   const g = GAME;
-  if (!g.tool) return say('You', 'Load a bar first — they\u2019re on the board.');
+  if (!g.tool) { if (REC) REC.refusal('rough', 'NO_TOOL', { clock_min: g.clock_min }); return say('You', 'Load a bar first — they\u2019re on the board.'); }
   g.machine.spindle_on = true;
   if (g.machine.edgeR_cold_mm === null) doTouchOff();
   /* leave a real allowance: roughing is repeats, not decisions (§77) */
+  const diaBefore = g.part.holeDia_cold_mm;
   const r = kernelJob(G.roughTo, { target_dia_mm: g.job.band_high_mm - 0.008,
     bite_mm: 0.3, feed_mm_rev: 0.12, vc: 120 });
-  if (!r || !r.ok || !r.passes.length) return toast('Nothing left to rough.', 1800);
+  if (!r || !r.ok || !r.passes.length) {
+    if (REC) REC.refusal('rough', r && r.why ? r.why : 'NOTHING_TO_ROUGH',
+      { clock_min: g.clock_min, detail: 'roughTo returned no passes' });
+    return toast('Nothing left to rough.', 1800);
+  }
+  if (REC) {
+    REC.action('rough', { clock_min: g.clock_min, passes: r.passes.length,
+      minutes: r.minutes, target_dia_mm: g.job.band_high_mm - 0.008,
+      coldDia_before_mm: diaBefore, coldDia_after_mm: g.part.holeDia_cold_mm });
+    /* Roughing is REPEATS, so each pass gets its own `cut` row: the surplus
+       relationship is only discoverable if every pass is on the record. */
+    let dB = diaBefore, prevClock = g.clock_min;
+    for (const p of r.passes) {
+      REC.cut({ rec: p, coldDia_before_mm: dB, coldDia_after_mm: dB + p.bite_realised_um / 500,
+                clock_min: g.clock_min, pass_index: p.n });
+      dB += p.bite_realised_um / 500;   // realised is a RADIUS; diameter moves 2x
+      prevClock = g.clock_min;
+    }
+    void prevClock;
+    REC.action('rough_done', { clock_min: g.clock_min, dialR_um: r.passes[r.passes.length - 1].edge_coldR_mm * 1000 });
+  }
   const last = r.passes[r.passes.length - 1];
   chipsFromPass(last, g.mat);
   if (audioReady) { AUD.cutEnter('mine', { tooth_Hz: 60, gain: 0.3 }); AUD.chipFall(1); }
@@ -730,11 +774,14 @@ function doRough() {
 }
 function doCut() {
   const g = GAME;
-  if (!g.tool) { say('You', 'The spindle\u2019s empty. Bars are on the board behind you.'); return; }
-  if (biteCmd_um <= 0) { toast('Dial is at zero. Pick a cut on 1\u20136.', 2000); return; }
+  if (!g.tool) { if (REC) REC.refusal('cut', 'NO_TOOL', { clock_min: g.clock_min, dial_um: biteCmd_um }); say('You', 'The spindle\u2019s empty. Bars are on the board behind you.'); return; }
+  if (biteCmd_um <= 0) { if (REC) REC.refusal('cut', 'DIAL_AT_ZERO', { clock_min: g.clock_min, dial_um: biteCmd_um }); toast('Dial is at zero. Pick a cut on 1\u20136.', 2000); return; }
   if (g.machine.edgeR_cold_mm === null) doTouchOff();
+  const diaBefore = g.part.holeDia_cold_mm;
   const res = kernelJob(G.cutOnce, { bite_mm: biteCmd_um / 1000, feed_mm_rev: 0.12, vc: 120, label: 'bored' });
   if (!res.ok) {
+    if (REC) REC.cutRefused(res.why, { dial_um: biteCmd_um, clock_min: g.clock_min,
+      detail: res.detail || null });
     if (res.why === 'RUBBING') {
       toast('<b>RUBBING.</b> The edge is not engaging — it is dragging on the wall.', 4200);
       say('Earl', "\u201cHear that? That's not cutting. Back it off and take a real bite.\u201d");
@@ -746,6 +793,8 @@ function doCut() {
     return;
   }
   const rec = res.rec;
+  if (REC) REC.cut({ rec, coldDia_before_mm: diaBefore, coldDia_after_mm: g.part.holeDia_cold_mm,
+                     clock_min: g.clock_min, pass_index: rec.n });
   const info = chipsFromPass(rec, g.mat);
   g.machine.spindle_on = true;
   if (audioReady) { AUD.cutEnter('mine', { tooth_Hz: 60, gain: 0.3 }); AUD.clack({ gain: 0.4, pitch: 1200 }); }
@@ -771,6 +820,14 @@ function doInspect() {
     gauge_err_um: lastRead ? (lastRead.mm - lastRead.coldDia_at_measure) * 1000 : 0,
   };
   if (audioReady) AUD.clack({ gain: 0.6, pitch: 700, kind: 'steel' });
+  if (REC) {
+    REC.shipEvent({ verdict: v.verdict, true_cold_mm: GAME.part.holeDia_cold_mm,
+      last_reading_mm: lastRead ? lastRead.mm : null, job: GAME.job,
+      net: r.net, late: r.late, passes: r.passes, shots: r.shots,
+      clock_min: GAME.clock_min });
+    firstEndAt = firstEndAt === null ? REC.wallMs() : firstEndAt;
+    endedOnce = true;
+  }
   if (v.verdict === 'ACCEPTED') {
     say('Earl', "\u201cThat's in. Put it on the bench, I'll get it on the van.\u201d");
     toast(`<b>ACCEPTED.</b> ${r.net >= 0 ? '+' : ''}£${r.net}` +
@@ -786,11 +843,30 @@ function doInspect() {
     logLine(`<b>${v.verdict}</b> — ${r.note}`);
   }
   SEEN.corrected = true;
+  /* Was the part OVER? Then it is still in your hands and you may cut again —
+     that is not a second part, and counting it as one would poison the single
+     most valuable number in the file. */
+  if (REC && v.verdict !== 'UNDERSIZE — SCRAP') {
+    partStillLive = !v.inSpec;
+  }
+}
+/* ── THE SECOND PART — the one question the whole round exists to answer ──── */
+let endedOnce = false, firstEndAt = null, partStillLive = false, secondPartSeen = false;
+function noteSecondPart(verbatim) {
+  if (!REC || !endedOnce || secondPartSeen || partStillLive) return;
+  secondPartSeen = true;
+  REC.secondPart({ started: true,
+    seconds_since_first_end: firstEndAt === null ? null
+      : Math.round((REC.wallMs() - firstEndAt) / 1000),
+    verbatim: verbatim ?? null });
 }
 
 /* ── THE LOOK-AT PROMPT ─────────────────────────────────────────────────── */
 let lookingAt = null;
 function doLook() {
+  /* Starting a SECOND bar after the first one is done and gone is the single
+     fact Round 1 turns on: "Give me another part" without being asked. */
+  if (lookingAt && /boring bar/i.test(lookingAt.name)) noteSecondPart('loaded another bar');
   if (lookingAt && lookingAt.act) lookingAt.act();
 }
 function updateLook() {
@@ -881,6 +957,7 @@ function enter() {
   renderer.domElement.requestPointerLock?.();
   audioGo();                       // browsers only allow audio from a gesture
   GEAR();
+  if (REC) REC.sessionStart({ game: GAME, clocks });
 }
 function GEAR() {
   GAME = G.newGame();
@@ -901,6 +978,7 @@ renderer.domElement.addEventListener('click', () => {
 /* ── MAIN LOOP ──────────────────────────────────────────────────────────── */
 const SPD_WALK = 2.5, SPD_RUN = 5.0;
 let prev = performance.now(), fpsN = 0, fpsT = prev, FPS = 0;
+let recSampleAccum = 0;
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -1020,6 +1098,28 @@ function frame(now) {
       : 'not measured';
     $('hBand').textContent = `${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}`;
     $('hMoney').innerHTML = `ON THE DAY <b>£${GAME.money}</b>` + (FPS ? ` <span style="opacity:.45">${FPS.toFixed(0)}fps</span>` : '');
+
+    /* ── THE RECORDER'S ONE TIMER ──────────────────────────────────────────
+       2 Hz. Cheap enough to be invisible, dense enough that a hesitation is
+       visible as a gap. It samples whether a prompt is CURRENTLY on screen,
+       which is what lets the analysis separate "did not understand" from
+       "was never asked" — the two failures that look identical in a log that
+       only records keypresses. */
+    if (REC) {
+      recSampleAccum += dtReal;
+      if (recSampleAccum >= 0.5) {
+        recSampleAccum = 0;
+        const kk = Object.keys(keys).filter((k) => keys[k]);
+        const sayEl = $('talk');
+        REC.sample({
+          clock_min: GAME.clock_min, phase, looking_at: lookingAt ? lookingAt.name : null,
+          prompt_visible: !!lookingAt, prompt_text: lookingAt ? lookingAt.verb : null,
+          say_visible: !!(sayEl && sayEl.innerHTML.length > 4),
+          keys_held: kk, money: GAME.money, history_len: GAME.history.length,
+          measurements: GAME.shots, tool: GAME.tool ? GAME.tool.label : null,
+        });
+      }
+    }
   }
   renderer.render(scene, camera);
 }
@@ -1040,9 +1140,20 @@ window.INDUSTRIA = {
   audio: () => ({ ready: audioReady, api: !!(globalThis.AudioContext || globalThis.webkitAudioContext),
                   ctx_state: AUD && AUD.context ? AUD.context.state : null }),
   carry: CARRIED, seen: SEEN,
-  setBite: (um) => { biteCmd_um = um; },
+  setBite: (um) => { biteCmd_um = um; if (REC) REC.action('set_dial', { dial_um: um, via: 'panel', clock_min: GAME ? GAME.clock_min : null }); },
   cut: doCut, measure: doMeasure, inspect: doInspect, rough: doRough,
   warm: doWarmUp, touch: doTouchOff, vibe: (n) => vibrate(n),
+  /* The recorder, reachable from the runner so a session can be closed out
+     cleanly with a real verdict instead of a truncated file. Null on the
+     public build, because `?rec` was not in the URL. */
+  rec: REC, recStats: () => (REC ? REC.stats() : null),
+  recEnd: (reason) => {
+    if (!REC) return null;
+    REC.sessionEnd({ reason: reason || 'runner_close', clock_min: GAME ? GAME.clock_min : null,
+      money: GAME ? GAME.money : null, history_len: GAME ? GAME.history.length : null,
+      measurements: GAME ? GAME.shots : null, finished: GAME ? GAME.finished : null });
+    return REC.stats();
+  },
 };
 </script>
 </body>
