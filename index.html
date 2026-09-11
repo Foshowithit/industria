@@ -1037,6 +1037,8 @@ window.INDUSTRIA = {
     if (!L) return { ok: false, why: 'no such thing', have: LOOK.map((e) => e.name) };
     L.act(); return { ok: true, did: L.name }; },
   items: () => LOOK.map((e) => e.name),
+  audio: () => ({ ready: audioReady, api: !!(globalThis.AudioContext || globalThis.webkitAudioContext),
+                  ctx_state: AUD && AUD.context ? AUD.context.state : null }),
   carry: CARRIED, seen: SEEN,
   setBite: (um) => { biteCmd_um = um; },
   cut: doCut, measure: doMeasure, inspect: doInspect, rough: doRough,
