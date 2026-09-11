@@ -42,6 +42,15 @@
   #panel .row i{color:var(--dim);font-style:normal}
   #panel .cut{margin-top:8px;padding-top:8px;border-top:1px solid #2a333d}
   #panel kbd{background:#1b2229;border:1px solid #333d47;border-radius:2px;padding:0 4px;font-size:11px;color:var(--ink)}
+  /* the load meter — a machine instrument, not a part measurement */
+  #pnLoad{margin-top:8px;padding-top:8px;border-top:1px solid #2a333d}
+  #pnLoad .lm{display:flex;align-items:center;gap:6px;font-size:10px;padding:1px 0}
+  #pnLoad .lm i{color:var(--dim);font-style:normal;width:44px;letter-spacing:.06em}
+  #pnLoad .lmt{flex:1;height:5px;background:#1b2229;border-radius:2px;overflow:hidden}
+  #pnLoad .lmt b{display:block;height:100%;background:#69a84f}
+  #pnLoad .lm em{font-style:normal;color:var(--dim);width:30px;text-align:right;font-variant-numeric:tabular-nums}
+  #pnLoad .lm em.over{color:#e2614a;font-weight:600}
+  #pnLoad .lmsub{color:var(--dim);font-size:10px;margin-top:3px;font-variant-numeric:tabular-nums}
 
   /* toasts — used ONLY for speech and events, never for instructions */
   #talk{left:50%;bottom:74px;transform:translateX(-50%);max-width:min(620px,86vw);text-align:center}
@@ -118,6 +127,7 @@
   <h4 id="pnTitle">Machine</h4>
   <div id="pnRows"></div>
   <div class="cut" id="pnCut"></div>
+  <div data-lmhost="1" id="pnLoad"></div>
 </div>
 
 <div id="hint">WASD move · mouse look · <b>E</b> use · <b>shift</b> run</div>
@@ -761,6 +771,25 @@ for (const [id, mesh, lbl] of [['bar12', BOARDS.bar12, 'Ø12'], ['bar16', BOARDS
 const DIALS = [10, 20, 50, 100, 200, 400];
 let biteCmd_um = 0, stickout = 45;
 
+/* ── ROUGHING IS A DECISION, NOT A BUTTON (round 2) ─────────────────────────
+ * `DIALS` above is the FINISHING dial — small, fine, one-directional, and it
+ * stays exactly as it was because the mechanic it carries (a commanded number
+ * that is never what comes off) is the one the round measures. Roughing has a
+ * different job: it exists to shift metal, and the bites that matter there are
+ * whole millimetres. Reaching 4 mm with the 400 µm dial would need ten presses
+ * and would tell the player nothing about load.
+ *
+ * So roughing gets its own bite ladder, and a feed. The feed is the interesting
+ * one: measured on J2, bite 4 mm at 0.12 mm/rev draws 43 % of spindle power and
+ * at 0.30 mm/rev is REFUSED at 107 %. Same dial, refusal decided entirely by
+ * feed — which is the true statement about this physics (MRR = b·h·vc) and it
+ * is already in the kernel. Nothing tells the player that. They find it by
+ * having a move turned down. */
+const ROUGH_BITES_MM = [0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0, 4.0];
+const ROUGH_FEEDS_MM_REV = [0.08, 0.12, 0.20, 0.30, 0.50];
+let roughBite_mm = 0.3;      /* the old hard-wired value, kept as the default */
+let roughFeed_mm_rev = 0.12; /* ditto */
+
 /* ── THE PREDICTION ─────────────────────────────────────────────────────────
  * Design-lead ruling (2026-09-11): "Make the player expose their current model
  * before the machine gives them the answer." The game refuses to perform the
@@ -800,6 +829,13 @@ function handleMachineKeys(e) {
   if (e.code === 'KeyV') doWarmUp();
   if (e.code === 'Enter') doInspect();
   if (e.code === 'KeyR') doRough();
+  /* Round 2 roughing controls. `[`/`]` = bite, `-`/`=` = feed. Bound only at
+     the machine, like every other machining verb — a feed change made from
+     across the shop floor would be a keystroke with no meaning. */
+  if (e.code === 'BracketLeft') stepRoughBite(-1);
+  if (e.code === 'BracketRight') stepRoughBite(1);
+  if (e.code === 'Minus') stepRoughFeed(-1);
+  if (e.code === 'Equal') stepRoughFeed(1);
 }
 
 function setPrediction(um) {
@@ -835,7 +871,13 @@ function machinePanel() {
       : `${predicted_um} µm`) +
     (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm <i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} vs dial)</i>`) : '') +
     `<div class="row" style="margin-top:6px"><i>1-6 dial · <kbd>Shift</kbd>+1-6 predict · <kbd>C</kbd> cut · <kbd>M</kbd> measure</i></div>` +
-    `<div class="row"><i><kbd>T</kbd> touch off · <kbd>V</kbd> warm up · <kbd>Enter</kbd> inspect</i></div>`;
+    `<div class="row"><i><kbd>T</kbd> touch off · <kbd>V</kbd> warm up · <kbd>Enter</kbd> inspect</i></div>` +
+    `<div class="row"><i><kbd>R</kbd> rough · <kbd>[</kbd><kbd>]</kbd> bite · <kbd>-</kbd><kbd>=</kbd> feed</i></div>`;
+  /* The instrument, refreshed on every panel tick. It reads the CURRENT
+     roughing setting, so stepping the feed with `=` moves the bars before the
+     cut rather than after the refusal. */
+  const lm = $('pnLoad');
+  if (lm) lm.innerHTML = loadMeterHTML();
 }
 
 /* ── THE VERBS — every number from the kernel, none from here ───────────── */
@@ -916,6 +958,95 @@ function doWarmUp() {
     setTimeout(() => say('Earl', "\u201cHe\u2019s got you warming spindles now. " +
       "Just don\u2019t stand there watching it, it\u2019ll take twenty minutes either way.\u201d"), 2000); }
 }
+/* ── THE PUSHBACK, SAID IN NUMBERS ──────────────────────────────────────────
+ * A refusal that says only "no" is a slot machine. This says WHAT wall, HOW
+ * FAR past it, and WHAT the machine already managed — three facts, no rule.
+ *
+ * It deliberately does NOT compute the largest bite that would fit. Working
+ * backwards from the wall to the answer is the inference the player is here to
+ * make, and handing it over would replace the round's mechanic with arithmetic
+ * the game did for them. It reports the load on the move that was ASKED for,
+ * which is what a load meter does, and stops. */
+function refusalText(bite, feed, env, why, did_um) {
+  const pct = (x) => `${(x * 100).toFixed(0)}%`;
+  const blade = `bite <b>${bite.toFixed(2)} mm</b> at feed <b>${feed.toFixed(2)} mm/rev</b>`;
+  let head;
+  if (why === 'SPINDLE POWER LIMIT') head = '<b>Not enough spindle.</b>';
+  else if (why === 'TORQUE LIMIT') head = '<b>Not enough torque.</b>';
+  else if (why === 'CHATTER') head = '<b>It would sing.</b>';
+  else if (why === 'SPINDLE SPEED LIMIT') head = '<b>Out of rpm.</b>';
+  else if (why === 'NO STOCK') head = '<b>Nothing there to cut.</b>';
+  else if (why === 'RUBBING') head = '<b>Rubbing, not cutting.</b>';
+  else head = `<b>Refused: ${why}.</b>`;
+  const load = env && env.ok
+    ? `<br>That move wants <b>${pct(env.power_frac)}</b> of spindle power and ` +
+      `<b>${pct(env.torque_frac)}</b> of torque at ${env.F_mean_N.toFixed(0)} N` +
+      (did_um > 0 ? `. The last pass took ${did_um.toFixed(1)} µm.` : '.')
+    : '';
+  toast(`${head} ${blade} — ${why.toLowerCase()}.${load}`, 7000);
+  logLine(`Roughing refused: <b>${why}</b> on ${blade}.`);
+}
+
+/* ── THE LOAD METER ─────────────────────────────────────────────────────────
+ * WHY THIS EXISTS, GIVEN ROUND 1'S RULE ABOUT NOT SHOWING NUMBERS. The
+ * difference is that this is not a measurement of the PART — it is a
+ * measurement of the MACHINE, and a machinist without a load meter is not being
+ * asked to infer anything, he is being asked to guess. Every machine in the
+ * shop has one and the operator glances at it constantly.
+ *
+ * It also cannot leak the round-1 secret. That one is a diameter; this is a
+ * fraction of rated spindle power over a COMMANDED bite. Nothing here is
+ * derived from the true bore or from the surplus, so the player still cannot
+ * learn from it what the dial really removes — which is the thing they are
+ * supposed to find out by cutting. */
+function loadMeterHTML() {
+  if (!GAME || !GAME.tool) return '';
+  const env = G.envelope(GAME, { bite_mm: roughBite_mm, feed_mm_rev: roughFeed_mm_rev, vc: 120 });
+  if (!env || !env.ok) return '';
+  const bar = (label, frac) => {
+    const p = Math.max(0, Math.min(1, frac)) * 100;
+    const over = frac > 1;
+    return `<div class="lm"><i>${label}</i>` +
+      `<span class="lmt"><b style="width:${p.toFixed(0)}%;background:${over ? '#c8452f' : frac > 0.85 ? '#c8962f' : '#69a84f'}"></b></span>` +
+      `<em${over ? ' class="over"' : ''}>${(frac * 100).toFixed(0)}%</em></div>`;
+  };
+  return bar('power', env.power_frac) + bar('torque', env.torque_frac) +
+    bar('rpm', env.rpm_frac) + bar('chatter', env.chatter_frac) +
+    `<div class="lmsub">${env.F_mean_N.toFixed(0)} N · sag ${env.sag_um.toFixed(1)} µm · ` +
+    `${env.cut_min.toFixed(2)} min/pass · bite ${roughBite_mm.toFixed(2)} feed ${roughFeed_mm_rev.toFixed(2)}</div>`;
+}
+function refreshLoadMeter() {
+  const el = document.querySelector('[data-lmhost]');
+  if (el) el.innerHTML = loadMeterHTML();
+}
+
+/* ── ROUGHING CONTROLS ──────────────────────────────────────────────────────
+ * Keys, not a mouse: the machine is already keyboard-driven and a panel that
+ * needed a cursor would break the one-handed work rhythm the other verbs are
+ * built around. `[`/`]` step the bite, `-`/`=` step the feed. Both write a
+ * recorder action, because a player who learns the wall by being refused at one
+ * feed and accepted at another has produced this round's most valuable
+ * evidence, and it has to survive into the session file. */
+function stepRoughBite(dir) {
+  const i = ROUGH_BITES_MM.indexOf(roughBite_mm);
+  const n = Math.max(0, Math.min(ROUGH_BITES_MM.length - 1, (i < 0 ? 2 : i) + dir));
+  roughBite_mm = ROUGH_BITES_MM[n];
+  if (REC) REC.action('set_rough', { bite_mm: roughBite_mm, feed_mm_rev: roughFeed_mm_rev,
+    clock_min: GAME ? GAME.clock_min : null });
+  toast(`Roughing bite <b>${roughBite_mm.toFixed(2)} mm</b>` +
+    (roughBite_mm >= 2 ? ' — that is a serious cut.' : '.'), 1800);
+  refreshLoadMeter();
+}
+function stepRoughFeed(dir) {
+  const i = ROUGH_FEEDS_MM_REV.indexOf(roughFeed_mm_rev);
+  const n = Math.max(0, Math.min(ROUGH_FEEDS_MM_REV.length - 1, (i < 0 ? 1 : i) + dir));
+  roughFeed_mm_rev = ROUGH_FEEDS_MM_REV[n];
+  if (REC) REC.action('set_rough', { bite_mm: roughBite_mm, feed_mm_rev: roughFeed_mm_rev,
+    clock_min: GAME ? GAME.clock_min : null });
+  toast(`Roughing feed <b>${roughFeed_mm_rev.toFixed(2)} mm/rev</b>`, 1800);
+  refreshLoadMeter();
+}
+
 function doRough() {
   const g = GAME;
   if (!g.tool) { if (REC) REC.refusal('rough', 'NO_TOOL', { clock_min: g.clock_min }); return say('You', 'Load a bar first — they\u2019re on the board.'); }
@@ -923,12 +1054,43 @@ function doRough() {
   if (g.machine.edgeR_cold_mm === null) doTouchOff();
   /* leave a real allowance: roughing is repeats, not decisions (§77) */
   const diaBefore = g.part.holeDia_cold_mm;
+  /* ── ROUND 2: ROUGHING IS NO LONGER A FIXED MOVE ─────────────────────────
+   * On J1 this was hard-wired to 0.3 mm at 0.12 mm/rev and it was the right
+   * call: 24 repeats that drew 3 % of the spindle and could never be refused.
+   * On a part with real stock in it that same fixed move is a wasted machine —
+   * and, worse, the move a player would naturally reach for is NOT this one.
+   * So the bite and the feed are now the player's, they are refused when they
+   * ask for more than the machine has, and the refusal names which wall it hit.
+   * The DEFAULT is unchanged, because a default is not a lesson. */
+  const feed = roughFeed_mm_rev;
+  const bite = roughBite_mm;
+  /* Preview first, so a refusal can be answered with the number that caused it
+     rather than a bare "no". `envelope` uses assessBoring — the same function
+     the cut refuses on — so the preview and the refusal cannot disagree. */
+  const env = G.envelope(g, { bite_mm: bite, feed_mm_rev: feed, vc: 120 });
   const r = kernelJob(G.roughTo, { target_dia_mm: g.job.band_high_mm - 0.008,
-    bite_mm: 0.3, feed_mm_rev: 0.12, vc: 120 });
+    bite_mm: bite, feed_mm_rev: feed, vc: 120 });
   if (!r || !r.ok || !r.passes.length) {
-    if (REC) REC.refusal('rough', r && r.why ? r.why : 'NOTHING_TO_ROUGH',
-      { clock_min: g.clock_min, detail: 'roughTo returned no passes' });
-    return toast('Nothing left to rough.', 1800);
+    /* THE PUSHBACK. A refused roughing pass now says which limit stopped it and
+       how far past it the command was, because "the machine said no" teaches
+       nothing and "that wants 159 % of spindle power, the wall is 100 %" is a
+       number the player can act on. Nothing here states the rule; it reports a
+       load meter reading on the move just requested. */
+    const why = r && r.why ? r.why : 'NOTHING_TO_ROUGH';
+    if (REC) REC.refusal('rough', why,
+      { clock_min: g.clock_min, bite_um: bite * 1000, feed_mm_rev: feed,
+        detail: r && r.detail ? r.detail : 'roughTo returned no passes',
+        pass_index: g.history.length });
+    const did = r && r.last ? r.last.bite_realised_um : 0;
+    refusalText(bite, feed, env, why, did);
+    return;
+  }
+  if (r.truncated) {
+    /* Roughing that stops for want of passes must SAY so. A run that quietly
+       quits early and reports success is the failure mode this project is
+       named after. */
+    toast(`Roughing hit the pass limit at Ø${g.part.holeDia_cold_mm.toFixed(3)} — ` +
+      `not at the target. Take the rest off.`, 5200);
   }
   if (REC) {
     REC.action('rough', { clock_min: g.clock_min, passes: r.passes.length,
@@ -1429,6 +1591,39 @@ window.INDUSTRIA = {
   predict: setPrediction,
   getPredicted: () => predicted_um,
   cut: doCut, measure: doMeasure, inspect: doInspect, rough: doRough,
+  /* ── ROUND 2 VERBS ───────────────────────────────────────────────────────
+   * Exposed so the acceptance gate drives the same functions the keys drive,
+   * not a copy of them. `envelope` is the load meter's own source, so a test
+   * asserting "this move is refused for power" and a player reading the meter
+   * before pressing R are looking at the same computation. */
+  envelope: (bite_mm, feed_mm_rev) => G.envelope(GAME,
+    { bite_mm: bite_mm === undefined || bite_mm === null ? roughBite_mm : bite_mm,
+      feed_mm_rev: feed_mm_rev === undefined || feed_mm_rev === null ? roughFeed_mm_rev : feed_mm_rev,
+      vc: 120 }),
+  setRough: (bite_mm, feed_mm_rev) => {
+    if (bite_mm !== undefined && bite_mm !== null) roughBite_mm = bite_mm;
+    if (feed_mm_rev !== undefined && feed_mm_rev !== null) roughFeed_mm_rev = feed_mm_rev;
+    refreshLoadMeter();
+    return { bite_mm: roughBite_mm, feed_mm_rev: roughFeed_mm_rev };
+  },
+  getRough: () => ({ bite_mm: roughBite_mm, feed_mm_rev: roughFeed_mm_rev }),
+  jobs: () => G.JOBS.map((j) => ({ id: j.id, title: j.title, client: j.client })),
+  /* Switching jobs is what lets the gate (and a player who wants the big part)
+     move between J1's lesson and J2's. It rebuilds from a fresh job spec, so
+     nothing of the old part — thermal history, dial offset, passes — leaks
+     across, which is the same discipline `newGame` already carries. */
+  job: (id) => {
+    if (!id) return GAME ? GAME.job.id : null;
+    const spec = G.jobById(id);
+    const money = GAME ? GAME.money : 0;
+    GAME = G.newGame(spec, undefined, money);
+    biteCmd_um = 0; predicted_um = null;
+    lastRead = null; revealed = null;
+    if (REC) REC.action('set_job', { job_id: spec.id, nominal_mm: spec.nominal_mm,
+      start_hole_dia_mm: spec.start_hole_dia_mm, clock_min: GAME.clock_min });
+    toast(`Set up <b>${spec.title}</b> — ${spec.client}.`, 4200);
+    return spec.id;
+  },
   warm: doWarmUp, touch: doTouchOff, vibe: (n) => vibrate(n),
   /* The recorder, reachable from the runner so a session can be closed out
      cleanly with a real verdict instead of a truncated file. Null on the

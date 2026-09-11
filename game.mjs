@@ -58,7 +58,75 @@ export const JOBS = [
     rate: 1850,
     late_credit: 0.7,
   },
+
+  /* ── J2 — THE STOCK-REMOVAL JOB ─────────────────────────────────────────
+     WHY THIS EXISTS. J1 is a Ø40 bore with 2 mm of radius to come out, which
+     a Ø20 bar clears in a handful of 0.3 mm repeats. Measured on J1
+     (tools/envelope-sweep.mjs): the deepest dial the machine offers, 400 µm,
+     draws 0.033 kW — 0.54 % of the 7.5 kW spindle — at 163 N, with a chatter
+     load of 0.010 against a limit that is 44x away. Roughing J1 out takes 24
+     passes and 12.7 minutes and NOTHING the player does is ever refused. The
+     machine cannot push back on that part, because the part is too small for
+     the machine to have an opinion about.
+
+     J2 is the same machine given work that is actually at its size: a Ø80 bore
+     in the same 4140, 55 mm deep, 4 mm of radius to come out. Now the walls are
+     inside the job instead of far outside it. Measured on J2, in the game's own
+     verbs (tools/envelope-sweep.mjs, section 7):
+
+        bite 4.0 mm @ 0.12 mm/rev   -> ok, 3.25 kW =  43 % of spindle power
+        bite 4.0 mm @ 0.30 mm/rev   -> REFUSED, SPINDLE POWER LIMIT (107 %)
+        bite 4.0 mm @ 0.50 mm/rev   -> REFUSED, SPINDLE POWER LIMIT (157 %)
+        bite 3.0 mm @ 0.30 mm/rev   -> REFUSED, TORQUE LIMIT
+        bite 2.0 mm @ 0.50 mm/rev   -> ok, 4.75 kW =  63 %
+
+     The lever is FEED, not depth — which is the true statement about this
+     physics and the one the kernel already models: MRR = b * h * vc, and kc
+     falls as h^-0.25, so leaning on the feed is how a machinist buys removal
+     rate, and it is also what runs him out of spindle. A player who has only
+     ever played J1 has never had a move refused for wanting too much power.
+
+     THE CHATTER LIMIT IS DELIBERATELY NOT THE JOB. On the boring path
+     `stability()` reports ap_crit_relevant = ap_crit_mm / h_mean, i.e. the
+     limit is set by the FEED and the dial does not enter it at all. Measured:
+     38.57 mm of radial bite at 0.12 mm/rev, 13.2 mm at 0.5, 4.68 mm at 2.0.
+     Every one of those bites wants 524 % of spindle power. So on this machine
+     power always binds before chatter can be reached, and a job that promised
+     chatter would be a job that lies. J2 therefore promises power and torque,
+     which the kernel genuinely reaches, and leaves chatter where it is. */
+  {
+    id: 'J2',
+    client: 'Kestrel Marine',
+    title: 'Stern tube liner — Ø80 IT7 bore',
+    brief:
+      'Their slipway window closes at 11:00 and the liner is the long pole. ' +
+      'A rough casting, pre-cored at Ø72, so there is 4 mm of radius to take ' +
+      'out of it — and the bar has to go 55 mm in to do it. Big bore, deep ' +
+      'cut, and a 7.5 kW spindle that will tell you when you have asked for ' +
+      'too much. Nobody is going to stop you leaning on the feed.',
+    material: 'steel_4140',
+    machine: 'vmc_40taper_7k5',
+    nominal_mm: 80,
+    grade: 'IT7',
+    start_hole_dia_mm: 72,
+    bore_depth_mm: 55,
+    clock_start_min: 8 * 60,
+    deadline_min: 11 * 60,
+    /* IT7 on Ø80 is +0.000 / +0.030 mm. Wider than the H6 band on J1 in
+       absolute terms, and still one-sided from nominal — a bigger part is not
+       an easier part, it is the same problem with more metal in the way. */
+    band_low_mm: 80.000,
+    band_high_mm: 80.030,
+    rate: 2400,
+    late_credit: 0.7,
+  },
 ];
+
+/** The job the machine is currently set up for. J1 stays the default: it is the
+ *  one that teaches the one-directional error first, and a player who has never
+ *  held a tolerance has no business being handed a 4 mm roughing cut. */
+export const DEFAULT_JOB_ID = 'J1';
+export const jobById = (id) => JOBS.find((j) => j.id === id) || JOBS[0];
 
 /* ══════════════════════════════════════════════════════════════════════════
    THERMAL CONSTANTS — EXPOSED AND PLACEHOLDER
@@ -672,7 +740,16 @@ export function ship(g) {
    ------------------------------------------------------------------------ */
 export function roughTo(g, { target_dia_mm, bite_mm = 0.3, feed_mm_rev = 0.15, vc = 120 } = {}) {
   const passes = [];
-  for (let i = 0; i < 40; i++) {
+  /* The pass cap is a guard against an unbounded loop, not a work limit. It was
+     40, which is fine for J1's 2 mm of radius and silently SHORT for a real
+     roughing allowance: a Ø80 bore with 4 mm to come out at a cautious 0.1 mm
+     bite needs 40 passes exactly, and one more would have been truncated with
+     no refusal, no error and no metal missing — a roughing run that stops early
+     and reports ok is the same class of lie as an export that under-reports
+     itself. Raised, and now if it IS reached the caller is told. */
+  const MAX_PASSES = 400;
+  let truncated = false;
+  for (let i = 0; i < MAX_PASSES; i++) {
     /* Drive on the COLD diameter, because that is the only number the player can
        hold in their head. `cutOnce` works out what that means for the dial once
        the machine's thermal offset is in it — which is the correct division of
@@ -681,11 +758,77 @@ export function roughTo(g, { target_dia_mm, bite_mm = 0.3, feed_mm_rev = 0.15, v
     if (want_r <= 1e-5) break;
     const bite = Math.min(bite_mm, want_r);
     const r = cutOnce(g, { bite_mm: bite, feed_mm_rev, vc, label: 'Rough' });
-    if (!r.ok) return { ok: false, why: r.why, detail: r.detail, passes };
+    if (!r.ok) return { ok: false, why: r.why, detail: r.detail, passes,
+                        /* Carry the LAST PASS through on a refusal. Without it
+                           the caller cannot say how much metal came off before
+                           the machine stopped objecting, which is exactly the
+                           number the player needs in order to back off. */
+                        last: passes.length ? passes[passes.length - 1] : null,
+                        dia: g.part.holeDia_cold_mm };
     passes.push(r.rec);
+    if (i === MAX_PASSES - 1) truncated = true;
   }
-  return { ok: true, passes, dia: g.part.holeDia_cold_mm,
+  return { ok: true, passes, dia: g.part.holeDia_cold_mm, truncated,
            minutes: passes.reduce((a, p) => a + p.cut_min, 0) };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE ENVELOPE — what this machine, this tool and this material will allow
+   ══════════════════════════════════════════════════════════════════════════
+   Round 2 is about making the machine push back, and a refusal the player
+   cannot predict is not pushback, it is a slot machine. So the machine has to
+   be able to say where its own wall is BEFORE the cut — the same way a real
+   operator reads a load meter and knows 80 % is fine and 110 % is not.
+
+   This is a MARGIN, not a verdict: it reports the fraction of each limit that
+   a given command would use, using `assessBoring` — the same function the cut
+   itself is refused by. It does not say "you may cut"; the cut still gets to
+   refuse. That separation matters, because a preview that disagreed with the
+   refusal would be a lie told in the opposite direction.
+
+   Deliberately NOT a suggestion engine: it never proposes a bite. It answers
+   "what would this do", which is the question a machinist asks a load meter. */
+export function envelope(g, { bite_mm, feed_mm_rev = 0.12, vc = 120 }) {
+  /* Guarded because this is reachable from the UI before a game exists — the
+     panel asks for a load reading on its first frame, and a throw there would
+     take the whole page down for a number nobody has asked for yet. A missing
+     precondition is a REFUSAL here, same as everywhere else. */
+  if (!g) return { ok: false, why: 'NO GAME' };
+  if (!g.tool) return { ok: false, why: 'NO TOOL' };
+  const spec = g.toolSpec;
+  const tool = makeTool({ D: spec.D, z: spec.z, stickout_L: g.stickout_L });
+  const as = assessBoring({ b: bite_mm, feed: feed_mm_rev, vc },
+    { tool, material: g.mat }, g.mach);
+  const f = (x) => (isFinite(x) ? x : 99);
+  const power_frac = f(as.step.power_frac);
+  const torque_frac = f(as.step.torque_frac);
+  const rpm_frac = f(as.step.rpm_frac);
+  const chatter_frac = f(as.chatter_load);
+  /* The worst of the four IS the verdict, and naming which one is worst is the
+     whole value: "you are at 107 % of spindle power" is actionable, "refused"
+     is not. Same order as the kernel's own assessBoring, so this can never
+     disagree with the refusal it is previewing. */
+  const limits = [
+    { key: 'CHATTER', label: 'chatter', frac: chatter_frac },
+    { key: 'TORQUE LIMIT', label: 'spindle torque', frac: torque_frac },
+    { key: 'SPINDLE POWER LIMIT', label: 'spindle power', frac: power_frac },
+    { key: 'SPINDLE SPEED LIMIT', label: 'spindle speed', frac: rpm_frac },
+  ];
+  const worst = limits.reduce((a, b) => (b.frac > a.frac ? b : a));
+  return {
+    ok: true, power_frac, torque_frac, rpm_frac, chatter_frac,
+    pkW: as.step.Pc_kW, F_mean_N: as.step.F_mean_N,
+    sag_um: as.err.deflection_mean_um,
+    mrr_mm3_min: as.step.MRR,
+    cut_min: g.job.bore_depth_mm / Math.max(as.step.f, 0.001) + 0.4,
+    binding: worst.key, binding_label: worst.label, binding_frac: worst.frac,
+    would_cut: worst.frac <= 1,
+    /* Per-pass time is what makes feed a real decision rather than a free win:
+       leaning on the feed buys removal rate and costs the spindle, and the two
+       are the same equation. Reporting minutes here is what lets the player
+       see the trade instead of being told about it. */
+    minutes: (g.job.bore_depth_mm / Math.max(as.step.f, 0.001) + 0.4),
+  };
 }
 
 /* ---------------------------------------------------------------------------
