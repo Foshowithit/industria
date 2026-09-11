@@ -53,6 +53,21 @@
 
   #ev{left:50%;top:76px;transform:translateX(-50%);text-align:center;font-size:13px;color:var(--warn)}
   #ev div{margin:3px 0}
+  /* The session handover. It shares #ev's corner but not its warning colour —
+     this is not a problem, it is the way a run gets out of the browser. It must
+     also outrank #ev's own colour rule, hence the explicit colour below.
+     `pointer-events:auto` is NOT optional: .hud sets `none` on the whole layer,
+     so without it the span renders, looks clickable, and silently swallows
+     every click into the canvas behind it. Same reason #talk .opt re-enables it. */
+  #ev .getrec{color:var(--dim);font-size:12px;background:var(--panel);
+    border:1px solid #333d47;border-radius:2px;padding:6px 10px;max-width:min(420px,80vw);
+    pointer-events:auto}
+  #ev .getrec b{color:var(--ink);font-weight:500}
+  #ev .getrec .dl{color:var(--warn);cursor:pointer;text-decoration:underline;
+    text-underline-offset:2px;white-space:nowrap;pointer-events:auto}
+  #ev .getrec .hint{color:var(--dim);white-space:nowrap}
+  #ev .getrec kbd{background:#1b2229;border:1px solid #333d47;border-radius:2px;
+    padding:0 4px;font-size:11px;color:var(--ink)}
 
   /* #log is a bottom-left column; #talk is a centred column. Left uncapped they
      CROSS, and #log paints later so it wins — measured 7808 px² of overlap at
@@ -496,6 +511,51 @@ function toast(html, ms = 4200) {
   if (REC) REC.hint({ kind: 'toast', who: null, text: html, is_question: false });
   setTimeout(() => { d.style.transition = 'opacity .5s'; d.style.opacity = '0'; setTimeout(() => d.remove(), 520); }, ms);
 }
+/* ── HANDING THE SESSION OVER ────────────────────────────────────────────────
+ * Everything a playtest run produces is in this browser's localStorage, and the
+ * only person who can get it out is the player. So this is deliberately a
+ * one-click affordance that says what it is, not a hidden key binding: a tester
+ * who has to be told a shortcut will not use it, and a session that is never
+ * exported is a session that was never run. */
+let exportOffered = false;
+/* One place that saves, reports, and RECORDS that it saved. Two callers (the
+   link and the S key) must not mean two log lines for one file. */
+function saveSession(via) {
+  if (!REC || !RECmod.downloadLocal) return { ok: false, why: 'not recording' };
+  /* Record FIRST, before the file is built. The .jsonl is assembled by reading
+     localStorage, so anything logged after that read is absent from the file it
+     describes — and the row count the file reports would describe the state
+     before its own export. Measured: `export_session` said rows: 28 while the
+     file it had just written ended at seq 44. That is a session export that
+     systematically under-reports itself, this project's signature failure in
+     miniature, so the fix is order, not a bigger number. */
+  REC.action('export_session', { via, clock_min: GAME ? GAME.clock_min : null });
+  if (RECmod.flushLocal) RECmod.flushLocal();
+  const r = RECmod.downloadLocal();
+  const el = document.querySelector('.getrec .dl');
+  if (el) el.textContent = r.ok ? `Saved ${r.filename} (${r.rows} events)` : `Could not save: ${r.why}`;
+  return r;
+}
+function offerSessionDownload() {
+  if (!REC || exportOffered) return;
+  /* Flush first. The recorder's heartbeat is 4 s and this can run sooner, so
+     without this a player who ships quickly reads rows:0 below and is offered
+     nothing — the exit would vanish for the fastest player. */
+  const st = RECmod.flushLocal ? RECmod.flushLocal() : (RECmod.localStats ? RECmod.localStats() : null);
+  if (!st || !st.rows) return;
+  exportOffered = true;
+  const d = document.createElement('div');
+  d.className = 'getrec';
+  /* The link is a convenience for a released pointer; the key is the one that
+     works inside the game. Both are stated, because a tester who is told only
+     about the link will press it and nothing will happen. */
+  d.innerHTML = `<b>Your session is in this browser.</b> ` +
+    `${st.rows} events so far.` +
+    (st.dropped ? ` <span style="color:#e0a030">${st.dropped} dropped (storage full).</span>` : '') +
+    ` <span class="dl">Save it as a file</span> <span class="hint">or press <kbd>S</kbd></span>`;
+  d.querySelector('.dl').onclick = () => saveSession('click');
+  $('ev').appendChild(d);
+}
 let talkTimer = null;
 function say(who, text, options) {
   const t = $('talk');
@@ -530,6 +590,20 @@ function vibrate(strength = 1) {
 const keys = Object.create(null);
 addEventListener('keydown', (e) => {
   keys[e.code] = true;
+  /* S saves the session. It is handled HERE, above handleMachineKeys, on
+     purpose: that function returns early unless you are at the machine or
+     holding calipers, and the one moment a session must be recoverable is the
+     moment after the part is done and you have walked away from both.
+     A KEY and not a click, because the page holds pointer lock: while
+     document.pointerLockElement is the canvas, a mouse click is consumed by the
+     lock and never reaches the link — measured, and it is why the visible
+     "Save it as a file" affordance alone was not enough. Keyboard works while
+     locked, so S is the affordance that actually functions in the game. */
+  if (e.code === 'KeyS' && REC && !e.metaKey && !e.ctrlKey) {
+    if (!exportOffered) offerSessionDownload();
+    saveSession('KeyS');
+    return;
+  }
   /* A first E press after shipping is the clearest "touched something" in the
      post-ship window — the manual treats re-checking the machine as a MORE cue. */
   if (e.code === 'KeyE') { tapShipWindow('interact', lookingAt ? lookingAt.name : 'nothing'); doLook(); }
@@ -911,7 +985,12 @@ function doInspect() {
     logLine(`<b>${v.verdict}</b> — ${r.note}`);
   }
   SEEN.corrected = true;
-  /* Was the part OVER? Then it is still in your hands and you may cut again —
+  /* The way out. On the public build the session lives in this browser and
+     nowhere else, so the player is the only one who can hand it over. Offered
+     as a TOAST and not a dialogue on purpose: the field manual makes the five
+     seconds after shipping the strongest signal in the round, and a modal
+     asking for a file would cover it. This sits in the corner and waits. */
+  if (REC) offerSessionDownload();  /* Was the part OVER? Then it is still in your hands and you may cut again —
      that is not a second part, and counting it as one would poison the single
      most valuable number in the file. */
   if (REC && v.verdict !== 'UNDERSIZE — SCRAP') {
@@ -1284,6 +1363,20 @@ window.INDUSTRIA = {
      cleanly with a real verdict instead of a truncated file. Null on the
      public build, because `?rec` was not in the URL. */
   rec: REC, recStats: () => (REC ? REC.stats() : null),
+  /* ── GET THE SESSION OUT OF THE BROWSER ──────────────────────────────────
+   * The offline capture in recorder.mjs means a session played on the PUBLIC
+   * url is fully recorded with no server anywhere. These three are how it
+   * leaves: `recLocal()` says how much is held and what was dropped, and
+   * `recExport()` downloads the .jsonl. Exposed as functions, not as a button,
+   * because the field kit's observer decides when the session is over — and a
+   * tester who has to be told a key combination will not find it. */
+  recLocal: () => (RECmod.localStats ? RECmod.localStats() : null),
+  /* Force the buffer into localStorage and report. Exposed so the acceptance
+     test can assert the fast-ship path, which is the one that used to lose the
+     offer entirely. */
+  recFlushLocal: () => (RECmod.flushLocal ? RECmod.flushLocal() : null),
+  recExport: () => (RECmod.downloadLocal ? RECmod.downloadLocal() : { ok: false, why: 'no exporter' }),
+  recDump: () => (RECmod.localDump ? RECmod.localDump() : null),
   /* ── THE OBSERVER'S CHANNEL (field manual §4) ────────────────────────────
    * The observer writes on paper, but the codes have to land in the SAME JSONL
    * as the machine events or they cannot be correlated — and the correlation

@@ -57,9 +57,16 @@ const MAX_FAILED_FLUSHES = 3;
 
 function flush(force = false) {
   if (!pending.length) return;
-  if (!force && failedFlushes >= MAX_FAILED_FLUSHES) return;
   const body = pending.join('');
+  /* Persist FIRST and unconditionally, then clear. Doing the append before the
+     queue is emptied is what makes two separate failure modes impossible:
+     a row that is only ever in `pending` (new events after the network gave
+     up) still reaches the store, and a row that gets re-queued for a network
+     retry cannot be appended twice. Order matters here; reversing these two
+     loses rows on the public url, where the POST can never succeed. */
+  lsAppend(body);
   pending = [];
+  if (!force && failedFlushes >= MAX_FAILED_FLUSHES) return;
   try {
     fetch(REC_ENDPOINT, {
       method: 'POST',
@@ -71,13 +78,19 @@ function flush(force = false) {
       failedFlushes = 0;
     }).catch(() => {
       failedFlushes += 1;
-      /* put the lines back, in order, without unbounded growth */
-      pending.unshift(body);
-      if (pending.join('').length > 2_000_000) pending = pending.slice(-8);
+      /* Put the lines back ONLY while the network is still worth retrying.
+         Past the limit the rows are already durable in localStorage, and
+         re-queueing them means the next flush appends them to localStorage a
+         SECOND time — the store would carry duplicates of every row and the
+         file would look longer than the session was. */
+      if (failedFlushes < MAX_FAILED_FLUSHES) {
+        pending.unshift(body);
+        if (pending.join('').length > 2_000_000) pending = pending.slice(-8);
+      }
     });
   } catch (e) {
     failedFlushes += 1;
-    pending.unshift(body);
+    if (failedFlushes < MAX_FAILED_FLUSHES) pending.unshift(body);
   }
 }
 
@@ -88,13 +101,152 @@ function flush(force = false) {
 if (typeof globalThis.addEventListener === 'function') {
   globalThis.addEventListener('pagehide', () => {
     if (!pending.length) return;
+    /* Persist before the beacon. On the public url the beacon cannot succeed,
+       and the rows in hand at pagehide are the LAST ones — the ship event,
+       which is the most important line in the file. Losing those to a doomed
+       sendBeacon would make the offline transport useless exactly when it
+       matters most. */
+    lsAppend(pending.join(''));
     try {
       const blob = new Blob([pending.join('')], { type: 'application/x-ndjson' });
       const sent = navigator.sendBeacon &&
         navigator.sendBeacon(REC_ENDPOINT, blob);
       if (sent) pending = [];
     } catch (e) { /* nothing better available; the periodic flush already ran */ }
+    pending = [];
   });
+}
+
+/* ── OFFLINE CAPTURE (the public build's only transport) ─────────────────────
+ * The POST above reaches a local Python runner. On the PUBLIC url there is no
+ * such runner: `/__rec` is somebody else's 404 and every event dies in the
+ * `.catch`. That made the field kit's one hard requirement "run a local server
+ * and play localhost" — which is a real barrier between the project and the
+ * only evidence class it cannot automate.
+ *
+ * So every row is ALSO appended to localStorage, and the player can export the
+ * .jsonl when they are done. No server, no Python, no instructions to follow,
+ * nothing to install: open the published URL with ?rec= and play.
+ *
+ * localStorage is the right home for this and not a hack: it is synchronous,
+ * it survives a tab close, it is per-origin, and a session that never leaves
+ * the machine records nothing about anyone else. A player who plays the public
+ * build with no ?rec= still writes nothing at all — the guard is `isRecording`.
+ *
+ * Quota is the one real risk: a long session is a few hundred KB of JSONL and
+ * localStorage is ~5 MB. So the store is capped and the DROP IS RECORDED rather
+ * than silent — a truncated log that looks complete is exactly the failure this
+ * project keeps re-committing. */
+const LS_KEY = REC_LABEL === null ? null : 'industria.rec.' + REC_LABEL;
+const LS_MAX_BYTES = 3_000_000;
+let lsDropped = 0;
+let lsFailing = false;
+/* Idempotence, and it is not optional. A row can be handed to `lsAppend` more
+   than once: the network re-queue puts a body back in `pending`, and the fetch
+   failure that triggers it is ASYNCHRONOUS — so it lands after the synchronous
+   append, which means the next flush appends the same rows a second time. The
+   first version of this file produced a 46-row session that exported as 92
+   rows, 44 of them duplicates: a log that over-reports itself, which is the
+   same class of lie as one that truncates.
+   Tracking which seqs are already durable makes the multiple submission paths
+   harmless instead of trying to prove there is only one. */
+const lsWritten = new Set();
+
+function lsAppend(body) {
+  if (LS_KEY === null || lsFailing) return;
+  const lines = body.split('\n').filter(Boolean);
+  const fresh = [];
+  for (const line of lines) {
+    let seq = null;
+    try { seq = JSON.parse(line).seq; } catch (e) { seq = null; }
+    /* A line with no parseable seq is kept — unparseable is not the same as
+       already-written, and dropping it would hide a real row. */
+    if (seq === null || !lsWritten.has(seq)) {
+      fresh.push(line);
+      if (seq !== null) lsWritten.add(seq);
+    }
+  }
+  if (!fresh.length) return;
+  const out = fresh.join('\n') + '\n';
+  try {
+    const store = globalThis.localStorage;
+    if (!store) return;
+    const cur = store.getItem(LS_KEY) || '';
+    if (cur.length + out.length > LS_MAX_BYTES) {
+      /* Count what we are losing so the export can say so out loud. */
+      lsDropped += fresh.length;
+      return;
+    }
+    store.setItem(LS_KEY, cur + out);
+  } catch (e) {
+    /* Private mode, disabled storage, quota — all of them just mean the
+       network transport is the only one, which is where we started. */
+    lsFailing = true;
+  }
+}
+
+/** Force everything still buffered into localStorage, right now.
+ *
+ *  This exists because the heartbeat is 4 s and the thing that needs the data
+ *  is not. A player who ships a part inside the first heartbeat has an empty
+ *  store, so any caller that decides whether to offer them their session sees
+ *  `rows: 0` and offers nothing — the exit disappears exactly for the fastest
+ *  player. Measured: a full job played without waiting showed `rows: 0` until
+ *  a 5 s wait; the offer was silently never made. */
+export function flushLocal() {
+  if (!pending.length) return localStats();
+  lsAppend(pending.join(''));
+  /* Only the local copy is forced. The network queue is left alone so a real
+     runner still receives the rows in its own order and its own time. */
+  return localStats();
+}
+
+/** How much of this session is sitting in the browser, and what was dropped. */
+export function localStats() {
+  if (LS_KEY === null) return null;
+  let bytes = 0, rows = 0;
+  try {
+    const s = globalThis.localStorage ? (globalThis.localStorage.getItem(LS_KEY) || '') : '';
+    bytes = s.length;
+    rows = s ? s.split('\n').filter(Boolean).length : 0;
+  } catch (e) { /* reported as zero */ }
+  return { key: LS_KEY, bytes, rows, dropped: lsDropped, failing: lsFailing };
+}
+
+/** The whole session as text, with an honest header about anything lost. */
+export function localDump() {
+  if (LS_KEY === null) return null;
+  let body = '';
+  try { body = globalThis.localStorage ? (globalThis.localStorage.getItem(LS_KEY) || '') : ''; }
+  catch (e) { return null; }
+  const st = localStats();
+  return JSON.stringify({
+    type: 'export_note', exported_iso: new Date().toISOString(),
+    rows: st.rows, bytes: st.bytes, dropped_rows: lsDropped,
+    note: lsDropped > 0
+      ? 'INCOMPLETE: storage quota was hit and ' + lsDropped + ' rows were not kept. Do not read this as a whole session.'
+      : 'Complete as far as the browser knows.',
+  }) + '\n' + body;
+}
+
+/** Hand the session back to the player as a file. Returns what it did. */
+export function downloadLocal() {
+  const text = localDump();
+  if (text === null) return { ok: false, why: 'not recording' };
+  try {
+    const blob = new Blob([text], { type: 'application/x-ndjson' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (sessionId || 'industria') + '.jsonl';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    const st = localStats();
+    return { ok: true, filename: a.download, rows: st.rows, dropped: lsDropped };
+  } catch (e) {
+    return { ok: false, why: String(e && e.message || e) };
+  }
 }
 
 /* ── THE CLOCK ───────────────────────────────────────────────────────────── */
