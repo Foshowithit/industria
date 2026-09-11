@@ -21,6 +21,7 @@
 import {
   MATERIALS, MACHINES, makeTool,
   removalStep, stability, assess, tipDeflection_um,
+  boringStep,
   itWidth_um, toleranceCheck, KERNEL_VERSION, errorBudget,
 } from './kernel.mjs';
 
@@ -281,6 +282,70 @@ function attributionBlock() {
 }
 
 attributionBlock();
+
+/* ── WORLD-* — the numbers the 3D shop floor renders with ────────────────
+   §13 makes sound a core gameplay system and §73 makes the CHIP the last rung
+   of the scale ladder. Both need the kernel to report its edge count and the
+   dominant frequency of the impulse train a cut makes. These are not new
+   physics — they are the kernel handing a caller a number it already had. */
+{
+  const T1 = makeTool({ D: 12.7, z: 1, stickout_L: 55 });   // single-point boring bar
+  const T3 = makeTool({ D: 12.0, z: 3, stickout_L: 40 });   // 3-flute
+  const rip = { b: 0.05, feed: 0.08, vc: 160 };             // 50 µm radial bite
+
+  const s1 = boringStep(rip, { tool: T1, material: MATERIALS.steel_4140 }, VMC);
+  const s3 = boringStep(rip, { tool: T3, material: MATERIALS.steel_4140 }, VMC);
+
+  check('WORLD.1', 'boringStep carries the tool edge count z', s1.z, 1, 1e-9, 'edges');
+  checkTrue('WORLD.2', 'edge count does NOT change the cutting force',
+    Math.abs(s1.F_mean_N - s3.F_mean_N) < 1e-9,
+    'F = kc*b*h is symmetric in b and h; flute count is not in it');
+
+  /* Tooth-passing frequency is n*z/60. To isolate z, hold the SPEED constant:
+     pass an explicit n so both bars turn at the same rpm and the only remaining
+     difference is how many edges arrive per revolution. */
+  const n_fixed = 4000;
+  const a1 = boringStep({ ...rip, n: n_fixed }, { tool: T1, material: MATERIALS.steel_4140 }, VMC);
+  const a3 = boringStep({ ...rip, n: n_fixed }, { tool: T3, material: MATERIALS.steel_4140 }, VMC);
+  checkTrue('WORLD.3', 'at equal rpm, a 3-edge bar passes 3x as often as a 1-edge bar',
+    Math.abs((a3.n / 60) * a3.z - 3 * ((a1.n / 60) * a1.z)) < 1e-9,
+    `tooth Hz at ${n_fixed} rpm: 1-edge ${fmt((a1.n / 60) * a1.z, 1)}  `
+    + `3-edge ${fmt((a3.n / 60) * a3.z, 1)}`);
+
+  /* The frequency a player hears is n*z/60. At the kernel's own rpm for a
+     50 µm bite on Ø17.5 the bar is fast, so the tone is high — which is
+     exactly why a boring bar squeals and a big face mill thumps. */
+  const cuttingHz1 = (s1.n / 60) * s1.z;
+  const cuttingHz3 = (s3.n / 60) * s3.z;
+  console.log(`  WORLD: boring Ø${fmt(rip.b * 2, 2)} mm  ${fmt(s1.n, 0)} rpm  `
+    + `1-edge ${fmt(cuttingHz1, 1)} Hz  3-edge ${fmt(cuttingHz3, 1)} Hz\n`);
+
+  checkTrue('WORLD.4', 'a single-point bar at 160 m/min is audible, not infra-sound',
+    cuttingHz1 >= 20 && cuttingHz1 <= 20000,
+    `${fmt(cuttingHz1, 1)} Hz is inside the band a human hears`);
+}
+
+/* ── WORLD.5 — THE CHIP MODEL'S HONEST LIMIT, PINNED ───────────────────────
+   world.mjs derives a chip's thickness ratio and break threshold from `mc`.
+   That reuse is defensible (it is the kernel's own statement about how a chip
+   thickens) but it separates the materials LESS than a reader would assume.
+   This test exists so the limitation is executable rather than a claim in a
+   comment: if a future edit widens `mc`, this test fails LOUDLY and whoever
+   widened it must go and re-check REF-A/B/S, which `kc` feeds.
+
+   It asserts the truth as shipped, not the truth one would like. */
+{
+  const mc = (k) => MATERIALS[k].mc;
+  checkTrue('WORLD.5a', 'stainless and titanium thicken less than al/steel (stringy chips)',
+    mc('ss_304') < mc('al_6061') && mc('ti_6al4v') < mc('al_6061'),
+    `mc: al ${mc('al_6061')}  steel ${mc('steel_4140')}  ti ${mc('ti_6al4v')}  ss ${mc('ss_304')}`);
+  checkTrue('WORLD.5b', 'KNOWN LIMIT: aluminium and 4140 are NOT separated by mc',
+    mc('al_6061') === mc('steel_4140'),
+    'so their modelled chips are bit-identical; world.mjs documents this hole rather than dressing it up');
+  console.log(`  WORLD.5  chip-model limit: ${new Set(Object.values(MATERIALS).map((m) => m.mc)).size} `
+    + `distinct mc across ${Object.keys(MATERIALS).length} materials — aluminium 6061 and steel 4140 `
+    + `produce the same modelled chip\n`);
+}
 
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);

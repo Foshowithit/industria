@@ -547,6 +547,12 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
                      g.machine.screwC - g.machine.refScrewC) * MM_TO_UM,
     runout_um, grow_um: ofs_um,
     partExp_um, prevCold, coldDia, hotDia, removed_um,
+    /* The kernel's own surface-finish prediction for THIS pass, carried onto the
+       record so the part's wall can be drawn and described from it rather than
+       from a remembered number. Zero extra arithmetic — `as` already has it. */
+    ra_est_um: as.ra_est_um,
+    verdict: as.verdict,
+    chatter_load: as.chatter_load,
     spindleC: g.machine.spindleC, screwC: g.machine.screwC, partC: g.part.partC,
     dialRead_mm, edge_coldR_mm: edge_coldR, edge_hotR_mm: edge_hotR,
     cut_hotR_mm: cut_hotR, hotR_mm: hotR,

@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>INDUSTRIA — Ø40 H6, one housing, due 10:30</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0e10'/%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23e8a33d' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5' fill='none' stroke='%238a8578' stroke-width='1.5'/%3E%3C/svg%3E">
+<meta name="description" content="A playable model of the physical economy. One bore, sixteen micrometres of tolerance, and a machine that is a different size at 09:20 than it was at 08:00.">
+<style>
+  :root{
+    --ink:#e6e2d8; --dim:#8a8578; --faint:#4a4740;
+    --bg:#0d0e10; --panel:#14161a; --panel2:#191c21; --line:#262a30;
+    --amber:#e8a33d; --amber-d:#8a6224;
+    --steel:#7fb2d9; --ok:#5fce8a; --bad:#e8654f; --warn:#e8c23d;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+  body{min-height:100dvh;display:flex;flex-direction:column}
+  button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
+  button:disabled{cursor:not-allowed}
+  input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;width:100%;margin:0}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--line)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;
+    border-radius:50%;background:var(--amber);border:2px solid #0d0e10;box-shadow:0 0 0 1px var(--amber-d)}
+  input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+  input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--amber);
+    border:2px solid #0d0e10}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ── header ─────────────────────────────────────────────────────────── */
+  header{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;
+    padding:13px 18px 11px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .brand{font-family:var(--mono);font-size:12.5px;letter-spacing:.32em;color:var(--amber);white-space:nowrap}
+  .brand b{color:var(--ink);font-weight:600;letter-spacing:.24em}
+  .client{font-size:12px;color:var(--dim);padding-bottom:2px}
+  header .spacer{flex:1}
+  .hstat{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap}
+  .hstat > div{text-align:right;line-height:1.15}
+  .hstat .k{font-size:9px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase}
+  .hstat .v{font-family:var(--mono);font-size:16px}
+  .hstat .v.bad{color:var(--bad)} .hstat .v.warn{color:var(--warn)}
+
+  /* ── drawing strip ──────────────────────────────────────────────────── */
+  .drawing{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    padding:9px 18px;border-bottom:1px solid var(--line);background:#101216;font-size:12px}
+  .dim{font-family:var(--mono);font-size:16px;letter-spacing:.02em}
+  .dim small{color:var(--dim);font-size:11px;letter-spacing:.06em}
+  .band{display:flex;align-items:center;gap:8px}
+  .bandbar{position:relative;width:170px;height:15px;border-radius:3px;
+    background:linear-gradient(90deg,#2a1512,#16281b 20%,#16281b 80%,#2a1512);
+    border:1px solid var(--line);overflow:hidden}
+  .bandbar i{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);
+    box-shadow:0 0 7px rgba(255,255,255,.55);transition:left .2s ease}
+  .bandbar i.over{background:var(--bad);box-shadow:0 0 9px var(--bad)}
+  .bandbar i.under{background:var(--steel);box-shadow:0 0 9px var(--steel)}
+  .briefbar{padding:9px 18px;border-bottom:1px solid var(--line);color:var(--dim);
+    font-size:12.5px;line-height:1.55;background:#0f1114}
+  .briefbar b{color:var(--ink);font-weight:500}
+
+  /* ── main ───────────────────────────────────────────────────────────── */
+  main{flex:1;display:grid;grid-template-columns:minmax(330px,1fr) minmax(290px,400px);
+    gap:1px;background:var(--line);min-height:0;align-items:start}
+  @media (max-width:900px){ main{grid-template-columns:1fr} }
+  .col{background:var(--bg);display:flex;flex-direction:column;min-height:0;min-width:0;align-self:stretch}
+  .colhead{padding:10px 16px 8px;border-bottom:1px solid var(--line);
+    font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--faint);
+    text-transform:uppercase;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .colhead span{letter-spacing:.03em;text-transform:none;color:var(--dim);font-size:11px}
+
+  /* readouts */
+  .rgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+    border-bottom:1px solid var(--line)}
+  .rgrid .r{background:var(--panel);padding:11px 14px 12px;min-width:0}
+  .r .k{font-size:9.5px;letter-spacing:.16em;color:var(--faint);text-transform:uppercase;margin-bottom:4px}
+  .r .v{font-family:var(--mono);font-size:22px;line-height:1.1}
+  .r .s{font-size:10.5px;color:var(--dim);margin-top:4px;line-height:1.45}
+  .r.gauge{grid-column:1/-1;background:#171a1f;padding:14px 16px 15px}
+  .r.gauge .v{font-size:38px;letter-spacing:-.01em}
+  .r.gauge .v.stale{color:var(--faint);font-size:20px;letter-spacing:.02em}
+  .r.gauge .s{font-size:11.5px;min-height:0}
+  .r .v.hot{color:var(--amber)}
+
+  /* dial */
+  .dial{padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .dial .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px;gap:10px}
+  .dial .top .k{font-size:9.5px;letter-spacing:.16em;color:var(--faint);text-transform:uppercase}
+  .dial .top .v{font-family:var(--mono);font-size:21px;color:var(--amber)}
+  .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;
+    color:var(--faint);margin-top:7px}
+  .quick{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+  .quick button{border:1px solid var(--line);background:var(--panel2);border-radius:5px;
+    padding:5px 10px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+  .quick button:hover{border-color:var(--amber-d);color:var(--ink)}
+
+  /* actions */
+  .acts{padding:14px 16px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+  .row{display:flex;gap:8px}
+  .row > *{flex:1;min-width:0}
+  .btn{display:flex;flex-direction:column;gap:2px;text-align:left;border:1px solid var(--line);
+    background:var(--panel2);border-radius:7px;padding:9px 12px;transition:border-color .12s,background .12s}
+  .btn:hover:not(:disabled){border-color:var(--amber-d);background:#1d2127}
+  .btn:disabled{opacity:.32}
+  .btn .t{font-size:13.5px;font-weight:600}
+  .btn .h{font-size:10.5px;color:var(--dim);line-height:1.4}
+  .btn.primary{border-color:var(--amber-d);background:#1e1a13}
+  .btn.primary:hover:not(:disabled){border-color:var(--amber);background:#241f14}
+  .btn.primary .t{color:var(--amber)}
+  .btn.danger{border-color:#4a2820}
+  .btn.danger .t{color:var(--bad)}
+  .btn.danger:hover:not(:disabled){border-color:var(--bad);background:#201513}
+
+  /* panels */
+  .sub{padding:12px 16px;border-bottom:1px solid var(--line)}
+  .sub h4{margin:0 0 10px;font-size:9.5px;letter-spacing:.16em;color:var(--faint);
+    text-transform:uppercase;font-weight:600;display:flex;justify-content:space-between;gap:8px}
+  .sub h4 span{letter-spacing:0;text-transform:none;color:var(--faint);font-weight:400}
+  .temps{display:flex;flex-direction:column;gap:8px}
+  .trow{display:flex;align-items:center;gap:9px;font-size:11.5px}
+  .trow .nm{width:74px;color:var(--dim);flex:none}
+  .trow .bar{flex:1;height:7px;background:#1c1f24;border-radius:4px;overflow:hidden;position:relative;min-width:40px}
+  .trow .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;width:0;
+    transition:width .4s cubic-bezier(.3,0,.2,1)}
+  .trow .bar i.sp{background:linear-gradient(90deg,#6b4a1a,var(--amber))}
+  .trow .bar i.sc{background:linear-gradient(90deg,#1f4a63,var(--steel))}
+  .trow .bar i.pt{background:linear-gradient(90deg,#2a4a2f,var(--ok))}
+  .trow .vv{width:56px;text-align:right;font-family:var(--mono);font-size:11.5px;flex:none}
+  .scale{font-size:10.5px;color:var(--faint);margin-top:9px;line-height:1.55}
+  .scale b{color:var(--dim);font-weight:500}
+
+  .toolpick{display:flex;flex-direction:column;gap:6px}
+  .toolpick button{border:1px solid var(--line);background:var(--panel2);border-radius:6px;
+    padding:8px 10px;text-align:left;font-size:12px}
+  .toolpick button.on{border-color:var(--amber);background:#1e1a13}
+  .toolpick button .n{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+  .toolpick button .d{font-size:10.5px;color:var(--dim);margin-top:3px;line-height:1.4;font-weight:400}
+  .toolpick button.on .n{color:var(--amber)}
+  .slider{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:11.5px;color:var(--dim)}
+  .slider .lbl{width:72px;flex:none}
+  .slider .val{font-family:var(--mono);width:62px;text-align:right;flex:none;color:var(--ink)}
+
+  /* log */
+  .logcol{overflow-y:auto;padding:6px 0 26px;min-height:0;flex:1;
+    -webkit-overflow-scrolling:touch;max-height:calc(100dvh - 190px)}
+  @media (max-width:900px){ .logcol{max-height:52dvh} }
+  .ev{display:flex;gap:10px;padding:5px 16px;font-size:11.5px;line-height:1.5;
+    border-left:2px solid transparent}
+  .ev .tt{font-family:var(--mono);color:var(--faint);flex:none;width:38px;font-size:11px}
+  .ev .tx{color:var(--dim);min-width:0;overflow-wrap:break-word}
+  .ev.cut{border-left-color:var(--amber-d)} .ev.cut .tx{color:var(--ink)}
+  .ev.gauge{border-left-color:#3a4a58} .ev.gauge .tx{color:var(--steel)}
+  .ev.tool{border-left-color:#3a4a58}
+  .ev.warm{border-left-color:#5a3a1a}
+  .ev.dwell{border-left-color:#2a3a2a}
+  .ev.ship{border-left-color:var(--ok)} .ev.ship .tx{color:var(--ok)}
+  .ev.scrap{border-left-color:var(--bad)} .ev.scrap .tx{color:var(--bad)}
+  .ev.note .tx{color:var(--faint);font-style:italic}
+  .ev.clock{border-left-color:#2d3f4d} .ev.clock .tx{color:var(--steel)}
+  .ev .tx em{color:var(--ink);font-style:normal;font-weight:600}
+  .ev .tx u{text-decoration:none;color:var(--amber);font-family:var(--mono)}
+
+  /* overlays */
+  .sheet{position:fixed;inset:0;background:rgba(6,7,8,.87);backdrop-filter:blur(7px);
+    display:flex;align-items:flex-start;justify-content:center;padding:22px;z-index:40;overflow-y:auto}
+  .sheet .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    max-width:640px;width:100%;padding:26px 28px 24px;box-shadow:0 24px 80px rgba(0,0,0,.65);
+    margin:auto}
+  .sheet h2{margin:0 0 5px;font-size:23px;letter-spacing:-.01em;line-height:1.2}
+  .sheet .sub2{color:var(--dim);font-size:12.5px;margin-bottom:18px}
+  .sheet p{margin:0 0 12px;font-size:13.5px;line-height:1.68;color:#cfcabd}
+  .sheet p b{color:var(--ink)}
+  .sheet p em{color:var(--ink);font-style:normal;text-decoration:underline;
+    text-decoration-color:var(--amber);text-underline-offset:3px}
+  .sheet .nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:16px 0}
+  .sheet .nums div{background:var(--panel2);padding:9px 11px}
+  .sheet .nums .k{font-size:9.5px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
+  .sheet .nums .v{font-family:var(--mono);font-size:16px;margin-top:3px}
+  .sheet .ck{margin:18px 0 0;padding:14px 16px;background:#171a1f;border-left:2px solid var(--amber);
+    font-size:13px;line-height:1.7;color:#cfcabd;border-radius:0 6px 6px 0}
+  .sheet .ck b{color:var(--amber)}
+  .sheet .go{display:flex;gap:9px;margin-top:20px;flex-wrap:wrap}
+  .sheet .go .btn{flex:1;min-width:160px}
+  .verdict{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:9px}
+  .verdict.ok{color:var(--ok)} .verdict.bad{color:var(--bad)} .verdict.warn{color:var(--warn)}
+  .hideref{font-size:11px;color:var(--faint);margin-top:16px;line-height:1.6}
+  footer{padding:9px 18px;border-top:1px solid var(--line);background:var(--panel);
+    display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;font-size:10.5px;color:var(--faint)}
+  footer .spacer{flex:1}
+  footer button{color:var(--dim);text-decoration:underline;text-underline-offset:3px;font-size:10.5px}
+  footer button:hover{color:var(--ink)}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
+    background:#241f14;border:1px solid var(--amber-d);color:var(--amber);
+    padding:10px 16px;border-radius:8px;font-size:12.5px;z-index:60;max-width:90vw;
+    box-shadow:0 10px 30px rgba(0,0,0,.55);line-height:1.45}
+  .toast.bad{background:#2a1714;border-color:#5a2d24;color:var(--bad)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">INDUSTRIA<b> / SHOP FLOOR</b></div>
+  <div class="client" id="client">—</div>
+  <div class="spacer"></div>
+  <div class="hstat">
+    <div><div class="k">Clock</div><div class="v mono" id="clock">08:00</div></div>
+    <div><div class="k">Due</div><div class="v mono" id="due">10:30</div></div>
+    <div><div class="k">On the day</div><div class="v mono" id="money">£0</div></div>
+    <div><div class="k">Passes</div><div class="v mono" id="passes">0</div></div>
+  </div>
+</header>
+
+<div class="drawing">
+  <div class="dim" id="dim">Ø40 <small>H6</small></div>
+  <div class="band">
+    <span style="color:var(--faint);font-size:10px;letter-spacing:.14em">BAND</span>
+    <div class="bandbar"><i id="bandmark" style="left:0%"></i></div>
+    <span class="mono" id="bandpos" style="font-size:11px;color:var(--dim)">—</span>
+  </div>
+  <div class="spacer" style="flex:1"></div>
+  <div style="color:var(--dim);font-size:11.5px" id="parttemp">casting at 20.0 °C</div>
+</div>
+
+<div class="briefbar" id="brief">—</div>
+
+<main>
+  <!-- ── LEFT: the machine ─────────────────────────────────────────────── -->
+  <div class="col">
+    <div class="colhead">The machine <span id="machname">—</span></div>
+
+    <div class="rgrid">
+      <div class="r gauge">
+        <div class="k">Bore gauge</div>
+        <div class="v mono stale" id="gauge">—— not yet measured ——</div>
+        <div class="s" id="gauges">A reading is a size and a temperature at once. They are not the same fact.</div>
+      </div>
+      <div class="r">
+        <div class="k">Dial position</div>
+        <div class="v mono" id="dialpos">0.0000</div>
+        <div class="s" id="dialsub">no bar loaded — no datum</div>
+      </div>
+      <div class="r">
+        <div class="k">Last pass took</div>
+        <div class="v mono" id="lastcut">—</div>
+        <div class="s" id="lastcuts">nothing yet</div>
+      </div>
+      <div class="r">
+        <div class="k">Next pass lands at</div>
+        <div class="v mono" id="predict">—</div>
+        <div class="s" id="predicts">dial something first</div>
+      </div>
+      <div class="r">
+        <div class="k">Spindle load</div>
+        <div class="v mono" id="load">0%</div>
+        <div class="s" id="loads">spindle stopped</div>
+      </div>
+    </div>
+
+    <div class="dial">
+      <div class="top">
+        <div class="k">Dial — radial bite</div>
+        <div class="v" id="dialval">0.0 µm</div>
+      </div>
+      <input type="range" id="dial" min="0" max="600" step="1" value="0" aria-label="radial bite in micrometres">
+      <div class="ticks"><span>0</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span><span>600 µm</span></div>
+      <div class="quick" id="quick"></div>
+    </div>
+
+    <div class="acts">
+      <div class="row">
+        <button class="btn primary" id="btncut">
+          <span class="t">Cut</span>
+          <span class="h" id="cuthelp">advance the bar and take one pass</span>
+        </button>
+        <button class="btn" id="btnmeasure">
+          <span class="t">Gauge it</span>
+          <span class="h" id="meashelp">three readings, half a minute</span>
+        </button>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnwarm">
+          <span class="t">Run the spindle</span>
+          <span class="h">warm the machine — nothing comes off</span>
+        </button>
+        <button class="btn" id="btnrough">
+          <span class="t">Rough to…</span>
+          <span class="h">repeats passes down to a target</span>
+        </button>
+      </div>
+      <button class="btn danger" id="btnship">
+        <span class="t">Send it to inspection</span>
+        <span class="h">once it leaves this bench it does not come back</span>
+      </button>
+    </div>
+
+    <div class="sub">
+      <h4>Machine thermal state <span class="mono" id="warmmins">0 min turning</span></h4>
+      <div class="temps">
+        <div class="trow"><span class="nm">Spindle</span><div class="bar"><i class="sp" id="tsp"></i></div><span class="vv mono" id="vsp">20.0°</span></div>
+        <div class="trow"><span class="nm">Ballscrew</span><div class="bar"><i class="sc" id="tsc"></i></div><span class="vv mono" id="vsc">20.0°</span></div>
+        <div class="trow"><span class="nm">Workpiece</span><div class="bar"><i class="pt" id="tpt"></i></div><span class="vv mono" id="vpt">20.0°</span></div>
+      </div>
+      <div class="scale" id="thermalnote">Everything on this machine is calibrated cold.</div>
+    </div>
+
+    <div class="sub" style="border-bottom:none">
+      <h4>Tooling</h4>
+      <div class="toolpick" id="toolpick"></div>
+      <div class="slider">
+        <span class="lbl">Stickout</span>
+        <input type="range" id="stick" min="24" max="90" step="1" value="55" aria-label="bar stickout in millimetres">
+        <span class="val mono" id="stickval">55 mm</span>
+      </div>
+      <div class="scale" id="toolnote">Pick a bar. Stickout sets both how far it reaches and how far it bends.</div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: the shift ──────────────────────────────────────────────── -->
+  <div class="col">
+    <div class="colhead">Shift log <span id="logcount"></span></div>
+    <div class="logcol" id="log"></div>
+  </div>
+</main>
+
+<footer>
+  <span id="footleft">Every number on this screen is a claim about the physical world.</span>
+  <span class="spacer"></span>
+  <button id="btnhelp">The one mistake</button>
+  <button id="btnabout">What this is</button>
+  <span class="mono" id="kver">—</span>
+</footer>
+
+<script type="module">
+import * as G from './game.mjs';
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SHOP FLOOR — the playable layer.
+
+   Discipline: this file decides NOTHING about how big anything is. Every size,
+   temperature, force and verdict comes out of game.mjs, which comes out of the
+   kernel. What lives here is: what the operator is allowed to do, and what the
+   operator is allowed to KNOW. Those two lists are deliberately different, and
+   that difference is the game.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const $ = (id) => document.getElementById(id);
+const gbp = (x) => (x < 0 ? '−£' : '£') + Math.round(Math.abs(x)).toLocaleString('en-GB');
+const ums = (x, n = 1) => `${x < 0 ? '−' : ''}${Math.abs(x).toFixed(n)} µm`;
+
+/* ── THE JOB LADDER ────────────────────────────────────────────────────────
+   J1 is the teacher: H6 at Ø40, and the entire lesson fits inside one part.
+   Each rung after it narrows the band or changes the material. That IS the
+   difficulty curve — a bar that runs out ~5 µm per pass means a narrower band
+   is not "bigger numbers", it is fewer passes of runway before you are over. */
+const LADDER = [
+  { ...G.JOBS[0] },
+  {
+    id: 'J2', client: 'Halvorsen Pumps', title: 'Second housing — Ø40 H7 bore',
+    brief: 'Same casting, same morning, same bar. H7 this time — three quarters of a thou wider — ' +
+           'but the courier has moved up to 12:15 and the shop promised it.',
+    material: 'steel_4140', machine: 'vmc_40taper_7k5',
+    nominal_mm: 40, grade: 'IT7', start_hole_dia_mm: 36.4, bore_depth_mm: 30,
+    clock_start_min: 10 * 60 + 45, deadline_min: 12 * 60 + 15,
+    band_low_mm: 40.000, band_high_mm: 40.025, rate: 1650, late_credit: 0.75,
+  },
+  {
+    id: 'J3', client: 'Norvent Fans', title: 'Stainless flange — Ø40 H6 bore, 304',
+    brief: 'Now in 304, on the 30-taper. Stainless cuts hot, work-hardens, and pushes back twice ' +
+           'as hard as the 4140 did. Same sixteen micrometres. Nothing else is the same.',
+    material: 'ss_304', machine: 'vmc_30taper_5k5',
+    nominal_mm: 40, grade: 'IT6', start_hole_dia_mm: 36, bore_depth_mm: 30,
+    clock_start_min: 13 * 60, deadline_min: 15 * 60,
+    band_low_mm: 40.000, band_high_mm: 40.016, rate: 2400, late_credit: 0.8,
+  },
+];
+
+let g, ui, stats, sheetEl = null;
+
+/* ── boot / job flow ───────────────────────────────────────────────────── */
+function startRun() { stats = { paid: 0, fees: 0, scrap: 0, passes: 0, jobs: [], idx: 0 }; beginJob(0); }
+
+function beginJob(idx) {
+  stats.idx = idx;
+  /* The bench carries the money across: job 2 opens with job 1's invoice on the
+     books, which is the difference between a shift and a series of puzzles. */
+  g = G.newGame(LADDER[idx], undefined, stats.paid - stats.fees);
+  ui = { dial: 0, gauge: null, gaugeBefore: null, lastExtra: null, roughTarget: 39.90, cursor: null };
+  $('brief').innerHTML = `<b>${g.job.client}</b> — ${g.job.title}. ${g.job.brief}`;
+  $('client').textContent = `${g.job.client} · ${g.job.title}`;
+  $('dim').innerHTML = `Ø${g.job.nominal_mm} <small>${g.job.grade}</small>`;
+  buildTools(); buildQuick(); syncTool(); logRender(); setDial(0); render(); closeSheet();
+  if (idx === 0 && !localStorage.getItem('industria.seenHelp')) {
+    showHelp(true); localStorage.setItem('industria.seenHelp', '1');
+  }
+}
+
+function nextJobOrDay() {
+  closeSheet();
+  if (stats.idx + 1 >= LADDER.length) return endOfDay();
+  beginJob(stats.idx + 1);
+}
+
+/* ── logging ───────────────────────────────────────────────────────────── */
+const CLS = { cut: 'cut', gauge: 'gauge', tool: 'tool', warm: 'warm', dwell: 'dwell',
+  ship: 'ship', note: 'note', clock: 'clock', scrap: 'scrap' };
+function logRender() {
+  const el = $('log'); el.innerHTML = '';
+  /* Roughing is 34 near-identical passes. Printing all of them would bury the
+     three lines that carry the actual story, so identical consecutive passes
+     collapse into one row. The DETAIL is all still on the part — only the
+     printing is summarised. */
+  const rows = [];
+  for (const e of g.log) {
+    const p = rows[rows.length - 1];
+    if (p && p.kind === e.kind && e.kind === 'cut') {
+      const m = /^(\w+) (\d+): (.*)$/.exec(e.text);
+      if (m && p._label === m[1]) { p.n++; p.last = e.t; p._tail = m[3]; continue; }
+    }
+    const m = /^(\w+) (\d+): (.*)$/.exec(e.text);
+    rows.push({ kind: e.kind, t: e.t, last: e.t, n: 1, text: e.text,
+                _label: m ? m[1] : null, _head: m ? m[2] : null, _tail: m ? m[3] : null });
+  }
+  for (const r of rows) {
+    el.appendChild(r.n > 1
+      ? evNode({ kind: r.kind, t: r.t,
+                 text: `${r._label} ${r._head}–${Number(r._head) + r.n - 1}: ` +
+                       `${r.n} identical passes. Last one — ${r._tail}` })
+      : evNode(r));
+  }
+  $('logcount').textContent = rows.length === g.log.length
+    ? `${g.log.length} entries` : `${g.log.length} entries, ${rows.length} shown`;
+}
+function evNode(e) {
+  const d = document.createElement('div');
+  let cls = CLS[e.kind] || '';
+  if (e.kind === 'ship' && /scrap|oversize/i.test(e.text)) cls = 'scrap';
+  d.className = 'ev ' + cls;
+  const tt = document.createElement('span'); tt.className = 'tt'; tt.textContent = G.hhmm(e.t);
+  const tx = document.createElement('span'); tx.className = 'tx'; tx.innerHTML = numberise(e.text);
+  d.append(tt, tx);
+  return d;
+}
+/* In this game the numbers ARE the thing, so they get to look like numbers. */
+function numberise(t) {
+  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+          .replace(/(Ø?\d+\.\d{2,4})/g, '<u>$1</u>')
+          .replace(/([+−-]?\d+(?:\.\d+)? (?:µm|K|kW|%|min))/g, '<u>$1</u>')
+          .replace(/^([A-Z][a-z]+ \d+:)/, '<em>$1</em>');
+}
+function toast(msg, bad = false) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const d = document.createElement('div');
+  d.className = 'toast' + (bad ? ' bad' : ''); d.textContent = msg;
+  document.body.appendChild(d);
+  setTimeout(() => { d.style.transition = 'opacity .45s'; d.style.opacity = '0'; }, 2300);
+  setTimeout(() => d.remove(), 2900);
+}
+
+/* ── tooling ───────────────────────────────────────────────────────────── */
+function buildTools() {
+  const wrap = $('toolpick'); wrap.innerHTML = '';
+  for (const t of G.TOOLING) {
+    const b = document.createElement('button');
+    b.dataset.tool = t.id;
+    const n = document.createElement('div'); n.className = 'n';
+    n.innerHTML = `<span>${t.label}</span><span class="mono">Ø${t.D}</span>`;
+    const d = document.createElement('div'); d.className = 'd'; d.textContent = t.note;
+    b.append(n, d);
+    b.onclick = () => loadTool(t.id);
+    wrap.appendChild(b);
+  }
+}
+function loadTool(id) {
+  const L = Number($('stick').value);
+  const r = G.loadTool(g, id, L);
+  logRender();
+  if (!r.ok) { toast(`${r.why} — ${r.detail}`, true); }
+  else { ui.gauge = null; ui.lastExtra = null; toast(`${r.spec.label} in the holder at ${L} mm. Datum set on the casting as found.`); }
+  syncTool(); render();
+}
+function syncTool() {
+  document.querySelectorAll('#toolpick button').forEach(b =>
+    b.classList.toggle('on', b.dataset.tool === g.tool));
+  if (g.toolSpec) $('stick').max = g.toolSpec.max_stickout_mm;
+  else $('stick').max = 90;
+  if (Number($('stick').value) < Number($('stick').min)) $('stick').value = $('stick').min;
+}
+$('stick').addEventListener('input', () => {
+  $('stickval').textContent = `${$('stick').value} mm`;
+  if (g.tool) loadTool(g.tool);
+  else render();
+});
+
+/* ── dial ──────────────────────────────────────────────────────────────── */
+function buildQuick() {
+  const q = $('quick'); q.innerHTML = '';
+  for (const v of [0.5, 1, 2, 5, 10, 20, 50, 100]) {
+    const b = document.createElement('button');
+    b.textContent = `+${v}`;
+    b.title = `add ${v} µm to the dial`;
+    b.onclick = () => setDial(ui.dial + v);
+    q.appendChild(b);
+  }
+  const z = document.createElement('button');
+  z.textContent = 'zero'; z.title = 'dial back to zero';
+  z.onclick = () => setDial(0);
+  q.appendChild(z);
+}
+function setDial(v) {
+  ui.dial = Math.max(0, Math.min(600, Math.round(v * 10) / 10));
+  $('dial').value = String(Math.round(ui.dial));
+  $('dialval').textContent = ums(ui.dial, ui.dial % 1 ? 1 : 0);
+  render();
+}
+$('dial').addEventListener('input', () => {
+  ui.dial = Number($('dial').value);
+  $('dialval').textContent = ums(ui.dial, 0);
+  render();
+});
+
+/* ── the actions ───────────────────────────────────────────────────────── */
+$('btncut').onclick = () => {
+  const before = g.part.holeDia_cold_mm;
+  const label = g.part.cutting ? 'Finish' : 'Rough';
+  const r = G.cutOnce(g, { bite_mm: ui.dial / 1000, feed_mm_rev: g.part.cutting ? 0.08 : 0.18,
+                           vc: g.part.cutting ? 160 : 120, label });
+  if (!r.ok) { toast(`${r.why} — ${r.detail}`, true); logRender(); render(); return; }
+  const rec = r.rec;
+  ui.lastExtra = rec.removed_um - 2 * ui.dial;      // the walk, as observed
+  ui.gaugeBefore = ui.gauge; ui.gauge = null;       // you just cut. the reading is stale.
+  logRender();
+  toast(`Ø${before.toFixed(4)} → Ø${r.coldDia.toFixed(4)} mm cold. ` +
+        `The bar took ${rec.removed_um.toFixed(1)} µm of diameter on a ${(2 * ui.dial).toFixed(1)} µm dial.`);
+  setDial(0);
+  render();
+};
+
+$('btnmeasure').onclick = () => {
+  const m = G.measure(g, { samples: 3, seed: 1000 + g.shots * 17 });
+  ui.gauge = m; logRender(); render();
+};
+
+$('btnwarm').onclick = () => {
+  openWarm();
+};
+
+$('btnrough').onclick = () => openRough();
+
+$('btnship').onclick = () => shipIt();
+
+/* ── warm-up sheet ─────────────────────────────────────────────────────── */
+function openWarm() {
+  sheet(`
+    <h2>Run the spindle</h2>
+    <div class="sub2">Nothing comes off the part. The machine changes size anyway.</div>
+    <p>This spindle puts <b>0.55 kW</b> into its own bearings the moment it turns, before it cuts a
+       single chip. The ballscrew is a <b>120 mm</b> loop of steel, and steel grows
+       <b>12 µm per metre per kelvin</b>. So a machine that has been running is a
+       <em>different size</em> from a machine that has not — and the dial you zeroed on the cold
+       machine is now reading from a wall that has moved.</p>
+    <p>You cannot un-warm a machine. You can only decide, once, which machine you are going to
+       take your measurements on.</p>
+    <div class="slider" style="margin-top:16px">
+      <span class="lbl">Duration</span>
+      <input type="range" id="wm" min="5" max="120" step="5" value="20">
+      <span class="val mono" id="wmv">20 min</span>
+    </div>
+    <div class="nums" id="wprev"></div>
+    <div class="go">
+      <button class="btn" id="wx">Cancel</button>
+      <button class="btn primary" id="wg"><span class="t">Turn it on</span>
+        <span class="h" id="wgh">costs machine time, not money</span></button>
+    </div>`);
+  const wm = $('wm');
+  const upd = () => {
+    const m = Number(wm.value);
+    $('wmv').textContent = `${m} min`;
+    const r = G.warmUpPreview ? G.warmUpPreview(g, m) : null;
+    if (r) {
+      $('wprev').innerHTML = `
+        <div><div class="k">Clock after</div><div class="v">${G.hhmm(r.clock_min)}</div></div>
+        <div><div class="k">Spindle</div><div class="v">${r.spindleC.toFixed(1)} °C</div></div>
+        <div><div class="k">Ballscrew</div><div class="v">${r.screwC.toFixed(1)} °C</div></div>
+        <div><div class="k">Casting</div><div class="v">${r.partC.toFixed(1)} °C</div></div>`;
+    }
+    const after = g.clock_min + m;
+    $('wgh').textContent = after > g.deadline_min
+      ? `puts you at ${G.hhmm(after)} — past the courier`
+      : `finishes at ${G.hhmm(after)}, ${(g.deadline_min - after)} min before the courier`;
+  };
+  wm.oninput = upd; upd();
+  $('wx').onclick = closeSheet;
+  $('wg').onclick = () => {
+    const m = Number(wm.value);
+    G.warmUp(g, m);
+    closeSheet(); logRender(); render();
+    if (g.clock_min > g.deadline_min) toast('Past the courier. The part still has to be right.', true);
+  };
+}
+
+/* ── roughing sheet ────────────────────────────────────────────────────── */
+function openRough() {
+  const cur = g.part.holeDia_cold_mm;
+  const lo = Math.max(cur + 0.02, g.job.band_low_mm);
+  const start = Math.min(Math.max(ui.roughTarget, lo), g.job.band_high_mm - 0.001);
+  sheet(`
+    <h2>Rough to…</h2>
+    <div class="sub2">Repeated passes on the dial's own allowance. Come off it early, not never.</div>
+    <p>Roughing is repeats, not decisions — so the only choice that matters here is
+       <em>how much you leave</em> for the finishing passes. The nearer you leave it, the less
+       runway you have to find out that the bar cuts where you did not point it.</p>
+    <p style="color:var(--dim);font-size:12.5px">As found: <b class="mono">Ø${cur.toFixed(4)} mm</b> cold.
+       The band top is Ø${g.job.band_high_mm.toFixed(3)} — and there is nothing below
+       Ø${g.job.band_low_mm.toFixed(3)} but a bin.</p>
+    <div class="slider" style="margin-top:16px">
+      <span class="lbl">Target Ø</span>
+      <input type="range" id="rt" min="${lo.toFixed(3)}" max="${(g.job.band_high_mm - 0.001).toFixed(3)}"
+             step="0.001" value="${start.toFixed(3)}">
+      <span class="val mono" id="rtv">—</span>
+    </div>
+    <div class="slider">
+      <span class="lbl">Bite</span>
+      <input type="range" id="rb" min="10" max="150" step="5" value="60">
+      <span class="val mono" id="rbv">60 µm</span>
+    </div>
+    <div class="ck" id="rhint"></div>
+    <div class="go">
+      <button class="btn" id="rx">Cancel</button>
+      <button class="btn primary" id="rg"><span class="t">Rough it</span>
+        <span class="h">stops when the next pass would cross the target</span></button>
+    </div>`);
+  const rt = $('rt'), rb = $('rb');
+  const upd = () => {
+    const t = Number(rt.value), bite = Number(rb.value);
+    $('rtv').textContent = t.toFixed(3);
+    $('rbv').textContent = `${bite} µm`;
+    const leave = (g.job.band_high_mm - t) * 1000;
+    const room = Math.max(0, Math.floor((leave - 5) / bite));
+    $('rhint').innerHTML = leave < 8
+      ? `<b>Only ${leave.toFixed(0)} µm of runway.</b> The bar adds roughly 5 µm of diameter per pass
+         on its own whatever you dial, so stopping at Ø${t.toFixed(3)} mm leaves you one pass from
+         the top of the band and no way to correct a mistake.`
+      : `Stops at <b>Ø${t.toFixed(3)} mm</b> — <b>${leave.toFixed(0)} µm of diameter</b> below the top
+         of the band, about <b>${room} more pass${room === 1 ? '' : 'es'}</b> at ${bite} µm before the
+         bar's own extra runs you out of tolerance.`;
+  };
+  rt.oninput = rb.oninput = upd; upd();
+  $('rx').onclick = closeSheet;
+  $('rg').onclick = () => {
+    ui.roughTarget = Number(rt.value);
+    const r = G.roughTo(g, { target_dia_mm: Number(rt.value), bite_mm: Number(rb.value) / 1000,
+                             feed_mm_rev: 0.18, vc: 120 });
+    closeSheet(); logRender();
+    if (!r.ok) { toast(`${r.why} — ${r.detail}`, true); render(); return; }
+    ui.gauge = null; ui.lastExtra = null;
+    const avg = r.passes.reduce((a, p) => a + p.removed_um, 0) / Math.max(1, r.passes.length);
+    toast(`Ø${r.dia.toFixed(4)} mm cold after ${r.passes.length} passes in ${r.minutes.toFixed(1)} min. ` +
+          `It is now ${(r.dia * 1000 - g.job.band_high_mm * 1000).toFixed(0)} µm below the band top.`);
+    setDial(0); render();
+  };
+}
+
+/* ── inspection ────────────────────────────────────────────────────────── */
+function shipIt() {
+  const v = G.inspect(g);
+  const s = G.ship(g);
+  stats.paid += s.paid; stats.fees += s.fee;
+  if (s.verdict !== 'ACCEPTED') stats.scrap++;
+  stats.passes = (stats.passes || 0) + g.passes;
+  stats.jobs.push(s);
+  logRender(); render();
+  const ok = s.verdict === 'ACCEPTED';
+  const under = s.verdict.startsWith('UNDERSIZE');
+  sheet(`
+    <div class="verdict ${ok ? 'ok' : under ? 'bad' : 'warn'}">
+      ${ok ? 'Accepted' : under ? 'Scrapped — undersize' : 'Rejected — oversize'}</div>
+    <h2>Ø${v.dia.toFixed(4)} mm</h2>
+    <div class="sub2">${g.job.client} · ${g.job.title} · inspected at ${G.hhmm(g.clock_min)}</div>
+    <p>${s.note}</p>
+    <div class="nums">
+      <div><div class="k">Band</div><div class="v">${v.lo.toFixed(3)}–${v.hi.toFixed(3)}</div></div>
+      <div><div class="k">Band width</div><div class="v">${v.band_um.toFixed(0)} µm</div></div>
+      <div><div class="k">Landed</div><div class="v">${v.inSpec
+        ? '+' + v.position_in_band_um.toFixed(1) + ' µm' : 'outside'}</div></div>
+      <div><div class="k">Over / under</div><div class="v">${v.over_um > 0 ? 'over ' + v.over_um.toFixed(1)
+        : v.under_um > 0 ? 'under ' + v.under_um.toFixed(1) : 'in spec'}</div></div>
+      <div><div class="k">Passes</div><div class="v">${g.passes}</div></div>
+      <div><div class="k">Gauge readings</div><div class="v">${g.shots}</div></div>
+      <div><div class="k">Floor time</div><div class="v">${G.elapsed(g).toFixed(0)} min</div></div>
+      <div><div class="k">Late</div><div class="v">${g.clock_min > g.deadline_min
+        ? 'by ' + (g.clock_min - g.deadline_min).toFixed(0) + ' min' : 'no'}</div></div>
+      <div><div class="k">Invoiced</div><div class="v">${gbp(s.paid)}</div></div>
+      <div><div class="k">Charged back</div><div class="v">${s.fee ? gbp(-s.fee) : '—'}</div></div>
+      <div><div class="k">Net</div><div class="v">${gbp(s.net)}</div></div>
+    </div>
+    ${postMortem(v)}
+    <div class="go">
+      <button class="btn primary" id="nx"><span class="t">${stats.idx + 1 < LADDER.length
+        ? 'Next job' : 'Tally the shift'}</span><span class="h">${stats.idx + 1 < LADDER.length
+        ? `${LADDER[stats.idx + 1].client} — ${LADDER[stats.idx + 1].title}`
+        : 'count it up'}</span></button>
+      <button class="btn" id="rv"><span class="t">Read the log</span>
+        <span class="h">every pass is still in there</span></button>
+    </div>`);
+  $('nx').onclick = nextJobOrDay;
+  $('rv').onclick = closeSheet;
+}
+
+/* The post-mortem is the point of the whole thing: the part is out by a SPECIFIC
+   number, that number has a cause, and the cause was printed on screen the whole
+   time. Never "you lose". Only "you were 6.2 µm over, and here is why." */
+function postMortem(v) {
+  const h = g.history;
+  const fin = h.filter(p => p.label === 'Finish');
+  const walk = fin.length
+    ? fin.reduce((a, p) => a + (p.removed_um - 2 * p.bite_cmd_um), 0) / fin.length : null;
+  const last = h[h.length - 1];
+  const warm = g.machine.warmup_log.reduce((a, w) => a + w.min, 0);
+  const machUp = g.machine.spindleC - 20, screwUp = g.machine.screwC - 20;
+  let why;
+  if (v.inSpec) {
+    why = `<b>It came in.</b> ${fin.length} finishing pass${fin.length === 1 ? '' : 'es'} on a bar that
+      adds roughly <b>${walk != null ? walk.toFixed(1) : '5'} µm of diameter</b> to whatever the dial
+      says, and you landed <b>${Math.abs(v.position_in_band_um).toFixed(1)} µm</b> above the bottom of a
+      ${v.band_um.toFixed(0)} µm band, with ${(v.band_um - v.position_in_band_um).toFixed(1)} µm of room
+      still above you. ${warm > 0
+        ? `You ran the spindle ${warm} min before you touched anything, so most of the machine's
+           ${machUp.toFixed(1)} K of spindle heat had already happened <em>before</em> your first
+           measurement instead of after it — you measured the machine you were going to use.`
+        : `You never ran the spindle up. It did not bite you this time, because the job took
+           ${G.elapsed(g).toFixed(0)} min and the ballscrew only reached ${screwUp.toFixed(2)} K. On a
+           longer job that is not a plan.`}`;
+  } else if (v.over_um > 0) {
+    why = `<b>${v.over_um.toFixed(1)} µm over the top.</b> That is
+      ${(v.over_um / Math.max(0.01, walk != null ? walk : 5)).toFixed(1)} pass
+      ${(v.over_um / Math.max(0.01, walk != null ? walk : 5)).toFixed(1) === '1.0' ? '' : 'es'} of
+      overshoot: every pass this bar takes removes about
+      <b>${walk != null ? walk.toFixed(1) : '5'} µm MORE diameter than the dial asks for</b>, because the
+      tip cuts the high side of its own circle at ${last ? last.runout_um.toFixed(1) : '—'} µm of runout
+      while the machine's thermal offset puts another
+      ${last ? last.edge_offset_um.toFixed(1) : '—'} µm on the radius. That extra is close to a
+      <b>constant</b>, not a percentage — so a 2 µm pass pays for it far more dearly than a 100 µm pass
+      does. Which is why "one more small pass" is the most expensive sentence in a machine shop.`;
+  } else {
+    why = `<b>${v.under_um.toFixed(1)} µm under, and a bore does not come back.</b> Only metal removal
+      exists; there is no operation on this machine that makes a hole smaller. You had
+      ${(v.band_um - (fin.length ? 0 : 0)).toFixed(0)} µm of tolerance and spent
+      ${(v.under_um + v.band_um).toFixed(1)} µm of it. The dial reading and the metal were never the
+      same number — on this bar the gap is ${walk != null ? walk.toFixed(1) : '—'} µm of diameter
+      per pass, and it has been on the screen since the first cut.`;
+  }
+  return `<div class="ck">${why}</div>
+    <div class="hideref">Behind this part: ${g.passes} passes · ${g.shots} gauge readings ·
+      ${warm} min of spindle warm-up · machine finished at
+      ${machUp.toFixed(2)} K on the spindle, ${screwUp.toFixed(2)} K on the screw ·
+      casting finished at ${(g.part.partC - 20).toFixed(2)} K.</div>`;
+}
+
+function endOfDay() {
+  const net = stats.paid - stats.fees, n = stats.jobs.length;
+  const best = stats.jobs.filter(j => j.verdict === 'ACCEPTED')
+    .sort((a, b) => Math.abs(a.position_in_band_um) - Math.abs(b.position_in_band_um))[0];
+  const net_ = stats.jobs.reduce((a, j) => a + j.net, 0);
+  sheet(`
+    <h2>End of shift</h2>
+    <div class="sub2">${n} job${n === 1 ? '' : 's'} · ${G.hhmm(g.clock_min)}</div>
+    <div class="nums">
+      <div><div class="k">Invoiced</div><div class="v">${gbp(stats.paid)}</div></div>
+      <div><div class="k">Charged back</div><div class="v">${stats.fees ? gbp(-stats.fees) : '—'}</div></div>
+      <div><div class="k">Net</div><div class="v">${gbp(net_)}</div></div>
+      <div><div class="k">Scrapped</div><div class="v">${stats.scrap} / ${n}</div></div>
+      <div><div class="k">Total passes</div><div class="v">${stats.passes || 0}</div></div>
+    </div>
+    <p>${stats.scrap === 0
+      ? 'Nothing in the bin. Which means you did the thing that actually separates a machinist from a person who owns a lathe: you stopped cutting before you thought you needed to. Every pass you did not take was worth more than the ones you did.'
+      : `${stats.scrap} in the bin. Each one was a specific number of micrometres out, and each of those micrometres had a name and a cause — the bar's runout, the screw's heat, the walk of the dial. Dead metal is not bad luck. It is arithmetic you ran out of runway to do.`}</p>
+    ${best ? `<div class="ck">Your best part landed <b>+${best.position_in_band_um.toFixed(1)} µm</b>
+      into the band. That is the trade in one number: as close to the bottom as you dare, never over.</div>` : ''}
+    <div class="go"><button class="btn primary" id="rs"><span class="t">Run the day again</span>
+      <span class="h">the machine starts cold every time</span></button></div>`);
+  $('rs').onclick = () => { closeSheet(); startRun(); };
+}
+
+/* ── render ────────────────────────────────────────────────────────────── */
+function render() {
+  if (!g) return;
+  const late = g.clock_min > g.deadline_min;
+  $('clock').textContent = G.hhmm(g.clock_min);
+  $('clock').className = 'v mono' + (late ? ' bad' : (G.remaining(g) < 20 ? ' warn' : ''));
+  $('due').textContent = G.hhmm(g.deadline_min);
+  $('money').textContent = gbp(stats.paid - stats.fees);
+  $('passes').textContent = String(g.passes);
+  $('machname').textContent = g.job.machine.replace(/_/g, ' ');
+  $('parttemp').textContent = `casting at ${g.part.partC.toFixed(1)} °C`;
+
+  /* where the bore is, right now, against the band the drawing asked for */
+  const v = G.inspect(g);
+  const mark = $('bandmark');
+  mark.style.left = Math.max(0, Math.min(100, (v.position_in_band_um / v.band_um) * 100)) + '%';
+  mark.className = v.under_um > 0 ? 'under' : (v.over_um > 0 ? 'over' : '');
+  mark.title = `true size Ø${v.dia.toFixed(4)} mm — the customer will never see this number, only the result`;
+  $('bandpos').textContent = v.inSpec ? `+${v.position_in_band_um.toFixed(1)} µm in band`
+    : v.over_um > 0 ? `${v.over_um.toFixed(1)} µm over` : `${v.under_um.toFixed(1)} µm under`;
+
+  /* the gauge — a reading, and what it is NOT */
+  const gEl = $('gauge');
+  if (ui.gauge) {
+    gEl.textContent = ui.gauge.reading_mm.toFixed(4);
+    gEl.className = 'v mono hot';
+    $('gauges').textContent =
+      `read at ${ui.gauge.partC.toFixed(1)} °C — ${ui.gauge.expansion_um.toFixed(1)} µm of that ` +
+      `reading is heat, not metal. Cold it is Ø${g.part.holeDia_cold_mm.toFixed(4)} mm.`;
+  } else {
+    gEl.textContent = ui.gaugeBefore ? '—— stale: you have cut since ——' : '—— not yet measured ——';
+    gEl.className = 'v mono stale';
+    $('gauges').textContent = g.passes === 0
+      ? 'Metal is not a fact you can look at. Put the gauge in the hole and read a number.'
+      : 'You have removed metal since that reading. It is a memory now, not a measurement.';
+  }
+
+  /* the datum: where the dial reads zero, expressed as a diameter, cold */
+  const dr = g.machine.edgeR_cold_mm;
+  $('dialpos').textContent = dr == null ? '——' : (dr * 2).toFixed(4);
+  $('dialsub').textContent = dr == null
+    ? 'no bar loaded — no datum. Load one and it sets itself on the hole as found.'
+    : `cold Ø at dial zero · the bar will cut ${G.edgeOffset_um(g).toFixed(1)} µm wider than this today`;
+
+  /* the last pass, and the walk */
+  const h = g.history[g.history.length - 1];
+  if (h) {
+    $('lastcut').textContent = `−${h.removed_um.toFixed(1)}`;
+    const walk = h.removed_um - 2 * h.bite_cmd_um;
+    $('lastcuts').textContent = `µm of diameter · the dial asked for ${(2 * h.bite_cmd_um).toFixed(1)} µm ` +
+      `· the bar added ${walk >= 0 ? '+' : ''}${walk.toFixed(1)} µm of its own`;
+  } else {
+    $('lastcut').textContent = '—';
+    $('lastcuts').textContent = 'nothing yet';
+  }
+
+  /* the prediction — the player's own extrapolation, not the machine's knowledge */
+  if (ui.dial > 0 && g.tool && g.passes > 0) {
+    const extra = ui.lastExtra != null ? ui.lastExtra : null;
+    const est = 2 * ui.dial + (extra != null ? extra : 0);
+    const tot = g.part.holeDia_cold_mm + est / 1000;
+    $('predict').textContent = `Ø${tot.toFixed(4)}`;
+    $('predict').className = 'v mono' + (tot > g.job.band_high_mm ? ' hot' : '');
+    $('predicts').textContent = extra != null
+      ? `if this pass adds the same ${extra >= 0 ? '+' : ''}${extra.toFixed(1)} µm it added last time`
+      : 'unknown — you have not taken a pass yet';
+  } else if (ui.dial > 0 && g.tool) {
+    $('predict').textContent = '—'; $('predict').className = 'v mono';
+    $('predicts').textContent = 'first pass — nobody knows yet. Take it, then measure.';
+  } else {
+    $('predict').textContent = '—'; $('predict').className = 'v mono';
+    $('predicts').textContent = 'dial something first';
+  }
+
+  /* load */
+  const frac = h ? Math.min(1, h.power_kW / g.mach.power_max_kW) : 0;
+  $('load').textContent = h ? `${(frac * 100).toFixed(0)}%` : '0%';
+  $('load').className = 'v mono' + (frac > 0.85 ? ' hot' : '');
+  $('loads').textContent = h
+    ? `${h.power_kW.toFixed(2)} kW of ${g.mach.power_max_kW} kW · ${h.force_N.toFixed(0)} N on the bar`
+    : 'spindle stopped';
+
+  /* thermal state — a 10 K bar, which is enough to hold the whole story */
+  const bar = (T) => Math.max(0, Math.min(100, ((T - 20) / 10) * 100)) + '%';
+  $('tsp').style.width = bar(g.machine.spindleC);
+  $('tsc').style.width = bar(g.machine.screwC);
+  $('tpt').style.width = bar(g.part.partC);
+  $('vsp').textContent = g.machine.spindleC.toFixed(1) + '°';
+  $('vsc').textContent = g.machine.screwC.toFixed(1) + '°';
+  $('vpt').textContent = g.part.partC.toFixed(1) + '°';
+  $('warmmins').textContent = `${g.machine.spindle_on_min.toFixed(0)} min turning`;
+  const machUp = g.machine.spindleC - 20, screwUp = g.machine.screwC - 20;
+  $('thermalnote').innerHTML = machUp < 0.05
+    ? 'Cold — and the machine is calibrated cold, so right now the dial is telling the truth. That will not last.'
+    : `The screw is up <b>${screwUp.toFixed(2)} K</b> and still climbing.
+       Every kelvin of it pushes the cutting edge outward by about
+       <b>${(G.K_SCREW * G.SCREW_LOOP_MM * 1000).toFixed(2)} µm</b> on the radius (the tool's own
+       expansion adds about ${(G.K_CARBIDE * (g.toolSpec ? g.toolSpec.D / 2 : 6) * 1000).toFixed(2)} µm).`;
+
+  /* buttons */
+  const hasTool = !!g.tool;
+  $('btncut').disabled = !hasTool || ui.dial <= 0;
+  $('cuthelp').textContent = !hasTool ? 'load a bar first'
+    : ui.dial <= 0 ? 'the dial is at zero' : `take ${ui.dial.toFixed(0)} µm of radius off`;
+  $('btnrough').disabled = !hasTool;
+  $('btnship').disabled = g.passes === 0;
+  $('meashelp').textContent = g.shots >= 3 ? 'the three-blow habit' : 'three readings, half a minute';
+
+  /* tool panel */
+  $('stickval').textContent = `${$('stick').value} mm`;
+  const reach = Math.ceil(g.job.bore_depth_mm * 0.8);
+  $('toolnote').innerHTML = !g.toolSpec
+    ? `Pick a bar. This bore is ${g.job.bore_depth_mm} mm deep, so the bar must reach at least
+       ${reach} mm — and every millimetre past that is a millimetre of bend.`
+    : `Reaches ${g.stickout_L} mm into a ${g.job.bore_depth_mm} mm bore.
+       Bend goes as the <b>cube</b> of stickout, so pulling the bar back 10 mm does far more
+       for accuracy than any of your dialling will.`;
+  $('kver').textContent = `kernel + game ${G.GAME_VERSION}`;
+}
+
+/* ── sheets ─────────────────────────────────────────────────────────────── */
+function sheet(html) {
+  closeSheet();
+  const d = document.createElement('div');
+  d.className = 'sheet';
+  d.innerHTML = `<div class="card">${html}</div>`;
+  document.body.appendChild(d);
+  sheetEl = d;
+}
+function closeSheet() { if (sheetEl) { sheetEl.remove(); sheetEl = null; } }
+
+/* ── reading matter ────────────────────────────────────────────────────── */
+function showHelp(first) {
+  sheet(`
+    <h2>The one mistake</h2>
+    <div class="sub2">There is only one, and it is why this is a game and not a calculator.</div>
+    <p><b>A dial is not a dimension.</b> Move a boring bar out by 10 µm and the hole does not grow by
+       20 µm. It grows by 20 µm <em>plus everything the machine added on its own</em> — the bar cutting
+       the high side of its own circle, and the thermal offset of a machine whose ballscrew is longer
+       than it was when you zeroed the dial.</p>
+    <p>On this machine that extra is about <b>5 µm of diameter a pass</b> — as long as your bite is
+       small, which is exactly when it matters.</p>
+    <div class="ck">That extra is roughly a <b>constant</b>, not a percentage. So the smaller the bite,
+      the worse the deal: dial 2 µm and the bar takes about 7; dial 100 µm and it takes about 100.
+      Creeping at 2 µm a pass costs you nearly two and a half times what the dial says, against a
+      tolerance measured in single micrometres.</div>
+    <p>On an Ø40 <b>H6</b> bore the whole tolerance is <b>16 µm wide, and it starts at nominal</b>.
+       There is nothing underneath it and only a bin down there. So: get close, gauge it, take
+       <b>one</b> deliberate pass, gauge it again — and stop while you could still have taken another.</p>
+    <p style="color:var(--dim);font-size:12.5px">The machine's own temperature is on the left, and it is
+      not decoration. A spindle that has been running is a different size from a spindle that has not,
+      and <em>you</em> choose which of those two machines you take your measurements on.</p>
+    <div class="go"><button class="btn primary" id="hs"><span class="t">${first ? 'Open the drawing' : 'Back to work'}</span>
+      <span class="h">Ø40 H6 · one housing · due 10:30</span></button></div>`);
+  $('hs').onclick = closeSheet;
+}
+$('btnhelp').onclick = () => showHelp(false);
+$('btnabout').onclick = () => {
+  sheet(`
+    <h2>What this is</h2>
+    <div class="sub2">${G.GAME_VERSION} · validated against ISO 286 and Kienzle reference cases</div>
+    <p>This is a <b>playable model of the physical economy</b>: one part, one operation, one shift, built
+       on the real arithmetic instead of on a story about it. Cutting forces are Kienzle specific
+       cutting force. The bar is a cantilever under a distributed load. Stability is a one-degree-of-freedom
+       regenerative chatter model. The tolerance bands are ISO 286, to the micrometre.</p>
+    <div class="ck">The claim this is built to test: <b>truth and observation are different objects.</b>
+      The bore has a true size. The gauge has a reading. They are never the same number, and closing the
+      gap between them is what a machinist is paid for — so the game never shows you the true size.
+      It shows you what the gauge said, and lets you be wrong about it.</div>
+    <p><b>What is honest and provisional.</b> The thermal time constants
+       (${G.THERMAL.spindle_tau_min} min spindle, ${G.THERMAL.screw_tau_min} min screw) are the right
+       order of magnitude for a 40-taper machine but have not been measured; they are calibrated for
+       feel and they are named right here rather than hidden. Tool and workpiece expansion coefficients
+       are provisional, as are the Kienzle constants for 304. Chatter does not actually bind at realistic
+       bar sizes in this model, so it is an overhang lesson rather than a threat. The gauge standard
+       deviation of <b>0.8 µm</b> is a real bore-gauge number.</p>
+    <p style="color:var(--dim);font-size:12.5px">The kernel is deterministic — no wall clock, no
+      unseeded randomness, no hidden global state — so a part that came out 6.2 µm over will come out
+      6.2 µm over again from the same moves. That is not a limitation. That is the point.</p>
+    <div class="go"><button class="btn" id="cs">Close</button></div>`);
+  $('cs').onclick = closeSheet;
+};
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeSheet();
+  if (sheetEl) return;
+  if (e.key === 'c' || e.key === 'C') $('btncut').click();
+  if (e.key === 'g' || e.key === 'G') $('btnmeasure').click();
+  if (e.key === 'ArrowUp') { setDial(ui.dial + 1); e.preventDefault(); }
+  if (e.key === 'ArrowDown') { setDial(ui.dial - 1); e.preventDefault(); }
+});
+
+/* ── go ────────────────────────────────────────────────────────────────── */
+startRun();
+window.INDUSTRIA = { get game() { return g; }, G, stats: () => stats,
+                     help: () => showHelp(false) };
+</script>
+</body>
+</html>

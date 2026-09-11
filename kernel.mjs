@@ -299,6 +299,7 @@ export function removalStep(cut, params, machine) {
  */
 export function boringStep(rip, params, machine) {
   const { tool, material } = params;
+  const z = Math.max(1, tool.z ?? 1);                     // edges on the bar
   const b = rip.b;                                        // mm, radial depth of cut
   const feed_mm_rev = rip.feed != null ? rip.feed : b;     // mm/rev, chip thickness
   const h = feed_mm_rev;
@@ -323,6 +324,13 @@ export function boringStep(rip, params, machine) {
 
   return {
     mode: 'boring', n, vc_m_min, f: f_mm_min,
+    /* The EDGE COUNT, carried through so a caller can reconstruct the impulse
+       train this cut makes. It is not part of the force arithmetic — F = kc*b*h
+       does not care how many edges are on the tool — but it IS the dominant
+       frequency of the sound the cut produces (§13 makes sound a core gameplay
+       system) and it is the frequency of the lobing the cut leaves on the wall,
+       which a two-point gauge cannot see. One line, from a number already here. */
+    z,
     b_radial_mm: b, feed_mm_per_rev: feed_mm_rev, h_mean: h, kc, MRR,
     Pc_kW, Pf_kW, F_mean_N, F_peak_N, k_peak, torque_Nm,
     kinematic_conflict: null,
