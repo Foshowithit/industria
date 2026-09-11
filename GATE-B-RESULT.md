@@ -144,6 +144,13 @@ Read this before trusting the build.
 4. **`mc` collapses across materials** — `al_6061` and `steel_4140` are both 0.25, so
    they produce identical chip behaviour. 2 distinct behaviours across 4 materials.
    Mechanism sound, constants unsupported.
+   *(Corrected 2026-09-11, measured: "identical chip behaviour" is right but the word
+   "collapse" overstated it. Steel needs **exactly 2.5×** aluminium's force, `kc`, power
+   and torque — `kc1_1` 2000 vs 800 separates them cleanly — and the deviation from a
+   pure 2.5× scale is 4.44e-16. What actually collapses is only the **feed-sensitivity**:
+   `kc`'s response to chip thickness is `h^-0.25` for both, so the ratio is 0.2991 in
+   both cases. Steel is therefore aluminium × 2.5 — a difficulty slider wearing a
+   material's name, not a second material.)*
 5. **`shop-floor.html` is reachable and works**, but is not linked from the world page.
    It is preserved, not offered.
 
@@ -154,3 +161,66 @@ Read this before trusting the build.
 **SHIP**, as a first playable hour — with the reservations above stated rather than
 buried. The two corrections that mattered most this round were both mine, and both were
 caught the same way: by playing the thing instead of reading it.
+
+---
+
+# ADDENDUM — re-verification against the CURRENTLY SHIPPED build (2026-09-11)
+
+The table at the top of this file pins `index.html` blob `2839c4b2…`. **That build is no
+longer what is deployed.** The page changed in commits since, so the SHIP verdict above
+described a build the player could no longer open. An acceptance record that ages silently
+is worse than no record, so it was re-run.
+
+| | |
+|---|---|
+| HEAD re-verified | `1351fa5375cbb03ce839b738429dea0b30eaae34` |
+| `index.html` blob at HEAD | `20dce9b22d1a8c01fc614d08d3f05d6495448cbb` |
+| `index.html` sha256, live vs HEAD | `517ab07d24c7f592…` — **identical**, Pages is current |
+| `kernel.mjs` sha256, live vs HEAD | `4e8464d771c80b45…` — **identical** |
+| kernel tests | **PASS 54 passed, 0 failed, 54 total** |
+
+### Re-run results, against `https://foshowithit.github.io/industria/index.html`
+
+| gate | result |
+|---|---|
+| full job, page's own buttons | **FULL JOB PLAYABLE** — `HOLD 40.01196`, `ACCEPTED`, net 1850, `under 0 / over 0`, not late |
+| R1 leak gate | **HOLDS** — truth `40.0120` never on screen during play; post-mortem reveal present, which R1 allows |
+| console errors, full job | **0** |
+| audio engine starts | `{ready: true, ctx_state: 'running'}` after a click |
+| acoustics through the page's adapter | `n_rpm: 1909.86`, `power_frac: 0.0211`, state `ROUGHING` |
+
+So the SHIP verdict **survives re-verification on the shipped build**, not only on the
+recorded one. Physics and pedagogy are intact; nothing regressed in the commits since.
+
+### A defect found in the acceptance tooling itself
+
+`acceptance/README.md` states these scripts "were played against the **published** URL, not
+a local copy, because the whole point is to test what the user will actually open."
+
+**That was false for `play_job.py` — the most important script** — and for `play_world.py`,
+`probe3d.py`, `r1_gate.py` and `shots.py`. Five of the six hardcoded
+`URL = "http://127.0.0.1:8799/index.html"` and **silently ignored a URL argument passed on
+the command line**. Only `r1_leakwatch.py` and `audio_probe2.py` read `sys.argv[1]`.
+
+The failure mode is worth naming, because this project keeps re-committing it: **a test
+that cannot reach the thing it claims to test looks exactly like a test that passed.**
+Running `play_job.py <published-url>` against a stopped local server produced
+`ERR_CONNECTION_REFUSED`, which is how the defect surfaced. Had port 8799 happened to be
+serving a *local copy*, it would have reported a PASS and the claim "verified against the
+published URL" would have stayed false and unchallenged.
+
+All five now take an optional URL argument: `URL = sys.argv[1] if len(sys.argv) > 1 else
+"http://127.0.0.1:8799/index.html"`. The local path still works unattended, and the
+published path is now real. The README's claim is true as of this addendum, and was not
+before it.
+
+### What this addendum does NOT claim
+
+- **Still nobody has put a hand on it.** The Machinist Test remains *partly* satisfied and
+  "would someone who knows nothing find it addictive" remains **Unproven**. Re-verifying a
+  build does not reduce that gap by one millimetre; the Part 6 reservations stand unchanged.
+- The thermal constants are still placeholders, and `errorBudget` is still never called by
+  the game.
+- This re-verification is of the build at `1351fa5`. **Uncommitted edits were in the working
+  tree at the time** (`index.html` among them). If those ship, this addendum ages too, and
+  the honest fix is to re-run rather than to extend the pin.

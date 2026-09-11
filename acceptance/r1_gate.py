@@ -5,9 +5,10 @@ The spine of this project: `part.true_surface/holeDia_cold` may never be the
 same thing as `instrument.observe(part)`. This probes the live DOM for every
 representation of the true bore, both with and without a measurement taken.
 """
+import sys
 from playwright.sync_api import sync_playwright
 
-URL = "http://127.0.0.1:8799/index.html"
+URL = sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:8799/index.html"
 errors = []
 
 PROBE = """() => {

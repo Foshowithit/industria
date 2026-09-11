@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Play the world page the way a player would, and report only what is TRUE."""
 import sys, time, json
+import sys
 from playwright.sync_api import sync_playwright
 
-URL = "http://127.0.0.1:8799/index.html"
+URL = sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:8799/index.html"
 errors, warns, raf_ok = [], [], False
 
 with sync_playwright() as p:

@@ -1,10 +1,11 @@
 from playwright.sync_api import sync_playwright
 import json
+import sys
 with sync_playwright() as p:
     b=p.chromium.launch(executable_path="/usr/bin/google-chrome",headless=False,
       args=["--use-gl=angle","--use-angle=gl","--enable-gpu","--ignore-gpu-blocklist"])
     pg=b.new_page(viewport={"width":1440,"height":900})
-    pg.goto("http://127.0.0.1:8799/index.html",wait_until="load"); pg.wait_for_timeout(2000)
+    pg.goto(sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:8799/index.html",wait_until="load"); pg.wait_for_timeout(2000)
     pg.click("#gate"); pg.wait_for_timeout(900)
     r=pg.evaluate("""() => {
       const I=window.INDUSTRIA, S=I.scene, T=I.THREE;

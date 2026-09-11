@@ -685,8 +685,11 @@ function machinePanel() {
   const surplus = last ? (last.bite_realised_um - last.bite_cmd_um) : 0;
   $('pnCut').innerHTML =
     F('dial', `${biteCmd_um} µm radius`) +
+    F('you expect', predicted_um === null
+      ? '<i>not stated — <kbd>Shift</kbd>+<kbd>1\u20136</kbd></i>'
+      : `${predicted_um} µm`) +
     (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm <i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} vs dial)</i>`) : '') +
-    `<div class="row" style="margin-top:6px"><i>1-6 dial · <kbd>C</kbd> cut · <kbd>M</kbd> measure</i></div>` +
+    `<div class="row" style="margin-top:6px"><i>1-6 dial · <kbd>Shift</kbd>+1-6 predict · <kbd>C</kbd> cut · <kbd>M</kbd> measure</i></div>` +
     `<div class="row"><i><kbd>T</kbd> touch off · <kbd>V</kbd> warm up · <kbd>Enter</kbd> inspect</i></div>`;
 }
 
@@ -857,8 +860,17 @@ function doCut() {
     `Measure it if you want to know where it actually is.`);
   if (rec.n === 1) toast(`<b>${info.colour_name} chip.</b> ${(info.t2_mm * 1000).toFixed(0)} µm thick ` +
     `— the dial said ${rec.bite_cmd_um.toFixed(0)}.`, 4600);
-  if (rec.n === 4) toast(`Every pass leaves the wall <b>${Math.abs(surplus).toFixed(1)} µm thicker</b> than the dial promised. ` +
-    `The surplus is a constant, not a percentage — the dial over-promises, so you must dial MORE than you want.`, 5200);
+  /* ── YOUR PREDICTION AGAINST THE MACHINE ──────────────────────────────────
+   * The design lead's exact form: "You expected 20.0 µm. Machine removed
+   * 19.2 µm. Difference: −0.8 µm." then STOP. The difference is shown and the
+   * game says nothing about it — discovering that the difference is a constant
+   * is the player's inference to make, and it is the one the round measures. */
+  const diff = rec.bite_realised_um - predicted;
+  logLine(`You expected <b>${predicted.toFixed(1)} µm</b>. Machine removed ` +
+    `<b>${rec.bite_realised_um.toFixed(1)} µm</b>. Difference: ` +
+    `<b>${diff >= 0 ? '+' : ''}${diff.toFixed(1)} µm</b>.`);
+  if (Math.abs(diff) >= 1) toast(`Expected <b>${predicted.toFixed(1)} µm</b> · removed ` +
+    `<b>${rec.bite_realised_um.toFixed(1)} µm</b> · difference <b>${diff >= 0 ? '+' : ''}${diff.toFixed(1)} µm</b>`, 4200);
   if (phase === 'ARRIVE' || phase === 'MEASURE') phase = 'CUTTING';
 }
 function doInspect() {
@@ -1258,6 +1270,14 @@ window.INDUSTRIA = {
                   ctx_state: AUD && AUD.context ? AUD.context.state : null }),
   carry: CARRIED, seen: SEEN,
   setBite: (um) => { biteCmd_um = um; if (REC) REC.action('set_dial', { dial_um: um, via: 'panel', clock_min: GAME ? GAME.clock_min : null }); },
+  /* The prediction, for automated runs. `predicted_um` is a player MODEL, so
+     this is the one action that has no meaning when scripted — a bot writing
+     its own prediction proves nothing about a human's. Scripted runs therefore
+     state 0 µm, which is an honest naive model and exercises the same code path
+     the player does, and the recorded sessions keep predict/result pairs that
+     can be told apart from a person's by their uniformity. */
+  predict: setPrediction,
+  getPredicted: () => predicted_um,
   cut: doCut, measure: doMeasure, inspect: doInspect, rough: doRough,
   warm: doWarmUp, touch: doTouchOff, vibe: (n) => vibrate(n),
   /* The recorder, reachable from the runner so a session can be closed out

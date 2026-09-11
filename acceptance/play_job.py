@@ -3,9 +3,10 @@
 if a job cannot be taken from 5:55 to a verdict using only the things the
 player can look at and press, it is not a game."""
 import json
+import sys
 from playwright.sync_api import sync_playwright
 
-URL = "http://127.0.0.1:8799/index.html"
+URL = sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:8799/index.html"
 errors = []
 
 with sync_playwright() as p:
@@ -62,6 +63,12 @@ with sync_playwright() as p:
         left_um = (st["hi"] - st["hold"]) * 1000
         bite = max(2, min(20, int(left_um / 2) or 2))
         pg.evaluate("(b) => window.INDUSTRIA.setBite(b)", bite)
+        # The prediction gate: a cut with no stated expectation is REFUSED by the
+        # game, so the script must state one like a player does. A scripted run
+        # states 0 um — a deliberately naive model. It exercises the identical
+        # code path and cannot fake the thing the mechanic measures, which is
+        # whether a HUMAN's prediction changes once the machine contradicts it.
+        pg.evaluate("() => window.INDUSTRIA.predict(0)")
         pg.evaluate("() => window.INDUSTRIA.cut()")
     last = pg.evaluate("""() => { const g=window.INDUSTRIA.game, h=g.history.at(-1);
       return h ? {cmd:+h.bite_cmd_um.toFixed(1), real:+h.bite_realised_um.toFixed(1),

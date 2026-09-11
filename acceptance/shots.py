@@ -5,7 +5,7 @@ with sync_playwright() as p:
         args=["--use-gl=angle","--use-angle=gl","--enable-gpu","--ignore-gpu-blocklist"])
     pg = b.new_page(viewport={"width":1440,"height":900})
     errs=[]; pg.on("pageerror", lambda e: errs.append(str(e)[:180]))
-    pg.goto("http://127.0.0.1:8799/index.html", wait_until="load"); pg.wait_for_timeout(2200)
+    pg.goto(sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:8799/index.html", wait_until="load"); pg.wait_for_timeout(2200)
     pg.screenshot(path="/tmp/live/s0_gate.png")
     pg.click("#gate"); pg.wait_for_timeout(1200)
     pg.screenshot(path="/tmp/live/s1_arrive.png")
