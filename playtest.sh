@@ -119,7 +119,28 @@ case "$1" in
       echo "  (acceptance/r1_leakwatch.py absent — skipping)"
     fi
     if [ "$started_srv" -eq 1 ]; then
+      # Kill the process GROUP, not just the pid. `setsid` deliberately puts the
+      # server in its own group, so a plain `kill "$srv_pid"` can leave a child
+      # behind holding :8799 — and a stray server is not cosmetic here: it
+      # accepts POST /__rec, which makes every dead-transport test pass for the
+      # wrong reason. Measured twice in one session: a playtest_server.py from
+      # 16:36 was still listening at 20:35 with systemd as its parent, because
+      # whatever spawned it died and it was reparented instead of reaped.
       kill "$srv_pid" 2>/dev/null || true
+      sleep 0.4
+      if kill -0 "$srv_pid" 2>/dev/null; then
+        kill -TERM -- "-$srv_pid" 2>/dev/null || true
+        sleep 0.4
+      fi
+      if kill -0 "$srv_pid" 2>/dev/null; then
+        kill -KILL -- "-$srv_pid" 2>/dev/null || true
+        sleep 0.3
+      fi
+      # Say so out loud rather than leaving the next run to trust a stranger.
+      if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8799/index.html; then
+        echo "  WARNING: :8799 still answers after cleanup — the next run may be" >&2
+        echo "           testing against a server this script did not start." >&2
+      fi
     fi
     echo
     [ "$fail" -eq 0 ] && echo "VERIFY: PASS" || { echo "VERIFY: FAIL"; exit 1; }

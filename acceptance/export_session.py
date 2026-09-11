@@ -28,6 +28,7 @@ is printed. `--keep` leaves the downloaded file for inspection.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -72,6 +73,40 @@ def transport_is_dead(url):
         return True, f"POST /__rec unreachable ({type(e).__name__}) — acceptable"
 
 
+def free_port(port=8799):
+    """Take :8799 back if something is holding it, and say what it was.
+
+    A stray playtest_server.py answers `POST /__rec` with 204, which silently
+    turns this test's central precondition (a DEAD transport) into a live one.
+    Refusing to run is the right call — but leaving the port occupied means the
+    next person hits the same wall, so clear it and report it.
+    """
+    holder = ""
+    try:
+        out = subprocess.run(["ss", "-ltnp"], capture_output=True, text=True, timeout=5).stdout
+        for line in out.splitlines():
+            if f":{port}" in line:
+                holder = line.strip()
+    except Exception:
+        pass
+    if not holder:
+        return None
+    pids = re.findall(r"pid=(\d+)", holder)
+    note(f":{port} was occupied — {' '.join(pids) or 'unknown pid'} :: {holder[-90:]}")
+    for pid in pids:
+        for sig in ("-TERM", "-KILL"):
+            try:
+                subprocess.run(["kill", sig, pid], timeout=5)
+            except Exception:
+                pass
+            time.sleep(0.3)
+    time.sleep(0.5)
+    still = subprocess.run(["ss", "-ltn"], capture_output=True, text=True).stdout
+    if f":{port}" in still:
+        return f":{port} is STILL occupied after cleanup — I will not test against a stranger"
+    return None
+
+
 def serve_repo(port=8799):
     """A plain static server: real HTTP, and POSTs refused."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -87,12 +122,57 @@ def serve_repo(port=8799):
     raise RuntimeError("static server never came up")
 
 
+def contaminated_store_heals(browser, url):
+    """Plant a session that already contains duplicate rows, then open the game.
+
+    Stores written before `lsWritten` existed are still sitting in real
+    browsers, and those players must not have to clear their storage by hand to
+    get a trustworthy file. The game should heal such a session on open and say
+    in the file that it did so.
+    """
+    key = "industria.rec.contam"
+    rows = []
+    for i in range(6):
+        rows.append({"seq": i, "wall_ms": i * 10, "t_iso": "2026-01-01T00:00:00.000Z",
+                     "type": "sample", "clock_min": 0, "phase": "CUTTING"})
+    text = "".join(json.dumps(r) + "\n" for r in rows)
+    doubled = text + text  # every row twice, exactly the old defect
+
+    ctx = browser.new_context(viewport={"width": 1200, "height": 800}, accept_downloads=True)
+    try:
+        pg = ctx.new_page()
+        # Write the damaged store, then reload so the recorder bootstraps over it.
+        pg.goto(url + "?rec=contam", wait_until="load")
+        pg.evaluate("(t) => localStorage.setItem('industria.rec.contam', t)", doubled)
+        pg.reload(wait_until="load")
+        pg.wait_for_timeout(2200)
+        st = pg.evaluate("() => window.INDUSTRIA.recLocal()")
+        hdr_txt = pg.evaluate("() => window.INDUSTRIA.recDump()")
+        hdr = json.loads(hdr_txt.split("\n")[0])
+        rows_now = [json.loads(l) for l in hdr_txt.split("\n")[1:] if l.strip()]
+        seqs = [r["seq"] for r in rows_now if isinstance(r.get("seq"), int)]
+        print(f"       planted {len(rows) * 2} rows holding {len(rows)} distinct seqs; "
+              f"store now reports {st['rows']} rows / {len(seqs)} with seq; "
+              f"header discarded={hdr.get('duplicate_rows_discarded_on_open')}")
+        return (len(seqs) == len(set(seqs)) and len(seqs) == 6
+                and hdr.get("duplicate_rows_discarded_on_open") == 6)
+    finally:
+        ctx.close()
+
+
 def main():
     from playwright.sync_api import sync_playwright
 
     started_server = None
     url = URL
     if "8799" in URL:
+        clash = free_port()
+        if clash:
+            print("=== PORT ===")
+            check(False, "the test port is usable", clash)
+            print("\n" + "=" * 62)
+            print("EXPORT PATH: CANNOT RUN — a stranger holds the port this test needs")
+            return 2
         started_server = serve_repo()
 
     try:
@@ -202,7 +282,65 @@ def main():
                       "the row count it reports matches the file",
                       f"claims {es[0].get('rows')}, file has {len(rows)}")
 
+            # ── THE RELOAD ───────────────────────────────────────────────────
+            # A playtester reloads to retry a part. If the session does not
+            # survive that, the file we get back is missing the attempt we most
+            # wanted, and nothing in it says so.
+            print("\n=== A PLAYTESTER RELOADS (retrying a part) ===")
+            before_rows = len(rows)
+            before_preds = n_pred
+            before_max = max(seqs) if seqs else 0
+            pg.reload(wait_until="load")
+            pg.wait_for_timeout(2200)
+            pg.click("#gate")
+            pg.wait_for_timeout(700)
+            pg.evaluate("() => window.INDUSTRIA.act('bar')")
+            pg.evaluate("() => window.INDUSTRIA.touch()")
+            pg.wait_for_timeout(250)
+            pg.evaluate("() => window.INDUSTRIA.measure()")
+            pg.evaluate("() => window.INDUSTRIA.setBite(50)")
+            pg.evaluate("() => window.INDUSTRIA.predict(50)")
+            pg.evaluate("() => window.INDUSTRIA.cut()")
+            pg.wait_for_timeout(400)
+            pg.evaluate("() => window.INDUSTRIA.measure()")
+            pg.wait_for_timeout(150)
+            pg.evaluate("() => window.INDUSTRIA.inspect()")
+            pg.wait_for_timeout(1000)
+            with pg.expect_download(timeout=20000) as dl2:
+                pg.keyboard.press("s")
+            p2 = os.path.join(DL_DIR, dl2.value.suggested_filename)
+            dl2.value.save_as(p2)
+            rows2 = [json.loads(l) for l in open(p2, encoding="utf-8") if l.strip()]
+            seqs2 = [r["seq"] for r in rows2 if isinstance(r.get("seq"), int)]
+            dups2 = len(seqs2) - len(set(seqs2))
+            acts2 = [r for r in rows2 if r.get("type") == "action"]
+
+            check(len(rows2) > before_rows,
+                  "the session grew across the reload rather than restarting",
+                  f"{before_rows} -> {len(rows2)} rows")
+            check(max(seqs2) > before_max,
+                  "numbering continued past the pre-reload rows",
+                  f"max seq {before_max} -> {max(seqs2)}")
+            check(dups2 == 0, "no duplicated rows after the reload",
+                  f"{dups2} duplicates" if dups2 else "0 duplicates")
+            old_dials = {r.get("dial_um") for r in rows if r.get("dial_um")}
+            new_dials = {r.get("dial_um") for r in rows2 if r.get("dial_um")}
+            check(old_dials <= new_dials,
+                  "the pre-reload work is still in the file",
+                  f"pre-reload dials {sorted(old_dials)} present afterwards {sorted(old_dials & new_dials)}")
+            n_pred2 = sum(1 for r in acts2 if r.get("act") == "predict")
+            check(n_pred2 > before_preds,
+                  "the new sitting's predictions were added",
+                  f"{before_preds} -> {n_pred2} predictions")
+            hdr = next((r for r in rows2 if r.get("type") == "export_note"), {})
+            check(hdr.get("resumed_from_a_previous_page_load") is True,
+                  "the file says outright that it is a resumed session, not one sitting",
+                  f"resumed={hdr.get('resumed_from_a_previous_page_load')}")
             check(not errs, "no page or console errors", "; ".join(errs[:3]) if errs else "none")
+
+            # ── A STORE LEFT DAMAGED BY AN OLDER BUILD ───────────────────────
+            print("\n=== A STORE WITH DUPLICATE ROWS ALREADY IN IT ===")
+            check(contaminated_store_heals(b, url), "an already-contaminated session heals on open")
             b.close()
     finally:
         if started_server:

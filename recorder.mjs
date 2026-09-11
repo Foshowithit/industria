@@ -140,6 +140,10 @@ if (typeof globalThis.addEventListener === 'function') {
 const LS_KEY = REC_LABEL === null ? null : 'industria.rec.' + REC_LABEL;
 const LS_MAX_BYTES = 3_000_000;
 let lsDropped = 0;
+/* Duplicate rows discarded while healing a store written before lsWritten
+   existed. Counted separately from `lsDropped`, because "we threw away rows
+   that were never distinct" is a different statement from "we lost rows". */
+let lsDroppedDupes = 0;
 let lsFailing = false;
 /* Idempotence, and it is not optional. A row can be handed to `lsAppend` more
    than once: the network re-queue puts a body back in `pending`, and the fetch
@@ -220,12 +224,20 @@ export function localDump() {
   try { body = globalThis.localStorage ? (globalThis.localStorage.getItem(LS_KEY) || '') : ''; }
   catch (e) { return null; }
   const st = localStats();
+  const problem = [];
+  if (lsDropped > 0) {
+    problem.push('INCOMPLETE: storage quota was hit and ' + lsDropped +
+                 ' rows were not kept. Do not read this as a whole session.');
+  }
+  if (lsDroppedDupes > 0) {
+    problem.push(lsDroppedDupes + ' duplicate rows were removed on open, left by an older build.');
+  }
   return JSON.stringify({
     type: 'export_note', exported_iso: new Date().toISOString(),
     rows: st.rows, bytes: st.bytes, dropped_rows: lsDropped,
-    note: lsDropped > 0
-      ? 'INCOMPLETE: storage quota was hit and ' + lsDropped + ' rows were not kept. Do not read this as a whole session.'
-      : 'Complete as far as the browser knows.',
+    resumed_from_a_previous_page_load: resumed,
+    duplicate_rows_discarded_on_open: lsDroppedDupes,
+    note: problem.length ? problem.join(' ') : 'Complete as far as the browser knows.',
   }) + '\n' + body;
 }
 
@@ -257,8 +269,79 @@ const T0 = (globalThis.performance && performance.now)
 export const wallMs = () =>
   (globalThis.performance && performance.now ? performance.now() : Date.now()) - T0;
 
+/* ── SURVIVING A RELOAD ──────────────────────────────────────────────────── */
+/** Every row already durable in this browser, parsed. [] if none/unavailable. */
+function storedRows() {
+  if (LS_KEY === null) return [];
+  let s = '';
+  try { s = globalThis.localStorage ? (globalThis.localStorage.getItem(LS_KEY) || '') : ''; }
+  catch (e) { return []; }
+  const out = [];
+  for (const line of s.split('\n')) {
+    if (!line) continue;
+    try { out.push(JSON.parse(line)); } catch (e) { /* skip a damaged line */ }
+  }
+  return out;
+}
+
+/** Drop rows sharing a seq, keeping the FIRST occurrence.
+ *
+ *  The store accumulated duplicate seqs before `lsWritten` existed, and those
+ *  stores are still sitting in real browsers. Deduping on read means an
+ *  already-contaminated session heals the next time it is opened, instead of
+ *  requiring the player to clear their storage. */
+function dedupeStoredRows() {
+  if (LS_KEY === null) return;
+  try {
+    const store = globalThis.localStorage;
+    if (!store) return;
+    const rows = storedRows();
+    if (rows.length < 2) return;
+    const seen = new Set();
+    let dropped = 0;
+    const keep = [];
+    for (const r of rows) {
+      const k = (typeof r.seq === 'number') ? r.seq : null;
+      if (k === null) { keep.push(r); continue; }
+      if (seen.has(k)) { dropped += 1; continue; }
+      seen.add(k);
+      keep.push(r);
+    }
+    if (dropped) {
+      store.setItem(LS_KEY, keep.map((r) => JSON.stringify(r)).join('\n') + '\n');
+      lsDroppedDupes = dropped;
+    }
+  } catch (e) { /* leave it alone; the read path is unaffected */ }
+}
+
+/** Continue the session already in this browser instead of colliding with it.
+ *
+ *  Without this, a page reload restarts `seq` at 0 against the SAME storage
+ *  key and the second page load's rows overwrite the first's. Measured: 32 rows
+ *  before a reload and 57 after, with 25 duplicate seq numbers — a playtester
+ *  who reloads to retry a part silently destroys the session that contains the
+ *  thing we are actually measuring. A playtester WILL reload, so the session
+ *  has to be the unit that survives, not the page load. */
+let resumed = false;
+function restoreLocalSession() {
+  if (LS_KEY === null) return 0;
+  dedupeStoredRows();
+  const rows = storedRows();
+  let high = -1;
+  for (const r of rows) {
+    if (typeof r.seq === 'number') {
+      lsWritten.add(r.seq);
+      if (r.seq > high) high = r.seq;
+    }
+  }
+  resumed = high >= 0;
+  return high + 1;
+}
+
 /* ── THE LOG ─────────────────────────────────────────────────────────────── */
-let seq = 0;
+/* Seeded from the browser, so a reload continues the session rather than
+   restarting its numbering underneath the rows already stored. */
+let seq = restoreLocalSession();
 const sessionId = REC_LABEL === null ? null :
   REC_LABEL + '-' + new Date().toISOString().replace(/[:.]/g, '-');
 
@@ -280,6 +363,10 @@ export function sessionStart({ game, clocks, url, ua, viewport, fps }) {
     recorder_version: RECORDER_VERSION,
     session_id: sessionId,
     label: REC_LABEL,
+    /* True when rows for this label were already in the browser, so a reader
+       can see that one file is two sittings and not mistake a resumed session
+       for a single continuous one. */
+    resumed_from_a_previous_page_load: resumed,
     url: url ?? (globalThis.location ? location.href : null),
     ua: ua ?? (globalThis.navigator ? navigator.userAgent : null),
     viewport: viewport ?? { w: globalThis.innerWidth, h: globalThis.innerHeight },

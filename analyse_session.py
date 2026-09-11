@@ -46,6 +46,25 @@ STUCK_S = 12.0
 BAND_LOW = 40.000
 BAND_HIGH = 40.016
 
+# ── The prediction-contradiction threshold.
+#
+# This is deliberately PROPORTIONAL, not a fixed number of µm, because the
+# quantity being judged is proportional: the kernel removes ~2.1 % less than the
+# dial says, so on a 10 µm dial the machine disagrees with "predicted == dial" by
+# only 0.21 µm, while on a 400 µm dial it disagrees by ~8.5 µm. A fixed 0.5 µm
+# rule therefore calls every small-dial pass "not contradicted" and reports zero
+# contradictions on a real session whose every single pass was contradicted —
+# which is the exact failure this section exists to prevent. Measured against a
+# live session: dials 20/20/10 produced deficits of 0.43/0.34/0.13 µm, all under
+# a 0.5 µm absolute rule.
+#
+# So the test is: the machine's surplus exceeds CONTRADICTION_PCT of the dial.
+# 1.0 % sits under the kernel's true 2.1 % proportional shortfall, so honest
+# small-dial passes register as contradictions, while float noise (~1e-9) does
+# not. The absolute floor keeps a 0 µm dial from making the ratio meaningless.
+CONTRADICTION_PCT = 1.0
+CONTRADICTION_FLOOR_UM = 0.05
+
 
 def load(path):
     rows, bad = [], 0
@@ -166,9 +185,12 @@ def analyse(path, verbose=True, name=None):
     reached_loop = bool(first_measure and first_cut)
 
     # ── THE SURPLUS RELATIONSHIP ──────────────────────────────────────────
-    # The design claim is that the surplus (removed − dialled) is a roughly
-    # CONSTANT offset. "Discovered" means: they cut, measured after the cut,
-    # and then changed the dial in a way consistent with having noticed.
+    # The design claim is that the surplus (removed − dialled) is PROPORTIONAL
+    # to the dial — about −2.1 % of it — not a constant offset. An earlier build
+    # told players it was constant, which is false: dial 400 misses by ~8.5 µm
+    # while dial 10 misses by ~0.21 µm. Nothing below may assume a constant.
+    # "Discovered" means: they cut, measured after the cut, and then changed the
+    # dial in a way consistent with having noticed.
     cuts = [r for r in rows if r.get("type") == "cut"]
     cuts_refused = [r for r in rows if r.get("type") == "cut_refused"]
     measures = [r for r in rows if r.get("type") == "measure"]
@@ -401,6 +423,189 @@ def analyse(path, verbose=True, name=None):
     # that shows the RELATIONSHIP landed, not the sequence.
     model_revision = bool(q_understand) or bool(q_misconception) or bool(obs_more)
 
+    # ── THE PREDICTION ────────────────────────────────────────────────────
+    #
+    # The game refuses to cut until the player states what they expect the dial
+    # to actually remove (Shift+1..6), then tells them what it really removed.
+    # That "predict, then cut" gate is the central design mechanic, and until
+    # now this tool reported NOTHING about it — the mechanic was unmeasurable
+    # from a recorded session, which meant the one question Round 1 exists to
+    # answer could not be answered at all.
+    #
+    # The verb lives in `act`, on rows whose `type` is "action". An earlier
+    # inspection filtered on a field named `action` and therefore reported
+    # "0 predictions" against a file that plainly contained three. The field
+    # name is the whole reason this section did not exist.
+    preds = [r for r in rows if r.get("type") == "action" and r.get("act") == "predict"]
+    results = [r for r in rows if r.get("type") == "action" and r.get("act") == "prediction_result"]
+    # An orphan outcome (a result with no predict) is the mirror of a lost
+    # prediction and is reported rather than hidden.
+    orphan_results = max(0, len(results) - len(preds))
+
+    # ── Pairing. Do NOT match on pass_index: `predict` carries the number of
+    #    passes completed BEFORE its cut (so the first predict is 0), while the
+    #    answering `prediction_result` and `cut` carry the 1-based pass number
+    #    produced by that same cut. Pairing on the index would drop the first
+    #    prediction every single time. Row order is the reliable join.
+    track = []
+    for i, p in enumerate(preds):
+        res = results[i] if i < len(results) else None
+        dial = p.get("dial_um")
+        prev = p.get("predicted_um")
+        realised = res.get("realised_um") if res else None
+        # The realised value is authoritative from whichever row carries it;
+        # the `cut` row is the record of what the machine physically did.
+        cut_row = next((c for c in cuts
+                        if c.get("pass") == res.get("pass_index")), None) if res else None
+        if realised is None and cut_row is not None:
+            realised = cut_row.get("removed_radius_um")
+        diff = (realised - prev) if (realised is not None and prev is not None) else None
+        track.append({
+            "n": i + 1,
+            "dial_um": dial,
+            "predicted_um": prev,
+            # The dial recorded AT the prediction can differ from the dial the
+            # cut actually ran, if the player re-dialled between the two. That
+            # is worth surfacing, not smoothing over.
+            "dial_at_cut_um": (cut_row or {}).get("dial_um", res.get("dial_um") if res else None),
+            "realised_um": None if realised is None else round(realised, 4),
+            "diff_um": None if diff is None else round(diff, 4),
+            "diff_pct_of_dial": (None if (diff is None or not dial)
+                                 else round(100.0 * diff / dial, 3)),
+            "has_result": res is not None,
+        })
+
+    with_outcome = [t for t in track if t["has_result"]]
+    predicted_vals = [t["predicted_um"] for t in track if t["predicted_um"] is not None]
+
+    # ── THE NAIVE-MODEL CONTROL ───────────────────────────────────────────
+    # A scripted bot believes the dial: it states predicted == dial every time.
+    # Such a session looks perfectly self-consistent and proves NOTHING about a
+    # human, so it must be impossible to skim as evidence of learning. The
+    # discriminator is not "are they accurate" but "did the stated model ever
+    # differ from the dial at all".
+    same_as_dial = [t for t in track if t["predicted_um"] is not None
+                    and t["dial_um"] is not None
+                    and abs(t["predicted_um"] - t["dial_um"]) < 1e-9]
+    naive = (len(track) >= 2 and len(same_as_dial) == len(track)
+             and len(set(predicted_vals)) == 1)
+    if naive:
+        session_model = "SCRIPTED-OR-NAIVE-MODEL"
+    elif len(track) < 2:
+        session_model = "INSUFFICIENT-DATA"
+    else:
+        session_model = "HUMAN-OR-VARYING"
+
+    # ── THE CENTRAL METRIC: did the prediction CHANGE after being contradicted?
+    #
+    # Definition, stated so it can be audited rather than skimmed:
+    #   A pass "contradicts" the prediction when the machine's disagreement
+    #   |predicted − realised| exceeds CONTRADICTION_PCT of the dial (with a
+    #   small absolute floor). For each contradicting pass that has a LATER
+    #   prediction, we ask whether that later prediction differs from the one
+    #   that preceded it. The metric is the count of such revisions over the
+    #   count of contradicting passes that had a later prediction to revise.
+    #
+    # The threshold is proportional because the phenomenon is proportional — see
+    # the constants above for why a fixed µm threshold reports zero
+    # contradictions on a session where every pass was contradicted. Only
+    # 0/10/20/50/100/200/400 µm are offerable, so revisions are coarse.
+    def contradicted(t):
+        if t["diff_um"] is None:
+            return False
+        dial = t["dial_at_cut_um"] or t["dial_um"] or 0
+        return (abs(t["diff_um"]) >= max(CONTRADICTION_FLOOR_UM,
+                                          CONTRADICTION_PCT * abs(dial) / 100.0))
+
+    contradicting = [t for t in with_outcome if contradicted(t)]
+    revisable = [t for t in contradicting if t["n"] < len(track)]
+    # `n` is 1-based and index-consecutive by construction above, so the next
+    # prediction in the track is exactly t["n"] (0-based index == n of prev).
+    revised = [t for t in revisable if track[t["n"]]["predicted_um"] != t["predicted_um"]]
+
+    if len(track) < 2 or len(with_outcome) < 2:
+        prediction_change = "INSUFFICIENT-DATA"
+    elif not revisable:
+        # Every contradiction came on the last prediction, so there was never a
+        # chance to revise. That is not a NO.
+        prediction_change = "INSUFFICIENT-DATA"
+    else:
+        prediction_change = "YES" if revised else "NO"
+
+    if prediction_change == "YES":
+        change_reading = "the prediction changed after a contradiction"
+        # A change is NECESSARY for evidence of revision but not SUFFICIENT for it.
+        # If the player stated predicted == dial every single time, the later
+        # prediction differed only because the DIAL differed — one sentence, and
+        # no data here separates "I revised my model" from "the track changed".
+        # This exact session shape occurred: dials 20,20,10 with predictions
+        # 20,20,10 reads as YES, and its predicted/realised gap moved only
+        # 0.425 -> 0.237 µm, i.e. no revision is visible beyond the dial.
+        if len(same_as_dial) == len(track) and len(track) > 0:
+            change_reading += ("; CAUTION: every prediction equalled the dial, so "
+                               "this change is equally consistent with following the "
+                               "dial — a change is necessary for revision, not proof "
+                               "of it")
+        elif len(errs) < 4:
+            change_reading += (f"; weak — only {len(errs)} scored pass(es), so a "
+                               "change this early is the first datum, not a trend")
+    elif prediction_change == "NO":
+        # The design lead's failure reading, worded as the design lead worded it.
+        change_reading = ("predictions did NOT move despite contradiction — "
+                          "this is the teaching problem, not a player problem")
+    else:
+        change_reading = "cannot say — too few predictions, or no contradiction was ever followed by another prediction"
+
+    # ── ACCURACY TRAJECTORY ───────────────────────────────────────────────
+    # First half vs second half, by pass order, because a single mean over three
+    # points hides the direction and a "trend" fitted to two points is a line
+    # through a coin toss. Each half's n is reported so a 1-vs-1 split cannot be
+    # read as a trend.
+    errs = [abs(t["diff_um"]) for t in with_outcome if t["diff_um"] is not None]
+    half = len(errs) // 2
+    first_half, second_half = errs[:half], errs[half:]
+    mae_first = round(statistics.mean(first_half), 3) if first_half else None
+    mae_second = round(statistics.mean(second_half), 3) if second_half else None
+    if len(errs) < 4:
+        # Three points split 1/2 or 2/1 — reported, but not called a trend.
+        accuracy_trend = "INSUFFICIENT-DATA"
+    elif mae_second < mae_first:
+        accuracy_trend = "IMPROVING"
+    elif mae_second > mae_first:
+        accuracy_trend = "WORSENING"
+    else:
+        accuracy_trend = "FLAT"
+
+    # ── THE PHYSICS CONTRAST ──────────────────────────────────────────────
+    # The kernel removes slightly LESS than the dial says, and by a PROPORTION
+    # (−2.1 % of the dial), not a constant offset: dial 10 → 9.79, 400 → 391.5.
+    # A previous build told players the surplus was constant, which was false.
+    # Nothing here may encode a constant-surplus assumption, so this reports the
+    # two candidate models against the recorded cuts and lets the numbers say
+    # which one holds — and says so when the sample cannot separate them.
+    cut_surplus = [c["surplus_um"] for c in cuts if c.get("surplus_um") is not None]
+    cut_dials = [c.get("dial_um") for c in cuts if c.get("surplus_um") is not None]
+    pct_model = None
+    if len(cut_surplus) >= 2:
+        pcts = [100.0 * s / d for s, d in zip(cut_surplus, cut_dials) if d]
+        if len(pcts) >= 2:
+            spread_um = max(cut_surplus) - min(cut_surplus)
+            spread_pct = max(pcts) - min(pcts)
+            pct_model = {
+                "n": len(pcts),
+                "mean_pct": round(statistics.mean(pcts), 3),
+                "sd_pct": round(statistics.pstdev(pcts), 3) if len(pcts) > 1 else None,
+                "spread_of_surplus_um": round(spread_um, 4),
+                "spread_of_surplus_pct": round(spread_pct, 4),
+                # Proportionality holds when the ABSOLUTE surplus varies with the
+                # dial while the PERCENTAGE stays put. Both spreads are printed;
+                # which one is "tight" is the reader's call, and no verdict is
+                # asserted from a handful of passes.
+                "reads_as": ("PROPORTIONAL (surplus varies in µm, % holds)"
+                             if spread_pct < abs(statistics.mean(pcts)) and spread_um > spread_pct
+                             else "cannot separate proportional from constant at this n"),
+            }
+
     # ── VERDICT ───────────────────────────────────────────────────────────
     if not reached_loop:
         verdict = "DID-NOT-REACH-THE-LOOP"
@@ -507,6 +712,51 @@ def analyse(path, verbose=True, name=None):
                 "NO-SIGNAL"
             ),
         },
+        # ── THE PREDICTION (the central design mechanic) ───────────────────
+        "prediction": {
+            "n_predictions": len(preds),
+            "n_with_outcome": len(with_outcome),
+            "n_lacking_result": len(preds) - len(with_outcome),
+            "n_orphan_results": orphan_results,
+            "data_gap": (len(preds) - len(with_outcome)) > 0,
+            "gap_note": (
+                f"{len(preds) - len(with_outcome)} prediction(s) have NO outcome "
+                "record — DATA LOSS, not a pass"
+                if len(preds) > len(with_outcome) else None),
+            "session_model": session_model,
+            "n_predicted_equals_dial": len(same_as_dial),
+            "predicted_values": predicted_vals,
+            "track": track,
+            "track_note": "paired by ROW ORDER, not by pass_index (predict carries "
+                          "passes-before-cut, prediction_result carries 1-based pass)",
+            "change": {
+                "definition": ("after a pass where the machine disagreed with the "
+                               f"stated model by ≥{CONTRADICTION_PCT}% of the dial, "
+                               "did a LATER prediction differ from the one that "
+                               "preceded it?"),
+                "threshold_pct_of_dial": CONTRADICTION_PCT,
+                "threshold_floor_um": CONTRADICTION_FLOOR_UM,
+                "threshold_note": ("proportional, not a fixed µm, because the kernel's "
+                                   "shortfall is proportional (~2.1% of dial); a fixed "
+                                   "0.5 µm rule scores a real 10/20 µm pass as "
+                                   "'not contradicted'"),
+                "n_contradicting_passes": len(contradicting),
+                "n_contradicting_with_later_prediction": len(revisable),
+                "n_revised": len(revised),
+                "verdict": prediction_change,
+                "reading": change_reading,
+            },
+            "accuracy": {
+                "n_scored": len(errs),
+                "absolute_errors_um": [round(e, 3) for e in errs],
+                "first_half_mae_um": mae_first, "first_half_n": len(first_half),
+                "second_half_mae_um": mae_second, "second_half_n": len(second_half),
+                "trend": accuracy_trend,
+                "trend_note": ("needs ≥4 scored passes before a direction is claimed; "
+                               "below that a 'trend' is two coin tosses"),
+            },
+            "surplus_model": pct_model,
+        },
         "ship": ship,
     }
     return result
@@ -537,6 +787,81 @@ def print_report(r):
           f"{r['dial_revised_after_measure']}×")
     print(f"  physical acts  {r['physical_actions']} (warm / touch-off / rough / load)")
     print()
+
+    # ── the prediction: the central mechanic, finally measured ────────────
+    p = r.get("prediction") or {}
+    if p:
+        print("  ── the prediction (predict, then cut) ────────────────────────")
+        print(f"  predictions    {p['n_predictions']}  ·  with an outcome "
+              f"{p['n_with_outcome']}  ·  lacking one {p['n_lacking_result']}")
+        if p["data_gap"]:
+            # Loud, because a prediction with no outcome is lost evidence.
+            print(f"  !! DATA LOSS   {p['gap_note']}")
+        if p["n_orphan_results"]:
+            print(f"  !! {p['n_orphan_results']} outcome(s) with no matching prediction")
+        if p["session_model"] == "SCRIPTED-OR-NAIVE-MODEL":
+            print()
+            print("  ** SCRIPTED-OR-NAIVE-MODEL **")
+            print(f"     predicted == dial on all {p['n_predicted_equals_dial']} predictions, "
+                  "with no variation.")
+            print("     A bot that believes the dial looks perfectly consistent. This")
+            print("     session is NOT evidence of human learning. Re-run with a human.")
+            print()
+        elif p["session_model"] == "INSUFFICIENT-DATA":
+            print("  session model  INSUFFICIENT-DATA (fewer than 2 predictions)")
+        else:
+            print(f"  session model  {p['session_model']} "
+                  f"({p['n_predicted_equals_dial']}/{p['n_predictions']} predicted == dial)")
+
+        if p["track"]:
+            print()
+            print("  the track      (dial → stated model → machine, per pass)")
+            for t in p["track"]:
+                real = "—" if t["realised_um"] is None else f"{t['realised_um']:>7.2f}"
+                diff = "—" if t["diff_um"] is None else f"{t['diff_um']:>+7.2f}"
+                pct = "" if t["diff_pct_of_dial"] is None else f"  {t['diff_pct_of_dial']:+.2f}%"
+                flag = "" if t["has_result"] else "   ← NO OUTCOME RECORDED"
+                print(f"    pass {t['n']}  dial {str(t['dial_um']):>4}  "
+                      f"said {str(t['predicted_um']):>4}  removed {real}  "
+                      f"diff {diff}{pct}{flag}")
+
+        c = p["change"]
+        print()
+        if c["verdict"] == "INSUFFICIENT-DATA":
+            print(f"  DID THE PREDICTION CHANGE?   {c['verdict']}")
+        else:
+            print(f"  DID THE PREDICTION CHANGE?   {c['verdict']}"
+                  + ("   ← the prediction changed" if c["verdict"] == "YES" else ""))
+        print(f"    definition  {c['definition']}")
+        print(f"    threshold   {c['threshold_pct_of_dial']}% of the dial "
+              f"(floor {c['threshold_floor_um']} µm) — {c['threshold_note']}")
+        print(f"    evidence    {c['n_contradicting_passes']} contradicting pass(es); "
+              f"{c['n_contradicting_with_later_prediction']} had a later prediction; "
+              f"{c['n_revised']} of those revised it")
+        print(f"    reading     {c['reading']}")
+
+        a = p["accuracy"]
+        print()
+        print("  accuracy trajectory  (|predicted − realised|)")
+        if a["first_half_mae_um"] is None:
+            print("    no scored passes — nothing to trend")
+        else:
+            print(f"    first half   MAE {a['first_half_mae_um']} µm  (n={a['first_half_n']})")
+            print(f"    second half  MAE {a['second_half_mae_um']} µm  (n={a['second_half_n']})")
+            print(f"    trend        {a['trend']}")
+            if a["trend"] == "INSUFFICIENT-DATA":
+                print(f"    note         {a['trend_note']}")
+
+        sm = p.get("surplus_model")
+        if sm:
+            print()
+            print("  surplus model  (is the machine's shortfall proportional?)")
+            print(f"    from {sm['n']} recorded cuts: mean {sm['mean_pct']}% of dial "
+                  f"(sd {sm['sd_pct']})")
+            print(f"    surplus spread {sm['spread_of_surplus_um']} µm across dials, "
+                  f"but only {sm['spread_of_surplus_pct']}% — {sm['reads_as']}")
+    print()
+
     s = r["surplus_um"]
     print("  ── the surplus (removed − dialled), per pass ─────────────────")
     if s["n"]:
@@ -639,6 +964,11 @@ def summary_rows(results):
         ("gaps.did_not_understand", "dnidnt", 8),
         ("failure_conditions.F2_sequence_not_relationship", "F2", 19),
         ("failure_conditions.F6_second_part", "F6", 6),
+        # The central mechanic, side by side across sessions — so a scripted run
+        # cannot hide among human ones simply by looking tidy.
+        ("prediction.n_predictions", "preds", 6),
+        ("prediction.change.verdict", "changed?", 17),
+        ("prediction.session_model", "model", 25),
     ]
     print("  " + "".join(h.ljust(w) for _, h, w in cols))
     print("  " + "-" * sum(w for _, _, w in cols))
