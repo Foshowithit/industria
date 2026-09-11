@@ -12,7 +12,7 @@ from playwright.sync_api import sync_playwright
 URL = sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:8799/index.html"
 errors, leaks = [], []
 
-OBSERVER = """() => {
+OBSERVER = r"""() => {
   window.__LEAKS = [];
   const check = (node) => {
     const g = window.INDUSTRIA && window.INDUSTRIA.game;
@@ -20,10 +20,18 @@ OBSERVER = """() => {
     const t = g.part.holeDia_cold_mm;
     const reps = [t.toFixed(4), t.toFixed(3)];
     const txt = (node.textContent || '') + ' ' + (node.innerText || '');
-    // a real leak is a DECIMAL NUMBER, not digits straddling a label boundary
+    // a real leak is a DECIMAL NUMBER, not digits straddling a label boundary.
+    // Deliberately NO lookbehind: (?<!...) is a SyntaxError on older Safari and
+    // this runs inside page.evaluate, so an unsupported assertion would throw
+    // and abort the watch — a gate that dies looks exactly like a gate that
+    // found nothing. Consuming the preceding character and retrying at the next
+    // index is equivalent here and runs everywhere.
     for (const r of reps) {
-      const re = new RegExp('(?<![0-9.])' + r.replace('.', '\\.') + '(?![0-9])');
-      if (r.length > 3 && re.test(txt))
+      const esc = r.replace('.', '\\.');
+      const re = new RegExp('[^0-9.]' + esc + '(?![0-9])', 'g');
+      let m, hit = null;
+      while ((m = re.exec(' ' + txt)) !== null) { hit = m; }
+      if (r.length > 3 && hit)
         window.__LEAKS.push({ rep: r, truth: t.toFixed(5),
           where: node.id || node.className || node.tagName,
           allowed: txt.includes('Customer CMM'),
