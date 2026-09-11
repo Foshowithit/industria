@@ -210,6 +210,53 @@ def main():
                 pg.evaluate("() => window.INDUSTRIA.cut()")
                 pg.wait_for_timeout(260)
 
+            print("\n=== THE CHIPS GO WHERE THE CUT IS ===")
+            # A regression gate, not a screenshot. The emitter once added every
+            # chip to `scene` at hand-picked WORLD coordinates while the machine
+            # lives in a cell at z=-7, so 10 chips per pass sprayed onto the floor
+            # ~7 units outside the enclosure. Then the floor clamp compared a
+            # SPINDLE-LOCAL y (-0.67, the tool nose) against a CELL-LOCAL floor
+            # (1.06), which is true, so every chip was slammed onto the floor on
+            # the very frame it spawned -- right position, zero visible flight.
+            # Both defects were invisible to every automated check that existed.
+            # This one reads the meshes themselves.
+            CHIPS = """() => {
+              const I = window.INDUSTRIA, T = I.THREE;
+              const w = new T.Vector3();
+              const found = [];
+              I.scene.updateMatrixWorld(true);
+              I.scene.traverse(o => {
+                if (!o.isMesh || !o.geometry || o.geometry.type !== 'TetrahedronGeometry') return;
+                let p = o.parent, inSpindle = false;
+                while (p) { if (p === I.cell) break; if (p.position.y === 2.52) inSpindle = true; p = p.parent; }
+                if (!inSpindle) return;            // the 90 decorative floor chips
+                o.getWorldPosition(w);
+                found.push({ x:+w.x.toFixed(3), y:+w.y.toFixed(3), z:+w.z.toFixed(3) });
+              });
+              return found;
+            }"""
+            pg.wait_for_timeout(1400)              # let the last pass settle to the floor
+            chips = pg.evaluate(CHIPS)
+            check(len(chips) >= 10, "the pass emitted chips at all", f"{len(chips)} meshes")
+            if chips:
+                # The bore is world (-0.1, ~1.30, -6.65); the cell sits at z -7 and
+                # the enclosure floor is cell-local y 1.06. A chip belongs near the
+                # machine in x/z, and its y sits between the floor and the nose.
+                near = [c for c in chips
+                        if abs(c["x"] + 0.1) < 1.2 and abs(c["z"] + 7) < 1.2]
+                check(len(near) == len(chips),
+                      "every chip is inside the machine, not sprayed across the shop",
+                      f"{len(near)}/{len(chips)} within 1.2 units of the bore; "
+                      f"z {min(c['z'] for c in chips)}..{max(c['z'] for c in chips)} (cell at z -7)")
+                on_floor = [c for c in chips if abs(c["y"] - 1.06) < 0.02]
+                check(bool(on_floor),
+                      "chips come to rest on the enclosure floor (cell-local y 1.06)",
+                      f"{len(on_floor)}/{len(chips)} at y=1.06; "
+                      f"y {min(c['y'] for c in chips)}..{max(c['y'] for c in chips)}")
+                check(all(c["y"] > 0.5 for c in chips),
+                      "no chip is below the floor (the clamp is not inverted)",
+                      f"lowest world y {min(c['y'] for c in chips)}")
+
             pg.evaluate("() => window.INDUSTRIA.measure()")
             pg.wait_for_timeout(150)
             pg.evaluate("() => window.INDUSTRIA.inspect()")
@@ -336,7 +383,31 @@ def main():
             check(hdr.get("resumed_from_a_previous_page_load") is True,
                   "the file says outright that it is a resumed session, not one sitting",
                   f"resumed={hdr.get('resumed_from_a_previous_page_load')}")
-            check(not errs, "no page or console errors", "; ".join(errs[:3]) if errs else "none")
+            # One file, one session id. A reload mints a new one by default, which
+            # puts two ids in a single export -- undetectable by a reader, and it
+            # silently splits the per-session accounting in the analysis.
+            ids = {r.get("session_id") for r in rows2 if r.get("session_id")}
+            check(len(ids) == 1,
+                  "the whole file carries ONE session id across both page loads",
+                  f"{len(ids)} ids: {sorted(ids)}")
+            check(hdr.get("session_id_adopted_from_the_earlier_load") is True,
+                  "the file says the earlier session id was adopted",
+                  f"adopted={hdr.get('session_id_adopted_from_the_earlier_load')}")
+            # The transport failing is the CONDITION UNDER TEST, not a defect: this
+            # suite deliberately serves from a static server that answers POST
+            # /__rec with 501 (see the header). A browser told to POST anyway will
+            # log that refusal, and the game is REQUIRED to survive it -- that
+            # tolerated failure is the entire point of the dead-transport design.
+            # Counting it as a defect made this check report the intended state as
+            # a break. Allowlist that one artifact; any page error, and any other
+            # console error, still fails.
+            EXPECTED = re.compile(r"POST[^\n]*__rec[^\n]*501|501[^\n]*Unsupported method", re.I)
+            real = [e for e in errs if not EXPECTED.search(e)]
+            expected_noise = len(errs) - len(real)
+            check(not real, "no page or console errors",
+                  "; ".join(real[:3]) if real
+                  else f"none ({expected_noise} expected 501 from the dead recorder transport)")
+
 
             # ── A STORE LEFT DAMAGED BY AN OLDER BUILD ───────────────────────
             print("\n=== A STORE WITH DUPLICATE ROWS ALREADY IN IT ===")

@@ -237,6 +237,7 @@ export function localDump() {
     rows: st.rows, bytes: st.bytes, dropped_rows: lsDropped,
     resumed_from_a_previous_page_load: resumed,
     duplicate_rows_discarded_on_open: lsDroppedDupes,
+    session_id_adopted_from_the_earlier_load: adoptedSessionId,
     note: problem.length ? problem.join(' ') : 'Complete as far as the browser knows.',
   }) + '\n' + body;
 }
@@ -321,8 +322,19 @@ function dedupeStoredRows() {
  *  before a reload and 57 after, with 25 duplicate seq numbers — a playtester
  *  who reloads to retry a part silently destroys the session that contains the
  *  thing we are actually measuring. A playtester WILL reload, so the session
- *  has to be the unit that survives, not the page load. */
+ *  has to be the unit that survives, not the page load.
+ *
+ *  Seeding `lsWritten` alone is NOT enough: if `seq` still restarts at 0 the
+ *  rows collide again, just with the duplicates filtered out — so the old rows
+ *  silently OVERWRITE the new ones instead of appending beside them. Both
+ *  halves are required.
+ *
+ *  And the session id has to come back too. Minting a fresh one on reload while
+ *  the store keeps rows stamped with the old one puts two session ids in a
+ *  single exported file, which is the one thing a reader cannot detect for
+ *  themselves. `adopted_session_id` says outright that it happened. */
 let resumed = false;
+let resumedFromSessionId = null;
 function restoreLocalSession() {
   if (LS_KEY === null) return 0;
   dedupeStoredRows();
@@ -333,17 +345,24 @@ function restoreLocalSession() {
       lsWritten.add(r.seq);
       if (r.seq > high) high = r.seq;
     }
+    // First row wins: the session the file started as is the session it is.
+    if (resumedFromSessionId === null && typeof r.session_id === 'string' && r.session_id) {
+      resumedFromSessionId = r.session_id;
+    }
   }
   resumed = high >= 0;
   return high + 1;
 }
 
 /* ── THE LOG ─────────────────────────────────────────────────────────────── */
-/* Seeded from the browser, so a reload continues the session rather than
-   restarting its numbering underneath the rows already stored. */
+/* `seq` and the session id are both seeded from the browser, so a reload
+   continues the session rather than restarting its numbering underneath the
+   rows already stored. */
 let seq = restoreLocalSession();
 const sessionId = REC_LABEL === null ? null :
-  REC_LABEL + '-' + new Date().toISOString().replace(/[:.]/g, '-');
+  (resumedFromSessionId !== null ? resumedFromSessionId
+    : REC_LABEL + '-' + new Date().toISOString().replace(/[:.]/g, '-'));
+const adoptedSessionId = resumedFromSessionId !== null;
 
 function emit(type, data = {}) {
   if (!isRecording()) return;
@@ -367,6 +386,11 @@ export function sessionStart({ game, clocks, url, ua, viewport, fps }) {
        can see that one file is two sittings and not mistake a resumed session
        for a single continuous one. */
     resumed_from_a_previous_page_load: resumed,
+    /* True when this page load kept the earlier load's session id instead of
+       minting a new one, so the whole file carries ONE id. A reader who sees
+       two ids in one file has no way to tell which rows go together; this makes
+       the situation impossible to hit silently. */
+    session_id_adopted_from_the_earlier_load: adoptedSessionId,
     url: url ?? (globalThis.location ? location.href : null),
     ua: ua ?? (globalThis.navigator ? navigator.userAgent : null),
     viewport: viewport ?? { w: globalThis.innerWidth, h: globalThis.innerHeight },

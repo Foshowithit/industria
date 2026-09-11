@@ -446,25 +446,96 @@ function scatterFloorChips(n) {
 }
 scatterFloorChips(90);
 const NEW_CHIPS = [];
+/* ONE shared material, deliberately.
+ *
+ * A chip is a 10-triangle tetrahedron: the right answer is a bright diffuse
+ * surface, not a polished one. The old material was metalness 0.9, and a metal
+ * has almost no diffuse response — it shows you only what it reflects, so a
+ * chip sitting in a dark cavity renders as a black speck and the HUD ends up
+ * describing a chip the player cannot see. This is that fix.
+ *
+ * Shared (and therefore never disposed) because a per-chip material would be
+ * disposed on eviction while other chips still referenced it. */
+const CHIP_MAT = new THREE.MeshStandardMaterial({ color: 0xc8ccd0, roughness: 0.55, metalness: 0.12 });
+const CHIP_GEO = new THREE.TetrahedronGeometry(1.0);
 function chipsFromPass(rec, material) {
   const info = W.chipFromPass(rec, material);
+  if (info && info.colour_hex) { try { CHIP_MAT.color.set(info.colour_hex); } catch (e) {} }
+  /* Emitted at the TOOL NOSE, in the cell's own space.
+   *
+   * The old emitter did `scene.add` at a hand-picked WORLD position of
+   * (x, 1.28, z 0.35). `cell` is the group that actually holds the machine
+   * (cell.position.z = -7), so those world coordinates are ~7 units outside
+   * the enclosure: every chip in the shop sprayed onto the floor 9 units wide,
+   * none of them at the cut, and none of them inside the cell where the one
+   * worklight is. Parented to `spindleGroup`, the chips land in cell space like
+   * the part, the vise and the tool do — measured at the bar nose, local
+   * y = -0.64, which is the bottom of `barMesh`. */
   for (let i = 0; i < 10; i++) {
-    const c = new THREE.Mesh(new THREE.TetrahedronGeometry(0.008 + Math.random() * 0.01),
-      new THREE.MeshStandardMaterial({ color: new THREE.Color(info.colour_hex), roughness: 0.35, metalness: 0.9 }));
-    c.position.set((Math.random() - 0.5) * 0.4, 1.28, 0.35 + (Math.random() - 0.5) * 0.3);
-    c.userData.v = new THREE.Vector3((Math.random() - .5) * 1.2, 0.7 + Math.random(), (Math.random() - .5) * 1.2);
-    scene.add(c); NEW_CHIPS.push(c);
+    const c = new THREE.Mesh(CHIP_GEO, CHIP_MAT);
+    const s = 0.008 + Math.random() * 0.01;
+    c.scale.setScalar(s);
+    c.position.set((Math.random() - 0.5) * 0.06, -0.64 - Math.random() * 0.04,
+                   0.25 + (Math.random() - 0.5) * 0.06);
+    /* Thrown DOWN and out, under the tool — the old velocity launched them
+       upward at 0.7+, which is why the spray spread across the shop instead of
+       falling past the vise.
+     *
+     * These are SCALED units: the bore is 18 mm across and appears here as
+     * 0.036 units, so a "metre" is ~2 units. Velocities are scaled to match,
+     * and `stepChips` applies gravity in the same units -- mixing a raw metric
+     * constant into a scaled world is what made a correctly-placed chip
+     * invisible. */
+    c.userData.v = new THREE.Vector3((Math.random() - .5) * 0.30,
+                                     -(0.06 + Math.random() * 0.10),
+                                     (Math.random() - .5) * 0.30);
+    c.userData.spin = 2.0 + Math.random() * 3.0;
+    spindleGroup.add(c); NEW_CHIPS.push(c);
   }
   return info;
 }
 function stepChips(dt) {
   for (let i = NEW_CHIPS.length - 1; i >= 0; i--) {
-    const c = NEW_CHIPS[i]; c.userData.v.y -= 9.8 * dt;
+    const c = NEW_CHIPS[i];
+    /* Gravity, in the units this world is actually authored in: the bore is
+       18 mm across and draws as 0.036 units, so a metre is ~2 units and one
+       metric 9.8 m/s^2 is 3.9 units/s^2. The old code applied a raw 9.8 here,
+       which is 24.5 m/s^2 -- two and a half times real gravity. Measured: ten
+       correctly-placed chips crossed from the tool nose to the enclosure floor
+       inside a single frame, so a correct emitter still showed the player
+       nothing. 3.9 gives the fall ~0.64 s, which is when a chip is actually
+       visible leaving the cut. */
+    c.userData.v.y -= 3.9 * dt;
     c.position.addScaledVector(c.userData.v, dt);
-    c.rotation.x += dt * 6; c.rotation.z += dt * 5;
-    if (c.position.y < 0.03) { c.userData.v.set(0, 0, 0); c.position.y = 0.03; }
+    c.rotation.x += dt * (c.userData.spin || 5);
+    c.rotation.z += dt * (c.userData.spin || 4) * 0.8;
+    /* THE FLOOR TEST HAS TO BE IN ONE FRAME OF REFERENCE.
+     *
+     * `c.position` is SPINDLE-LOCAL: the emitter puts the nose at local y
+     * -0.64, and the spindle group sits at cell-local y 2.52, so the nose is
+     * cell-local 1.88. Comparing a spindle-local y against the cell-local floor
+     * (1.06) says "-0.67 < 1.06" — TRUE — so every chip was slammed onto the
+     * floor on the frame it spawned. Measured: 720 clamp hits, all at y around
+     * -0.67, while the HUD described a chip that never drew a single visible
+     * frame. Convert once, then compare. */
+    const worldFloor = 1.06;                       // cell-local floor height
+    const spindleY = spindleGroup.position.y;      // cell-local y of the parent
+    if (spindleY + c.position.y <= worldFloor) {
+      c.userData.v.set(0, 0, 0);
+      c.position.y = worldFloor - spindleY;
+    }
   }
-  if (NEW_CHIPS.length > 260) { const c = NEW_CHIPS.shift(); scene.remove(c); c.geometry.dispose(); c.material.dispose(); }
+  if (NEW_CHIPS.length > 260) {
+    const c = NEW_CHIPS.shift();
+    /* `scene.remove(c)` is a NO-OP on a child of a child, and it fails SILENTLY
+       — the mesh stays in the scene, so chips would accumulate at 10 per pass
+       forever while NEW_CHIPS still reported its 260 cap honoured. A list lying
+       about its own contents. Removing from the real parent is the only thing
+       that works, and it must ship with the parenting change above or not at
+       all. Disposes the geometry only: CHIP_MAT is shared and still in use. */
+    c.removeFromParent();
+    c.geometry.dispose();
+  }
 }
 
 /* ── AUDIO — §13 as a gameplay system, fed by world.cutAcoustics ──────────
