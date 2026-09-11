@@ -5,6 +5,9 @@ INDUSTRIA: one self-contained page backed by a real causal kernel, with no build
 
 **Open the page:** https://foshowithit.github.io/industria/
 
+Nothing is fetched from a third party at runtime — the two three.js files the page needs are
+vendored under `vendor/` and pinned by SHA-256. Open it on a plane.
+
 ## What is here
 
 | File | What it is |
@@ -13,6 +16,7 @@ INDUSTRIA: one self-contained page backed by a real causal kernel, with no build
 | `kernel.mjs` | The causal kernel: cutting force, power, deflection, stability, and a signed µm error budget. Pure functions. |
 | `kernel.test.mjs` | 48 headless regression checks. `node kernel.test.mjs` → exit 0. |
 | `models/` | Three real CNC meshes, measured in your browser. No CAD kernel involved. |
+| `vendor/` | three.js + its STL loader, pinned by hash. See `vendor/README.md`. |
 
 ## The idea
 

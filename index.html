@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>INDUSTRIA — causal kernel, live</title>
 <meta name="description" content="A playable slice of the INDUSTRIA kernel: predict how a cut fails, then see the arithmetic that decided it.">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "three/addons/": "./vendor/three/"
+  }
+}
+</script>
 <style>
   :root{
     --bg:#0b0d10; --panel:#141820; --panel2:#1b212b; --line:#2a323f;
@@ -740,11 +748,15 @@ let three = null, started3D = false, current = null;
 async function init3D() {
   if (started3D) return; started3D = true;
   try {
-    three = await import('https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js');
-    const { STLLoader } = await import('https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/loaders/STLLoader.js');
+    // Vendored, not fetched from a CDN. A page whose whole argument is that it
+    // audits itself should not depend on a third party being up. The bytes are
+    // pinned by hash in vendor/README.md; the mapping lives in the importmap.
+    three = await import('three');
+    const { STLLoader } = await import('three/addons/loaders/STLLoader.js');
     three.__STLLoader = STLLoader;
   } catch (e) {
-    document.getElementById('vlayer').innerHTML = '<span class="err">three.js failed to load from CDN — the measurements below still work.</span>';
+    document.getElementById('vlayer').innerHTML =
+      `<span class="err">three.js failed to load (${e && e.message ? e.message : e}) — every measurement below still works; none of it uses the renderer.</span>`;
   }
   const vb = document.getElementById('vfiles');
   vb.innerHTML = FILES.map((x, i) => `<button data-i="${i}" aria-pressed="${i === 0}">${x.label}</button>`).join('');
