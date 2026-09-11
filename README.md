@@ -14,9 +14,25 @@ vendored under `vendor/` and pinned by SHA-256. Open it on a plane.
 |---|---|
 | `index.html` | The whole app — one page, no bundler, no framework. Reads `kernel.mjs` as an ES module. |
 | `kernel.mjs` | The causal kernel: cutting force, power, deflection, stability, and a signed µm error budget. Pure functions. |
-| `kernel.test.mjs` | 48 headless regression checks. `node kernel.test.mjs` → exit 0. |
+| `kernel.test.mjs` | 54 headless regression checks. `node kernel.test.mjs` → exit 0. |
 | `models/` | Three real CNC meshes, measured in your browser. No CAD kernel involved. |
 | `vendor/` | three.js + its STL loader, pinned by hash. See `vendor/README.md`. |
+| `PLAYTEST-KIT.md` | **How to run a human session**, start to finish, for a facilitator who is not technical. |
+| `playtest.sh` | One command per job: `run` · `analyse` · `report` · `selftest` · `verify`. |
+| `recorder.mjs` | The event log. Off unless the URL carries `?rec=…`, so the public build is unaffected. |
+| `analyse_session.py` | Reads a session file and reports what the player actually understood. |
+| `debrief-novice.md` / `debrief-machinist.md` | Post-session capture forms. |
+
+### Running a playtest
+
+```bash
+./playtest.sh run alice        # start a session, opens the browser
+./playtest.sh analyse          # read the session that just happened
+./playtest.sh verify           # kernel tests + both acceptance gates
+```
+
+Instrumentation is **off by default**, armed only by `?rec=1`. The page at the link
+above is the same game with logging off and makes no network requests at all.
 
 ## The idea
 
