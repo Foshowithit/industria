@@ -530,7 +530,9 @@ function vibrate(strength = 1) {
 const keys = Object.create(null);
 addEventListener('keydown', (e) => {
   keys[e.code] = true;
-  if (e.code === 'KeyE') doLook();
+  /* A first E press after shipping is the clearest "touched something" in the
+     post-ship window — the manual treats re-checking the machine as a MORE cue. */
+  if (e.code === 'KeyE') { tapShipWindow('interact', lookingAt ? lookingAt.name : 'nothing'); doLook(); }
   handleMachineKeys(e);
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -613,6 +615,24 @@ for (const [id, mesh, lbl] of [['bar12', BOARDS.bar12, 'Ø12'], ['bar16', BOARDS
 /* ── MACHINE CONTROL — only what the kernel actually models ─────────────── */
 const DIALS = [10, 20, 50, 100, 200, 400];
 let biteCmd_um = 0, stickout = 45;
+
+/* ── THE PREDICTION ─────────────────────────────────────────────────────────
+ * Design-lead ruling (2026-09-11): "Make the player expose their current model
+ * before the machine gives them the answer." The game refuses to perform the
+ * inference for the player — it collects every observation and stops.
+ *
+ * Shift+1..6 states what you EXPECT the dial to actually remove, in µm, before
+ * the cut. From pass one, because "their first prediction is valuable precisely
+ * because it records their naive model." A cut with no prediction recorded is
+ * refused here rather than silently defaulted, because a default of 0 would
+ * manufacture a revision moment the player never had.
+ *
+ * The historical causal-chain line (dial → removed → surplus) is untouched:
+ * "Keep the existing historical causal-chain lines because they are excellent
+ * evidence." What is gone is the interpretation. No "Notice that…", no
+ * "Therefore…", no statement of the rule. */
+const PREDICTIONS = [10, 20, 50, 100, 200, 400];
+let predicted_um = null;
 const MACHINE_NEAR = new THREE.Vector3(0, 1.6, -7);
 
 function handleMachineKeys(e) {
@@ -620,6 +640,12 @@ function handleMachineKeys(e) {
   if (!atMachine && !CARRIED.calipers) return;
   const d = 'Digit1 Digit2 Digit3 Digit4 Digit5 Digit6'.split(' ');
   const i = d.indexOf(e.code);
+
+  /* The prediction is a DIFFERENT number from the dial (the whole point is that
+     they disagree), so it gets a different key. Shift+1..6. */
+  if (i >= 0 && e.shiftKey) { setPrediction(PREDICTIONS[i]); return; }
+  if (e.code === 'Digit0' && e.shiftKey) { setPrediction(0); return; }
+
   if (i >= 0) { biteCmd_um = DIALS[i]; if (REC) REC.action('set_dial', { dial_um: biteCmd_um, key: e.code, clock_min: GAME ? GAME.clock_min : null }); toast(`Dial set to <b>${biteCmd_um} µm</b> on the radius.`, 1800); return; }
   if (e.code === 'Digit0') { biteCmd_um = 0; if (REC) REC.action('set_dial', { dial_um: 0, key: 'Digit0' }); return; }
   if (e.code === 'KeyC') doCut();
@@ -630,6 +656,14 @@ function handleMachineKeys(e) {
   if (e.code === 'Enter') doInspect();
   if (e.code === 'KeyR') doRough();
 }
+
+function setPrediction(um) {
+  predicted_um = um;
+  if (REC) REC.action('predict', { predicted_um: um, dial_um: biteCmd_um,
+    pass_index: GAME ? GAME.history.length : 0, clock_min: GAME ? GAME.clock_min : null });
+  toast(`You expect the dial to remove <b>${um} µm</b>. Take the cut.`, 2200);
+}
+
 
 function machinePanel() {
   const atMachine = eye.distanceTo(MACHINE_NEAR) < 4.2;
@@ -782,6 +816,12 @@ function doCut() {
   const g = GAME;
   if (!g.tool) { if (REC) REC.refusal('cut', 'NO_TOOL', { clock_min: g.clock_min, dial_um: biteCmd_um }); say('You', 'The spindle\u2019s empty. Bars are on the board behind you.'); return; }
   if (biteCmd_um <= 0) { if (REC) REC.refusal('cut', 'DIAL_AT_ZERO', { clock_min: g.clock_min, dial_um: biteCmd_um }); toast('Dial is at zero. Pick a cut on 1\u20136.', 2000); return; }
+  /* THE PREDICTION GATE. Refused, not defaulted — see the PREDICTION block above. */
+  if (predicted_um === null) {
+    if (REC) REC.refusal('cut', 'NO_PREDICTION', { clock_min: g.clock_min, dial_um: biteCmd_um });
+    toast('<b>How much will it take off?</b> Press <kbd>Shift</kbd>+<kbd>1\u20136</kbd> to say what you expect, then cut.', 5200);
+    return;
+  }
   if (g.machine.edgeR_cold_mm === null) doTouchOff();
   const diaBefore = g.part.holeDia_cold_mm;
   const res = kernelJob(G.cutOnce, { bite_mm: biteCmd_um / 1000, feed_mm_rev: 0.12, vc: 120, label: 'bored' });
@@ -799,6 +839,12 @@ function doCut() {
     return;
   }
   const rec = res.rec;
+  /* The prediction is consumed by the cut that answers it. Recorded before the
+     comparison so a crash between the two cannot lose the player's model. */
+  const predicted = predicted_um;
+  if (REC) REC.action('prediction_result', { predicted_um: predicted, dial_um: rec.bite_cmd_um,
+    realised_um: rec.bite_realised_um, pass_index: rec.n, clock_min: g.clock_min });
+  predicted_um = null;
   if (REC) REC.cut({ rec, coldDia_before_mm: diaBefore, coldDia_after_mm: g.part.holeDia_cold_mm,
                      clock_min: g.clock_min, pass_index: rec.n });
   const info = chipsFromPass(rec, g.mat);
@@ -833,6 +879,10 @@ function doInspect() {
       clock_min: GAME.clock_min });
     firstEndAt = firstEndAt === null ? REC.wallMs() : firstEndAt;
     endedOnce = true;
+    /* Start the five-seconds-after-ship window. The manual is unambiguous that
+       this is the strongest signal in the round, so it is opened HERE, at the
+       ship event itself, rather than waiting for the observer to notice. */
+    openShipWindow();
   }
   if (v.verdict === 'ACCEPTED') {
     say('Earl', "\u201cThat's in. Put it on the bench, I'll get it on the van.\u201d");
@@ -858,9 +908,57 @@ function doInspect() {
 }
 /* ── THE SECOND PART — the one question the whole round exists to answer ──── */
 let endedOnce = false, firstEndAt = null, partStillLive = false, secondPartSeen = false;
+
+/* ── THE POST-SHIP WINDOW (field manual §6) ──────────────────────────────────
+ * The manual: "After they ship, say nothing for five seconds... Do they look
+ * around? Touch something? Re-check the machine?... If they naturally attempt
+ * to continue, record MORE." The observer cannot log five seconds of silence
+ * accurately, so the recorder holds the physics of it. This window is the
+ * strongest single signal in the round; it must survive even if nobody writes
+ * anything on the paper sheet. */
+const SHIP_WINDOW_MS = 8000;
+let shipWindow = null;
+function openShipWindow() {
+  if (!REC) return;
+  shipWindow = { t0: REC.wallMs(), events: [], looked_around: false, moved: false, interacted: false, started_second: false, closed: false };
+  setTimeout(() => closeShipWindow('timer'), SHIP_WINDOW_MS);
+}
+function tapShipWindow(kind, detail) {
+  if (!shipWindow || shipWindow.closed) return;
+  const t = Math.round((REC.wallMs() - shipWindow.t0) / 100) / 10;
+  shipWindow.events.push(t + 's ' + kind + (detail ? ' ' + detail : ''));
+  if (kind === 'look') shipWindow.looked_around = true;
+  if (kind === 'move') shipWindow.moved = true;
+  if (kind === 'interact') shipWindow.interacted = true;
+  if (kind === 'second_part') shipWindow.started_second = true;
+}
+function closeShipWindow(reason) {
+  if (!shipWindow || shipWindow.closed) return;
+  shipWindow.closed = true;
+  /* A window with no events at all is the single most informative outcome
+     ("they shipped it and stopped dead"), so it is recorded, not dropped. */
+  const last = shipWindow.events.length
+    ? shipWindow.events[shipWindow.events.length - 1].split(' ')[1]
+    : 'idle';
+  REC.postShip({
+    seconds_since_ship: Math.round((REC.wallMs() - shipWindow.t0) / 100) / 10,
+    last_kind: last,
+    events: shipWindow.events,
+    looked_around: shipWindow.looked_around,
+    moved: shipWindow.moved,
+    interacted: shipWindow.interacted,
+    started_second: shipWindow.started_second,
+    /* Filled afterwards by the observer if the player said anything aloud in
+       the window. Read by the analysis tool as spontaneous speech — optional,
+       never required, and its absence changes no verdict. */
+    verbatim: (window.__SHIP_VERBATIM || {})[String(shipWindow.t0)] || null,
+  });
+  shipWindow = null;
+}
 function noteSecondPart(verbatim) {
   if (!REC || !endedOnce || secondPartSeen || partStillLive) return;
   secondPartSeen = true;
+  tapShipWindow('second_part', 'another bar/job');
   REC.secondPart({ started: true,
     seconds_since_first_end: firstEndAt === null ? null
       : Math.round((REC.wallMs() - firstEndAt) / 1000),
@@ -1116,6 +1214,13 @@ function frame(now) {
       if (recSampleAccum >= 0.5) {
         recSampleAccum = 0;
         const kk = Object.keys(keys).filter((k) => keys[k]);
+        /* Post-ship window: the manual asks "do they look around? touch
+           something? re-check the machine?" Moving and looking ARE that
+           behaviour, so they are tapped here rather than inferred later. */
+        if (shipWindow && !shipWindow.closed) {
+          if (kk.some((k) => /^(KeyW|KeyA|KeyS|KeyD|Arrow)/.test(k))) tapShipWindow('move', kk.join('+'));
+          else if (lookingAt) tapShipWindow('look', lookingAt.name);
+        }
         const sayEl = $('talk');
         REC.sample({
           clock_min: GAME.clock_min, phase, looking_at: lookingAt ? lookingAt.name : null,
@@ -1139,8 +1244,14 @@ window.INDUSTRIA = {
   camp: () => ({ eye, yaw, pitch, fps: FPS }),
   /* Press the real buttons without walking. Used by the build gate so the
      acceptance test exercises the same code the player does, not a copy. */
+  /* `act` is meant to be indistinguishable from a player pressing E on the same
+     object, so it taps the post-ship window exactly as the E key handler does.
+     Without this the window silently under-reports: a scripted run that kept
+     interacting looked identical to a player who stopped dead, which is the one
+     distinction the window exists to make. */
   act: (name) => { const L = LOOK.find((e) => e.name.toLowerCase().includes(name.toLowerCase()));
     if (!L) return { ok: false, why: 'no such thing', have: LOOK.map((e) => e.name) };
+    tapShipWindow('interact', L.name);
     L.act(); return { ok: true, did: L.name }; },
   items: () => LOOK.map((e) => e.name),
   audio: () => ({ ready: audioReady, api: !!(globalThis.AudioContext || globalThis.webkitAudioContext),
@@ -1153,8 +1264,38 @@ window.INDUSTRIA = {
      cleanly with a real verdict instead of a truncated file. Null on the
      public build, because `?rec` was not in the URL. */
   rec: REC, recStats: () => (REC ? REC.stats() : null),
+  /* ── THE OBSERVER'S CHANNEL (field manual §4) ────────────────────────────
+   * The observer writes on paper, but the codes have to land in the SAME JSONL
+   * as the machine events or they cannot be correlated — and the correlation
+   * is the whole design: the observer writes six words, the recorder holds the
+   * physics. This handle is what the facilitator's page-console helper (or the
+   * selftest) calls. It is deliberately tiny and validated: an unknown code
+   * throws rather than being silently dropped, because a dropped code is
+   * indistinguishable from "the observer never saw it". */
+  obs: (code, words, extra) => {
+    if (!REC) return { ok: false, why: 'not recording' };
+    try { REC.observerEvent(code, words, extra || {}); return { ok: true, code }; }
+    catch (e) { return { ok: false, why: String(e && e.message) }; }
+  },
+  obsCodes: () => Object.keys(REC ? REC.OBSERVER_CODES : {}),
+  obsQuote: (category, text, when) => {
+    if (!REC) return { ok: false, why: 'not recording' };
+    REC.quote(category, text, when); return { ok: true };
+  },
+  obsHelp: (rung, opts) => {
+    if (!REC) return { ok: false, why: 'not recording' };
+    REC.helpAsked(rung, opts || {}); return { ok: true };
+  },
+  obsSilence: (kind, seconds, opts) => {
+    if (!REC) return { ok: false, why: 'not recording' };
+    REC.silence({ kind, seconds, ...(opts || {}) }); return { ok: true };
+  },
   recEnd: (reason) => {
     if (!REC) return null;
+    /* Close an OPEN post-ship window before the final row. A session that ends
+       one second after shipping still produced a behaviour worth recording —
+       "shipped it and immediately stopped" is a real, and telling, result. */
+    closeShipWindow('session_end');
     REC.sessionEnd({ reason: reason || 'runner_close', clock_min: GAME ? GAME.clock_min : null,
       money: GAME ? GAME.money : null, history_len: GAME ? GAME.history.length : null,
       measurements: GAME ? GAME.shots : null, finished: GAME ? GAME.finished : null });

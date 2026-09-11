@@ -1,2 +1,4 @@
 .DS_Store
 .selftest-sessions/
+__pycache__/
+*.pyc

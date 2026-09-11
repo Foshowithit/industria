@@ -29,6 +29,23 @@ from datetime import datetime, timezone
 REPO = pathlib.Path(__file__).resolve().parent
 SAFE_LABEL = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
+# The observer's event sheet (field manual §4): timestamp + code + 3-8 words.
+# Kept in sync with OBSERVER_CODES in recorder.mjs by test, not by hope —
+# see selftest_pipeline.py, which asserts the two sets match exactly.
+OBSERVER_CODES = {
+    "C": "confused",
+    "H": "hypothesis",
+    "A": "understanding-changed",
+    "F": "frustration",
+    "S": "surprise",
+    "R": "retries-voluntarily",
+    "HELP": "requested-help",
+    "WALL": "cannot-progress",
+    "P": "part-shipped",
+    "MORE": "wants-another",
+    "REALISM": "professional-objection",
+}
+
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     sessions_dir = None
@@ -44,7 +61,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             sys.stderr.write("  [http] " + (fmt % args) + "\n")
 
     def do_POST(self):
-        if self.path.rstrip("/") not in ("/__rec", "/__rec/"):
+        route = self.path.rstrip("/")
+        # The observer's annotation channel (field manual §4). The observation
+        # sheet is on paper, but the CODES have to land in the same JSONL as the
+        # machine events or they cannot be correlated — and the correlation is
+        # the entire point. The observer's browser-side helper posts here; it is
+        # a separate route from /__rec so that a stray annotation can never be
+        # mistaken for a machine-recorded event.
+        if route in ("/__obs", "/__obs/event"):
+            self._handle_observer(body_only=True)
+            return
+        if route not in ("/__rec", "/__rec/"):
             self.send_error(404)
             return
         label = self.headers.get("X-Rec-Label") or "unlabelled"
@@ -65,6 +92,57 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.counters[label] = self.counters.get(label, 0) + body.count(b"\n")
             if first:
                 sys.stderr.write(f"\n  ▸ session file opened: {out}\n\n")
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _handle_observer(self, body_only=False):
+        """Append one observer annotation to the live session's JSONL.
+
+        Validated here as well as in the page, because a typo in a paper sheet
+        silently becomes a missing data point in the verdict — better a 400 the
+        observer can see than a code that never arrives.
+        """
+        label = self.headers.get("X-Rec-Label") or "unlabelled"
+        if not SAFE_LABEL.match(label):
+            self.send_error(400, "bad label")
+            return
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            n = 0
+        raw = self.rfile.read(n) if n else b""
+        try:
+            row = json.loads(raw.decode("utf-8") or "{}")
+        except Exception:
+            self.send_error(400, "bad json")
+            return
+        code = str(row.get("code", "")).strip().upper()
+        if code not in OBSERVER_CODES:
+            self.send_error(
+                400,
+                f"unknown code {code!r}; expected one of {' '.join(OBSERVER_CODES)}",
+            )
+            return
+        row["code"] = code
+        row["meaning"] = OBSERVER_CODES[code]
+        # The analysis tool keys every row off `type`, exactly as the page's
+        # recorder does. Without this the annotation arrives as an anonymous
+        # object and is silently ignored — the correlation the field manual
+        # depends on would produce nothing while looking like it worked.
+        row["type"] = "observer"
+        row.setdefault("source", "observer")
+        if not row.get("at_wall_ms"):
+            row["at_wall_ms"] = int(time.time() * 1000)
+        row.setdefault("t_iso", datetime.now(timezone.utc).isoformat(timespec="milliseconds"))
+        line = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
+        out = self.sessions_dir / (label + ".jsonl")
+        with self.lock:
+            with open(out, "ab") as fh:
+                fh.write(line)
+            self.counters[label] = self.counters.get(label, 0) + 1
+        if not self.quiet:
+            sys.stderr.write(f"  [obs] {code} — {row.get('words') or ''}\n")
         self.send_response(204)
         self.send_header("Content-Length", "0")
         self.end_headers()

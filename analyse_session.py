@@ -291,15 +291,115 @@ def analyse(path, verbose=True, name=None):
     # ── F5: machinist absurdity ───────────────────────────────────────────
     f5 = "UNMEASURABLE-IN-SESSION"   # requires the machinist's words
 
-    # ── F6: another part? ─────────────────────────────────────────────────
+    # ── F6: "MORE" — the strongest single signal in the whole run ──────────
+    #
+    # The field manual is emphatic that this is detected BEHAVIOURALLY, and
+    # that asking "would you play more?" is worthless because a polite player
+    # says yes. So this reads the post-ship window: what the player actually
+    # did in the seconds after the part left their hands, before anyone spoke.
+    #
+    # The manual's own cue list is "do they look around? touch something?
+    # re-check the machine?" — so an observer's MORE annotation and the
+    # recorded behaviour are two views of one event, and disagreement between
+    # them is itself interesting: the observer saw intent the machine could
+    # not, or the machine saw engagement the observer missed.
     sp = next((r for r in rows if r.get("type") == "second_part"), None)
-    f6 = ("PROMPTED-OR-NOT" if not ship else
-          ("YES" if sp else "NO"))
+    psw = next((r for r in rows if r.get("type") == "post_ship"), None)
+    obs_more = [r for r in rows if r.get("type") == "observer"
+                and str(r.get("code", "")).upper() == "MORE"]
+
+    if not ship:
+        f6 = "NOT-REACHED"          # no ship, so "after shipping" is undefined
+    elif sp or (psw and psw.get("started_second")):
+        f6 = "YES-BEHAVIOURAL"      # started another part without being asked
+    elif psw and (psw.get("interacted") or psw.get("moved")
+                  or psw.get("looked_around")):
+        # Stayed at the machine and kept engaging. Not a second part, but
+        # unmistakably not "done" either — the manual's middle case.
+        f6 = "ENGAGED-NOT-CONTINUED"
+    elif psw:
+        f6 = "NO-IDLE"              # nothing at all in the window
+    else:
+        # No window recorded. On a real session that means the run predates the
+        # window or the page never fired it, which is NOT the same as "no".
+        f6 = "NO-WINDOW-CAPTURED"
+
+    second_part_s = sp.get("seconds_since_first_end") if sp else None
 
     # ── F7: was the relationship ever looked for? ─────────────────────────
     f7 = ("NEVER-REACHED-A-CUT" if not cuts else
           ("LOOKED-FOR" if (remeasure_after_cut >= 1 and len(cuts) >= 2)
            else "NOT-LOOKED-FOR"))
+
+    # ── THE FIELD MANUAL'S OBSERVER EVIDENCE ──────────────────────────────
+    #
+    # The manual's sheet is paper, but its codes land in this same JSONL, which
+    # is the entire point of the design: the observer writes six words and the
+    # recorder holds the physics, and NEITHER ALONE ANSWERS THE QUESTION. A
+    # `WALL` at 02:14 means something specific when the machine log shows no
+    # measurement had ever been taken and a prompt was on screen — and
+    # something quite different when the player had just re-measured cleanly.
+    # So the codes are correlated against the machine state at that moment
+    # rather than merely counted.
+    obs = [r for r in rows if r.get("type") == "observer"]
+    obs_counts = {}
+    for r in obs:
+        c = str(r.get("code", "")).upper()
+        obs_counts[c] = obs_counts.get(c, 0) + 1
+
+    # Each WALL is classified by what the machine can prove about that moment.
+    walls = []
+    for r in obs:
+        if str(r.get("code", "")).upper() != "WALL":
+            continue
+        at = r.get("at_wall_ms")
+        # Machine state as of the annotation, so the human word is grounded.
+        before = [x for x in rows
+                  if x.get("type") != "observer"
+                  and (at is None or (x.get("wall_ms") or 0) <= at)]
+        m_before = [x for x in before if x.get("type") == "measure"]
+        c_before = [x for x in before if x.get("type") == "cut"]
+        # Was a question on screen in the moments before? That separates
+        # "the game never asked" from "the player could not act on the ask".
+        recent = [x for x in before if x.get("type") == "sample"][-12:]
+        prompted = any(x.get("prompt_visible") for x in recent)
+        if not m_before:
+            kind = "BEFORE-EVER-MEASURING"
+        elif not c_before:
+            kind = "BEFORE-EVER-CUTTING"
+        elif not prompted:
+            kind = "NO-QUESTION-ON-SCREEN"
+        else:
+            kind = "PROMPTED-BUT-BLOCKED"
+        walls.append({
+            "at_wall_ms": at, "words": r.get("words"), "kind": kind,
+            "prompt_visible_before": prompted,
+            "measures_before": len(m_before), "cuts_before": len(c_before),
+        })
+
+    # ── THE PASS STANDARD (field manual §7) ───────────────────────────────
+    #
+    # The manual is explicit that "the novices finished" is NOT the pass
+    # standard, and that a completed run reached *after* the observer supplied
+    # information the game owed the player must NOT be recorded as a pass. So
+    # this refuses to treat completion as success and reports the two things
+    # that actually matter separately: whether the loop closed, and whether it
+    # closed UNASSISTED.
+    gives = [r for r in rows if r.get("type") == "help"]
+    gave_info = [r for r in gives if r.get("gave_information")]
+    # TRUE only if the observer never handed over information the game owed the
+    # player. Rung-1 and rung-2 replies ("tell me what you think you're
+    # supposed to do") extract a mental model and give nothing away, so they
+    # leave the run clean — which is precisely why the manual grades them.
+    unassisted = not gave_info
+
+    quotes = [r for r in rows if r.get("type") == "quote"]
+    q_understand = [q for q in quotes if q.get("category") == "understanding"]
+    q_misconception = [q for q in quotes if q.get("category") == "misconception"]
+    q_desire = [q for q in quotes if q.get("category") == "desire"]
+    # The manual's "genuine model-revision moment": the player said something
+    # that shows the RELATIONSHIP landed, not the sequence.
+    model_revision = bool(q_understand) or bool(q_misconception) or bool(obs_more)
 
     # ── VERDICT ───────────────────────────────────────────────────────────
     if not reached_loop:
@@ -308,6 +408,20 @@ def analyse(path, verbose=True, name=None):
         verdict = "LOOP-ENTERED-NOT-CLOSED"
     else:
         verdict = "LOOP-CLOSED"
+
+    # The verdict the FIELD MANUAL actually asks for. Deliberately a separate
+    # field from `verdict` above, because they answer different questions and
+    # conflating them is exactly the error the manual warns against.
+    if not reached_loop:
+        field_verdict = "FATAL-FIRST-WALL"
+    elif not unassisted:
+        field_verdict = "COMPLETED-AFTER-HELP — NOT A CLEAN RUN"
+    elif f6 in ("YES-BEHAVIOURAL", "ENGAGED-NOT-CONTINUED") or model_revision:
+        field_verdict = "STRONG"
+    elif verdict == "LOOP-CLOSED":
+        field_verdict = "LOOP-CLOSED-BUT-NO-OBSESSION-SIGNAL"
+    else:
+        field_verdict = "WEAK"
 
     result = {
         "file": name, "ok": True, "rows": len(rows), "bad_lines": bad,
@@ -355,6 +469,43 @@ def analyse(path, verbose=True, name=None):
             "F5_machinist_absurdity": f5,
             "F6_second_part": f6,
             "F7_relationship_looked_for": f7,
+        },
+        # ── THE FIELD MANUAL'S EVIDENCE (Round 1's authoritative protocol) ──
+        "field_manual": {
+            "field_verdict": field_verdict,
+            "verdict_note": ("completion is not the pass standard; see §7 of the "
+                             "field manual"),
+            "unassisted": unassisted,
+            "help_events": len(gives),
+            "help_gave_information": len(gave_info),
+            "help_rungs": [g.get("rung") for g in gives],
+            "post_ship_window": None if not psw else {
+                "seconds": psw.get("seconds_since_ship"),
+                "last_kind": psw.get("last_kind"),
+                "events": psw.get("events") or [],
+                "looked_around": psw.get("looked_around"),
+                "moved": psw.get("moved"),
+                "interacted": psw.get("interacted"),
+                "started_second": psw.get("started_second"),
+            },
+            "more_verdict": f6,
+            "second_part_after_s": second_part_s,
+            "model_revision_moment": model_revision,
+            "observer_codes": obs_counts,
+            "observer_rows": len(obs),
+            "walls": walls,
+            "quotes": {
+                "understanding": [q.get("text") for q in q_understand],
+                "misconception": [q.get("text") for q in q_misconception],
+                "desire": [q.get("text") for q in q_desire],
+            },
+            "observer_more_annotations": len(obs_more),
+            "observer_vs_machine_more": (
+                "AGREE" if (bool(obs_more) and f6 == "YES-BEHAVIOURAL") else
+                "MACHINE-ONLY" if (not obs_more and f6 == "YES-BEHAVIOURAL") else
+                "OBSERVER-ONLY" if (obs_more and f6 != "YES-BEHAVIOURAL") else
+                "NO-SIGNAL"
+            ),
         },
         "ship": ship,
     }
@@ -421,6 +572,44 @@ def print_report(r):
     print(f"  F5 machinist absurdity               {f['F5_machinist_absurdity']}   ← the machinist decides")
     print(f"  F6 wanted another part               {f['F6_second_part']}")
     print(f"  F7 relationship looked for           {f['F7_relationship_looked_for']}")
+
+    # ── the field manual's own verdict ────────────────────────────────────
+    fm = r.get("field_manual") or {}
+    if fm:
+        print()
+        print("── FIELD MANUAL (Round 1 pass standard, §7) ───────────────────")
+        print(f"  field verdict                        {fm.get('field_verdict')}")
+        print(f"  unassisted run                       "
+              f"{'YES' if fm.get('unassisted') else 'NO — observer supplied information'}")
+        if fm.get("help_events"):
+            print(f"  help asked                           {fm['help_events']}× "
+                  f"rungs {fm.get('help_rungs')}"
+                  + (f", {fm['help_gave_information']} gave information away"
+                     if fm.get("help_gave_information") else
+                     " (all extraction-only — run stays clean)"))
+        pw = fm.get("post_ship_window")
+        if pw:
+            print(f"  after shipping                       {pw['seconds']}s window: "
+                  f"{pw.get('events') or 'nothing at all'}")
+            print(f"    looked around / moved / touched    "
+                  f"{pw['looked_around']} / {pw['moved']} / {pw['interacted']}")
+        print(f"  MORE (behavioural)                   {fm.get('more_verdict')}"
+              + (f" — second part after {fm['second_part_after_s']}s"
+                 if fm.get("second_part_after_s") is not None else ""))
+        print(f"  observer codes seen                  "
+              + (", ".join(f"{k}×{v}" for k, v in sorted(fm["observer_codes"].items()))
+                 or "none — no sheet annotations were entered"))
+        if fm.get("observer_rows"):
+            print(f"  observer vs machine on MORE          "
+                  f"{fm.get('observer_vs_machine_more')}")
+        for w in fm.get("walls") or []:
+            print(f"  WALL  \"{w['words']}\"  →  {w['kind']} "
+                  f"(prompt on screen: {w['prompt_visible_before']}, "
+                  f"{w['measures_before']} measurements, {w['cuts_before']} cuts before)")
+        q = fm.get("quotes") or {}
+        for cat in ("understanding", "misconception", "desire"):
+            for line in q.get(cat) or []:
+                print(f"  quote[{cat}]  “{line}”")
     if r.get("ship"):
         sh = r["ship"]
         v = sh.get("verdict") or (sh.get("finished") or {}).get("verdict")

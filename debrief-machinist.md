@@ -13,9 +13,37 @@ summary — a machinist's phrasing carries the precision we need.
 
 ---
 
-## The three questions that matter
+## Was this an UNASSISTED run?
 
-### 1. "What was fake?"
+Same rule as the novice: if you supplied information the game owed them, the
+clean gate **ended** there. Record it honestly — the machinist's verdict on the
+physics is still valuable either way, but it is not a clean run.
+
+    Information given?                      YES  /  NO
+    Escalation rungs used: 1st ☐  2nd ☐  3rd ☐  BLOCKED-then-helped ☐
+
+---
+
+## The four questions — this order, no substitutions
+
+The opening script for a machinist is **not** the novice script. Before the run:
+
+> "I want you to play this as if someone put you in front of it without
+> explaining it. For the first ten minutes, please play rather than review it.
+> You can say anything you notice out loud, including things that feel wrong,
+> but don't stop to give me a full critique yet. Afterward I'm going to ask you
+> specifically what was fake, what was credible, and what you would actually do
+> differently."
+
+**Mid-run, do not debate them. Do not explain your model. Do not say "actually
+that's intentional because…"** — that contaminates the reaction. Say "Got it.
+Keep going." Log each objection as `REALISM — [short description]`.
+
+Then, afterwards, unlimited critique. **Ask these four in this order** — order
+matters because question 1 biases question 2, and question 4 only works once
+they have finished evaluating.
+
+### 1. "What was the first thing that felt fake?"
 
 Ask it flat, like that. Do not soften it to "was there anything that felt a bit
 off?" — that lets them be polite. You want the list.
@@ -46,22 +74,32 @@ If yes, quote it exactly — this single sentence can redirect a whole round:
 
 ---
 
-### 2. "What made you trust it?"
+### 2. "What was the first thing that made you think whoever built this actually understood machining?"
 
 This is the more subtle and more valuable question. It finds the parts that are
 **right**, and those are the parts we must not break while fixing everything
-else.
+else. The pass standard needs **at least one machinist to name something
+genuinely right, unprompted** — this question is where that is captured, so do
+not skip it even if question 1 produced a long list of complaints.
 
 > ______________________________________________________________________
 >
 > ______________________________________________________________________
 
----
+### 3. "What would you have done differently from what the game led you toward?"
 
-### 3. "At what moment did you stop thinking about the software?"
+This catches process errors the game *teaches* rather than merely contains. If
+they would never have taken the sequence the game steered them into, that is a
+finding about the lesson, not just the physics.
 
-The question that measures immersion. A machinist who never stops thinking about
-the software stayed outside it the whole time.
+> ______________________________________________________________________
+
+### 4. "Was there any moment where you stopped evaluating the simulation and just tried to make the part?"
+
+The question that measures immersion. A machinist who never stopped thinking
+about the software stayed outside it the whole time.
+
+> Question 4 is where simulation starts becoming game.
 
   - Never stopped (stayed outside):     ☐
   - Briefly lost track:                 ☐
@@ -70,6 +108,14 @@ the software stayed outside it the whole time.
 What were they doing at the moment they named?
 
 > ______________________________________________________________________
+
+**→ Also record whether they objected to the audio.** The pass standard says
+audio cannot *actively damage* credibility, so a `REALISM` note about the cut
+sound is a Round 1 finding even if everything else works.
+
+  - Audio damaged credibility:   ☐   what they said: ____________________
+  - Audio neutral / unnoticed:   ☐
+  - Audio read as right:         ☐
 
 ---
 
@@ -142,13 +188,34 @@ Quote: ______________________________________________________________
 
 ---
 
-## The three sentences that matter most
+## The quotes that matter most
 
-Verbatim. These go in the round summary unedited.
+Verbatim. These go in the round summary unedited. The three categories are the
+manual's, not ours — and for a machinist, **misconception** is usually replaced
+by **objection**, so that row carries the `REALISM` lines instead.
 
-1. "________________________________________________________________"
-2. "________________________________________________________________"
-3. "________________________________________________________________"
+**1. Something genuinely right, unprompted** — the pass standard needs at least
+   one machinist to produce this, and it is easy to lose it in a long complaint
+   list:
+
+> ______________________________________________________________________
+
+**2. Professional objection** — the sharpest `REALISM` line of the session,
+   word for word:
+
+> ______________________________________________________________________
+
+**3. Immersion / intrinsic desire** — did they ever stop evaluating, or ask for
+   another part?
+
+> ______________________________________________________________________
+
+Enter the objection and any desire so they correlate with the machine log:
+
+```js
+INDUSTRIA.obs('REALISM', 'nobody deburrs before measuring', { machinist: true })
+INDUSTRIA.obsQuote('desire', 'set me up another one')
+```
 
 ---
 

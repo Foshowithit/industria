@@ -271,9 +271,130 @@ export function secondPart({ started, seconds_since_first_end, verbatim }) {
   emit('second_part', { started, seconds_since_first_end, verbatim: verbatim ?? null });
 }
 
+/* ── THE POST-SHIP WINDOW — the strongest single signal in the round ────────
+ *
+ * The field manual is explicit: after the part ships the observer says NOTHING
+ * for five seconds and watches what the player does. "MORE" is voluntary
+ * continuation, detected BEHAVIOURALLY. Asking "would you play more?" is
+ * leading and a polite player will say yes, so the behaviour is the evidence.
+ *
+ * The observer cannot log this: they are watching a face, not a keyboard, and
+ * five seconds is too short to write in. So the recorder holds it. Whatever
+ * the player actually does in that window is recorded verbatim, with timing,
+ * and the analyser decides — it never has to trust a human's memory of a
+ * five-second silence.
+ *
+ * `kind` is one of:
+ *   'idle'        nothing at all — no input, no look change
+ *   'look'        moved the crosshair onto something (looking around)
+ *   'interact'    pressed E / acted on a thing
+ *   'move'        walked somewhere
+ *   'second_part' loaded another bar or started another job (the real MORE)
+ *   'end'         window closed by the timer or by the player leaving
+ */
+export function postShip({ seconds_since_ship, last_kind, events, looked_around, moved, interacted, started_second, verbatim }) {
+  emit('post_ship', {
+    seconds_since_ship, last_kind,
+    /* Compact, ordered list of what happened in the window: enough to replay
+       the five seconds, not enough to become a second event stream. */
+    events: Array.isArray(events) ? events.slice(0, 40) : [],
+    looked_around: !!looked_around,
+    moved: !!moved,
+    interacted: !!interacted,
+    started_second: !!started_second,
+    /* Spontaneous speech in the window, if the player said anything aloud.
+       The observer transcribes it; this field is the place it lands. */
+    verbatim: verbatim ?? null,
+  });
+}
+
 /** Free-form, used by the runner for forced close-out and by the page for
  *  anything that does not deserve its own type. */
 export const note = (message, extra = {}) => emit('note', { message, ...extra });
+
+/* ── THE OBSERVER'S EVENT CODES (field manual §4) ────────────────────────────
+ *
+ * The manual's sheet is "timestamp + code + 3-8 words", one page, eleven codes:
+ *   C H A F S R HELP WALL P MORE REALISM
+ *
+ * This channel carries the OBSERVER's annotations into the same JSONL as the
+ * machine's own events, which is the whole point of the design: the observer
+ * writes six words, the recorder holds the physics, and the analysis tool
+ * CORRELATES them. An `WALL` at 02:14 means something specific when the
+ * machine log shows no measurement had ever been taken and a prompt was on
+ * screen — and something quite different when the player had just re-measured
+ * successfully. Neither record answers that alone.
+ *
+ * The classes are validated here rather than trusted, because a typo in a
+ * paper sheet silently becomes a missing data point in the verdict.
+ */
+export const OBSERVER_CODES = Object.freeze({
+  C: 'confused', H: 'hypothesis', A: 'understanding-changed', F: 'frustration',
+  S: 'surprise', R: 'retries-voluntarily', HELP: 'requested-help',
+  WALL: 'cannot-progress', P: 'part-shipped', MORE: 'wants-another',
+  REALISM: 'professional-objection',
+});
+
+/** One observer annotation: `code` plus 3-8 words of what was seen.
+ *  `at_wall_ms` is optional — if the observer wrote a stopwatch time, pass it;
+ *  the analyser matches it to the nearest machine event to build the pairing. */
+export function observerEvent(code, words, { at_wall_ms, at_clock_min, machinist } = {}) {
+  const key = String(code || '').trim().toUpperCase();
+  if (!OBSERVER_CODES[key]) {
+    /* Loud, because a silently dropped code is a silently lost data point. */
+    throw new Error('unknown observer code "' + code + '"; expected one of ' + Object.keys(OBSERVER_CODES).join(' '));
+  }
+  emit('observer', {
+    code: key, meaning: OBSERVER_CODES[key],
+    words: words ? String(words).replace(/\s+/g, ' ').trim().slice(0, 120) : null,
+    at_wall_ms: at_wall_ms ?? Math.round(wallMs()),
+    at_clock_min: at_clock_min ?? null,
+    machinist: !!machinist,
+  });
+}
+
+/** A verbatim quote the observer wrote down immediately (field manual §4).
+ *  Three categories, and the category matters to the verdict:
+ *    'understanding' — unexpected understanding
+ *    'misconception' — unexpected misconception (often the most valuable line)
+ *    'desire'        — intrinsic desire, e.g. "Can I try another one?"
+ *  `when` is free text: "after first cut", "at once-ship", etc. */
+export function quote(category, text, when) {
+  emit('quote', {
+    category: String(category || 'unknown').slice(0, 40),
+    text: String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500),
+    when: when ? String(when).slice(0, 80) : null,
+  });
+}
+
+/** The graded help ladder (field manual §2). `rung` is 1, 2 or 3.
+ *  Once the observer reaches rung 3 and then supplies information the game was
+ *  responsible for communicating, the run is no longer unassisted — this row is
+ *  the machine's record of that moment, and the analyser refuses to report such
+ *  a run as a clean pass. */
+export function helpAsked(rung, { gaveInformation, words, clock_min } = {}) {
+  emit('help', {
+    rung: Number(rung),
+    gave_information: !!gaveInformation,
+    /* True once the run has stopped being a clean test of the game. */
+    run_no_longer_unassisted: !!gaveInformation,
+    words: words ? String(words).replace(/\s+/g, ' ').trim().slice(0, 160) : null,
+    clock_min: clock_min ?? null,
+  });
+}
+
+/** A deadlock judgement (field manual §3): 45 s of genuine deadlock by default.
+ *  `kind` distinguishes the two silences the manual insists on separating —
+ *  productive ("thinking", a hypothesis was articulate) from unproductive
+ *  ("dead", no new hypothesis, looking at the observer for rescue). */
+export function silence({ kind, seconds, hypothesis, clock_min } = {}) {
+  emit('silence', {
+    kind: String(kind || 'unknown').slice(0, 20),
+    seconds: seconds == null ? null : Number(seconds),
+    hypothesis: hypothesis ? String(hypothesis).replace(/\s+/g, ' ').trim().slice(0, 300) : null,
+    clock_min: clock_min ?? null,
+  });
+}
 
 /** Final row before the tab closes. */
 export function sessionEnd({ reason, clock_min, money, history_len, measurements, finished }) {
@@ -296,5 +417,6 @@ export const stats = () => ({ seq, pending: pending.length, failedFlushes, recor
 export default {
   isRecording, REC_LABEL, wallMs, sessionStart, action, refusal,
   measurement, cut, cutRefused, shipEvent, hint, choice, hintUsed,
-  sample, secondPart, note, sessionEnd, flushNow, stats,
+  sample, secondPart, postShip, note, sessionEnd, flushNow, stats,
+  OBSERVER_CODES, observerEvent, quote, helpAsked, silence,
 };

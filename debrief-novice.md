@@ -9,6 +9,36 @@ down verbatim before you think about what it means.
 
 ---
 
+## Before you write anything: was this an UNASSISTED run?
+
+The pass standard counts **unassisted** progression. If you gave the player
+information the game was responsible for communicating, the clean novice gate
+**ended** at that moment — and a completed run after help is **not** a pass,
+however well it finished.
+
+    Information given?                          YES  /  NO
+    If YES, timestamp of the BLOCKED call:      ________
+    Hint given (smallest factual one only):     __________________________
+
+    Escalation used (tick all that happened):
+      1st  "Tell me what you think you're supposed to do."   ☐
+      2nd  "What have you tried?"                            ☐
+      3rd  "Show me the thing that's confusing you."         ☐
+      BLOCKED, then help given                               ☐
+
+From the report — `field_manual.field_verdict`:
+
+> ______________________________________________________________________
+
+**Completion is not the pass standard.** What matters is whether their internal
+model of the machine **changed because reality contradicted their prediction**.
+Record that moment if it happened:
+
+> "What I expected: ______________________  What actually happened: ____________
+>  What I did differently after that: _______________________________________"
+
+---
+
 ## Ask in this order
 
 ### 1. "Tell me what happened."
@@ -103,21 +133,48 @@ Did they ever mute or wish they could?  ______________________________
 
 ---
 
-### 7. "Would you play it again right now?"
+### 7. "What would you do now?"
 
-**→ F6 — this is the round's sharpest single test.** Do not lead them. Do not
-say "I can set up another part if you want". Just ask, and note whether the
-answer is spontaneous enthusiasm or polite interest.
+**→ F6 / MORE — the strongest single signal in the whole run.** Read this
+carefully, because the obvious question is the wrong one.
 
-  - Yes, immediately, unprompted:     ☐   ← **this is the result the round wants**
-  - Yes, but only if asked again:     ☐
-  - No / polite no:                   ☐
+**Do NOT ask "would you play again?" or "do you want another part?".** That is
+leading, and a player can politely say yes. The evidence that counts is
+**behavioural**: what they did in the seconds after shipping, before anyone
+spoke — recorded automatically in the **post-ship window**. Fill this in from
+what actually happened, not from what they now say:
 
-Quote: ______________________________________________________________
+  - Started another part / another job, unprompted:   ☐  ← the result round wants
+  - Stayed at the machine, kept poking at things:     ☐  (`ENGAGED-NOT-CONTINUED`)
+  - Sat still, did nothing at all:                    ☐  (`NO-IDLE`)
+  - Waited for me to say something:                   ☐
+
+What the recorder caught in the 8 s after the ship (from the report):
+
+> ______________________________________________________________________
+
+If they *did* volunteer something before you asked, quote it exactly — a
+spontaneous "can I try another one?" outranks every checkbox above:
+
+> Quote: ______________________________________________________________
 
 ---
 
-### 8. Finally: "What should I fix first?"
+### 8. Intrinsic desire — the third quote category
+
+The manual asks for **verbatim quotes** in three categories. Two of them usually
+turn up earlier in the session (log them the moment you hear them — see §4 of
+`PLAYTEST-KIT.md`). This one often arrives now:
+
+- **Intrinsic desire** — "Can I try another one?"
+
+> ______________________________________________________________________
+
+Do not explain why they are right or wrong. Say: **"Keep going."**
+
+---
+
+### 9. Finally: "What should I fix first?"
 
 Let them pick. Their priority order is more informative than your own.
 
@@ -148,11 +205,33 @@ a menu?** (Smooth, purposeful movement vs hunting for buttons.)
 
 ---
 
-## The three sentences that matter most
+## The three quote categories that matter most
 
-Copy out, verbatim, the three most useful things they said. These go in the
-round summary. Do not paraphrase them.
+Copy out, verbatim, the most useful things they said under each heading. These
+go in the round summary. Do not paraphrase them, and do not tidy up their
+grammar — the exact wording is the finding.
 
-1. "________________________________________________________________"
-2. "________________________________________________________________"
-3. "________________________________________________________________"
+**1. Unexpected understanding** — they articulate the causal relationship.
+   e.g. *"Oh, so measuring it changes what I know, not the part."*
+   Also *"Why did it take THAT much?"* followed by changed behaviour.
+
+> ______________________________________________________________________
+
+**2. Unexpected misconception** — they state a wrong model confidently. These are
+   the most actionable sentences of the whole session.
+   e.g. *"I thought that number was the actual diameter."*
+
+> ______________________________________________________________________
+
+**3. Intrinsic desire** — unprompted wanting.
+   e.g. *"Can I try another one?"*
+
+> ______________________________________________________________________
+
+Enter each one so it correlates with the machine log:
+
+```js
+INDUSTRIA.obsQuote('understanding', '…')
+INDUSTRIA.obsQuote('misconception', '…')
+INDUSTRIA.obsQuote('desire', '…')
+```
