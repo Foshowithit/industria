@@ -775,8 +775,8 @@ export function inspect(g) {
   const lo = g.job.band_low_mm, hi = g.job.band_high_mm;
   const band_um = (hi - lo) * 1000;
   let verdict;
-  if (dia < lo - 1e-9) verdict = 'UNDERSIZE — SCRAP';
-  else if (dia > hi + 1e-9) verdict = 'OVERSIZE — can still be cut';
+  if (dia < lo - 1e-9) verdict = 'UNDERSIZE — can still be cut';
+  else if (dia > hi + 1e-9) verdict = 'OVERSIZE — SCRAP';
   else verdict = 'ACCEPTED';
   return {
     dia, lo, hi, band_um, position_in_band_um: (dia - lo) * 1000,
@@ -822,6 +822,30 @@ export const rackParts = (g) =>
 /** Everything physically in the scrap bin. */
 export const binParts = (g) =>
   g.part_register.filter((p) => p.state === 'BIN');
+
+/**
+ * IS THIS PART ONE THE CUSTOMER CAN STILL WORK WITH?
+ *
+ * This is the ONE definition of "collectable", and it exists because Round 10A
+ * turned `REWORK` from dead code into a real destination. Before the flip the
+ * only racked disposition the van could take was `SEND`, because the only
+ * disposition reachable off the machine was `SEND`. Now an undersize part is
+ * racked as `REWORK` — and a housing with a bore the customer finishes
+ * themselves is not a dead part, it is the job going out incomplete. If the
+ * courier ignored it, the recovered part would sit on the rack forever and the
+ * whole point of the corrected direction would produce no gameplay at all.
+ *
+ * It lives HERE, next to the states it names, rather than as a
+ * `disposition === 'SEND' || disposition === 'REWORK'` test repeated in the
+ * courier, the page's rack line, the bay line and the driver's line. Four
+ * copies of one fact is how this project has already shipped a disagreement
+ * with itself twice.
+ */
+export const collectable = (p) =>
+  !!p && (p.disposition === 'SEND' || p.disposition === 'REWORK');
+
+/** Everything physically on the finished rack that the van can take. */
+export const collectableParts = (g) => rackParts(g).filter(collectable);
 
 /** A part that is neither on the machine, on the rack, nor in the bin. */
 export const goneParts = (g) =>
@@ -878,11 +902,11 @@ export function unmount(g, state, patch = {}) {
 export function classifyOffMachine(v) {
   if (v.inSpec) return { outcome: 'ACCEPTED', state: 'RACK', disposition: 'SEND' };
   if (v.under_um > 0) {
-    return { outcome: 'SCRAP', state: 'BIN', disposition: 'SCRAP',
-             why: `${v.under_um.toFixed(1)} µm under the low limit — the bore cannot be made larger` };
+    return { outcome: 'RECOVERABLE', state: 'RACK', disposition: 'REWORK',
+             why: `${v.under_um.toFixed(1)} µm under the low limit — there is still material to remove` };
   }
-  return { outcome: 'RECOVERABLE', state: 'RACK', disposition: 'REWORK',
-           why: `${v.over_um.toFixed(1)} µm over the high limit — the customer reworks it` };
+  return { outcome: 'SCRAP', state: 'BIN', disposition: 'SCRAP',
+           why: `${v.over_um.toFixed(1)} µm over the high limit — the bore cannot be made smaller` };
 }
 
 /**
@@ -911,14 +935,19 @@ export function ship(g, { silent = false } = {}) {
       ? `Accepted at ${hhmm(g.clock_min)} — past the courier's booked slot. Paid at ` +
         `${(g.job.late_credit * 100).toFixed(0)}%.`
       : 'Accepted, in spec, on time. Invoice goes out.';
-  } else if (cls.outcome === 'SCRAP') {
-    fee = g.job.rate * 1.15;
-    note = `Scrapped — ${v.under_um.toFixed(1)} µm under. The bore cannot be made ` +
-           `larger. You are out the casting and the morning.`;
-  } else {
+  } else if (cls.outcome === 'RECOVERABLE') {
+    /* THE UNDERSIZE CASE, and it is the recoverable one. The bore is still
+       small, so there is metal left to take out — off the machine, by the
+       customer, on their own setup, which is what the fee is. */
     fee = g.job.rate * 0.35;
-    note = `Shipped ${v.over_um.toFixed(1)} µm oversize. The customer reworks it and ` +
+    note = `Shipped ${v.under_um.toFixed(1)} µm under. The customer reworks it and ` +
            `charges you for the privilege.`;
+  } else {
+    /* THE OVERSIZE CASE, and it is the dead one. Cutting only makes a bore
+       larger, so metal this far out is metal nobody can put back. */
+    fee = g.job.rate * 1.15;
+    note = `Scrapped — ${v.over_um.toFixed(1)} µm over. The bore cannot be made ` +
+           `smaller. You are out the casting and the morning.`;
   }
 
   /* ── THE PART MOVES. This is the mutation the round is about. ─────────── */
@@ -1011,15 +1040,23 @@ export function mountBlank(g, { reason = 'RECOVERY', silent = false } = {}) {
  *
  *   SCRAP      a casting and a walk. The re-cut casting goes back on the SAME
  *              setup — insert, jaws, datum, all of it — because a scrap part
- *              was never finished out of the jaws. It is the CHEAP recovery.
- *   REWORK     the part has had a finish cut and the machine has been re-set
- *              since: a new casting has to be clamped on fresh parallels and
- *              touched off again, which is twelve minutes of setup plus
- *              eighteen pounds. It is the EXPENSIVE recovery.
+ *              is an OVERSIZE part: cutting only makes a bore larger, so a
+ *              bore past the top of the band was caught with the bar still in
+ *              the cut, on the setup that made it. It is the CHEAP recovery.
+ *              £42 / 1.5 min.
+ *   REWORK     an UNDERSIZE part, taken off the machine with metal still to
+ *              come out. The customer finishes the bore on their own setup —
+ *              and getting back to a shippable part here means a fresh
+ *              casting clamped on new parallels and touched off again, which
+ *              is twelve minutes of setup plus eighteen pounds on top of the
+ *              blank. It is the EXPENSIVE recovery. £60 / 13.5 min.
  *
  * That ordering is the opposite of what a punishment variable would produce
- * (the worse verdict costing less), and it is what the process does. It is
- * also the reason this game would rather you be 8 µm over than 2 µm under.
+ * (the worse verdict costing less), and it is what the process does. And after
+ * Round 10A the two directions agree instead of contradicting each other: the
+ * recoverable mistake is being UNDER, and the expensive recovery belongs to
+ * the recoverable one. Stopping too early costs you £60 and a re-setup;
+ * cutting past the top of the band costs you the casting.
  */
 export function chargeRecovery(g, reason) {
   const scrap = reason !== 'REWORK';
@@ -1054,7 +1091,19 @@ export function courierDepart(g) {
     return { ok: false, why: 'NOT_YET', at: departsMin(g.job), clock_min: g.clock_min };
   }
   const rack = rackParts(g);
-  const load = rack.find((p) => p.disposition === 'SEND') || null;
+  /* ROUND 10A (i): the load rule was `disposition === 'SEND'`. After the
+     direction flip an undersize part is racked `REWORK` — customer-finishes —
+     and a `SEND`-only rule would leave it uncollected AND blocking a slot.
+     `collectable()` is the single definition; see it above. */
+  const load = rack.find((p) => p.disposition === 'SEND')
+            || rack.find(collectable)
+            || null;
+
+  /* WHAT KIND OF PART IS GOING OUT. This has to be read BEFORE the mutation
+     below, because `load.disposition` is overwritten with 'SHIPPED' and that
+     write destroys the very fact the departure line needs. Reading it after
+     the write is how the rework sentence silently reverted to the in-spec one. */
+  const collectedRework = !!load && load.disposition === 'REWORK';
 
   if (load) {
     load.state = 'GONE';
@@ -1068,13 +1117,24 @@ export function courierDepart(g) {
   g.courier.left = true;
   g.courier.departed_at = g.clock_min;
 
+  /* The departure line has to read truthfully for BOTH kinds of collectable
+     part. A `SEND` part is a finished housing; a `REWORK` part is a housing
+     Halvorsen still has to finish the bore on. Round 10A (i) made the second
+     one collectable, so the sentence can no longer assume the first. */
   const line = load
     ? `Collected ${load.id} — ${load.verdict} at Ø${load.position_in_band_um === null ? '?' :
         (g.job.band_low_mm + load.position_in_band_um / 1000).toFixed(4)} mm. ` +
-      `${g.job.client}'s pump line can be built.`
+      (collectedRework
+        ? `${g.job.client} takes it and finishes the bore themselves — ` +
+          `they have the housing, not a finished one.`
+        : `${g.job.client}'s pump line can be built.`)
     : `Left with nothing. ${g.job.client} gets no housing and the pump line stays down.`;
   log(g, 'courier', line);
   return { ok: true, left: true, at: g.courier.departed_at, loaded: load,
+           /* The page needs to know WHICH kind of part went out, because the
+              two are not the same sentence to the customer and the difference
+              has to survive on the record after the rack is empty. */
+           loaded_disposition: load ? load.disposition : null,
            dependency: g.courier.dependency,
            still_on_rack: rack.filter((p) => p.state === 'RACK').map((p) => p.id),
            line };

@@ -958,13 +958,13 @@ add(RACK, 'Finished-part rack — by the roll-up door', 'check it', () => {
     ? 'Empty. Four slots, nothing on them.'
     : rack.map((p) => `${p.id} — ${p.disposition === 'SEND'
         ? 'in spec, traveller signed, waiting for the van'
-        : 'over the top of the band, flagged for the customer to rework'}`).join('<br>'));
+        : 'under the bottom of the band, flagged to finish at the customer'}`).join('<br>'));
   logLine(`Rack: <b>${rack.length}</b>/${GAME.rack_slots} slots — ` +
     (rack.length ? rack.map((p) => `${p.id} (${p.disposition})`).join(', ')
                  : 'empty') + '.');
   logLine(`Van books ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}. ` +
     (GAME.courier.left
-      ? (send.length || GONE_SENT ? 'It has been and gone — with the part.'
+      ? (send.length || rework.length || GONE_SENT ? 'It has been and gone — with the part.'
                                   : 'It has been and gone — <b>with nothing</b>.')
       : `${W.hhmm(G.departsMin(GAME.job))} is when it stops mattering what you are about to do.`));
 }, () => true);
@@ -1001,7 +1001,7 @@ add(APRON, 'Loading bay — one drop on the ticket', 'read the board', () => {
     `Window ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}. ` +
     `The driver does not wait.`);
   logLine(GAME.courier.left
-    ? (rack.some((p) => p.disposition === 'SEND') || GONE_SENT
+    ? (G.collectableParts(GAME).length || GONE_SENT
         ? `Bay: collected at ${W.hhmm(GAME.courier.departed_at)}. A part went out.`
         : `Bay: left at ${W.hhmm(GAME.courier.departed_at)} with nothing on the rack.`)
     : `Bay: booked ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}. ` +
@@ -1659,7 +1659,7 @@ function doInspect() {
       `Part <b>${r.part_id}</b> is on the rack, slot ${G.rackParts(GAME).length} of ${GAME.rack_slots}.`);
     phase = 'RACKED';
   } else if (r.outcome === 'SCRAP') {
-    say('Earl', "\u201cIt's under. There's no putting metal back in a hole.\u201d");
+    say('Earl', "\u201cIt's over. There's no putting metal back in a hole.\u201d");
     toast(`<b>${v.verdict}</b> — band ${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}.` +
       `<br>` + revealLine(), 10000);
     logLine(`<b>${v.verdict}</b> — ${r.note} ` +
@@ -1672,7 +1672,7 @@ function doInspect() {
        are at the machine or across the shop. */
     scheduleAchebe();
   } else {
-    say('Earl', "\u201cIt's over. You can still take more out — it's not scrap yet.\u201d");
+    say('Earl', "\u201cIt's under. Get it on the rack — they can take the rest out at their end.\u201d");
     toast(`<b>${v.verdict}</b> — band ${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}.` +
       `<br>` + revealLine(), 10000);
     logLine(`<b>${v.verdict}</b> — ${r.note} Part <b>${r.part_id}</b> is on the rack, ` +
@@ -1686,9 +1686,11 @@ function doInspect() {
      seconds after shipping the strongest signal in the round, and a modal
      asking for a file would kill it. This sits in the corner and waits. */
   if (REC) offerSessionDownload();
-  /* Was the part OVER? Then it is still live work and a fresh casting can be
-     cut — but that is a DIFFERENT casting, so it must not be recorded as the
-     same part twice. */
+  /* Was the part OFF THE MACHINE alive — undersize, recoverable? Then it is
+     still live work and a fresh casting can be cut — but that is a DIFFERENT
+     casting, so it must not be recorded as the same part twice. (Round 10A:
+     RECOVERABLE is now the UNDERSIZE case. An OVERSIZE part is SCRAP and the
+     casting is gone, so there is nothing to keep alive.) */
   if (REC) partStillLive = (r.outcome === 'RECOVERABLE');
 }
 /* ── THE SECOND PART — the one question the whole round exists to answer ──── */
@@ -1713,11 +1715,15 @@ function doFetchBlank() {
     return;
   }
   /* WHAT THE RECOVERY COSTS DEPENDS ON WHAT WENT WRONG, and `mountBlank`
-     decides that from the register rather than from the page. A scrap part was
-     never finished out of the jaws, so its replacement goes back on the SAME
-     setup: cheap. A part that has had a finish cut costs a re-clamp and a
-     re-datum. See `chargeRecovery()` in game.mjs — that asymmetry is the
-     reason this game would rather you were over than under. */
+     decides that from the register rather than from the page. A scrap part is
+     an OVERSIZE part — caught with the bar still in the cut — so its
+     replacement goes back on the SAME setup: cheap. The expensive one is the
+     UNDERSIZE part: it came off the jaws with metal still to remove and left
+     the setup behind it, so going again costs a re-clamp and a re-datum. See
+     `chargeRecovery()` in game.mjs — that asymmetry is the reason this game
+     would rather you stopped short than cut past the band: the recoverable
+     mistake is being UNDER, because there is metal left to remove, and the
+     expensive recovery belongs to the recoverable one. */
   /* Read the REGISTER, not the summary object. The register is where a part's
      disposition actually lives (it is what `rackParts()` and the rack mesh are
      derived from), and `finished` is a settlement record that carries money and
@@ -1807,7 +1813,7 @@ function courierBeat(now_min, dt_real_s) {
     if (now_min >= leave - 6) {
       courierPhase = 'LOADING';
       logLine('The driver is at the rack with a clipboard, counting slots.');
-      say('Hallam driver', G.rackParts(GAME).some((p) => p.disposition === 'SEND')
+      say('Hallam driver', G.collectableParts(GAME).length
         ? P.OTHERS.hallam.lines[0] : P.OTHERS.hallam.lines[1]);
     }
   }
@@ -1819,11 +1825,30 @@ function courierBeat(now_min, dt_real_s) {
       GONE_SENT = !!d.loaded;
       syncFloor();
       if (d.loaded) {
-        say('Earl', P.EARL_LINES.courier_satisfied[0] + ' ' + P.EARL_LINES.courier_satisfied[1]);
-        logLine(`<b>${W.hhmm(d.at)}</b> — van gone with <b>${d.loaded.id}</b> on it. ` +
-          `Halvorsen's pump line can be built.`);
-        toast(`<b>Collected ${d.loaded.id}.</b> Halvorsen has their housing.<br>` +
-          `One drop, one part, off your floor.`, 9000);
+        /* ── TWO KINDS OF "IT WENT OUT", AND THEY ARE NOT THE SAME NEWS ─────
+           Added in Round 10A. `d.loaded` used to be an in-spec part every
+           time, because `SEND` was the only disposition the courier could
+           see. Now a `REWORK` part — undersize, customer finishes the bore —
+           is collectable too, and telling the player "Halvorsen has their
+           housing" over a part Halvorsen still has to cut would be the game
+           claiming something the evidence does not support. The dependency
+           IS satisfied in both cases: a housing that arrives needing one
+           finishing pass is not a housing that failed to arrive. */
+        const rework = d.loaded.disposition === 'REWORK';
+        if (rework) {
+          say('Earl', P.EARL_LINES.courier_satisfied[0] + ' ' + P.EARL_LINES.courier_satisfied[1]);
+          logLine(`<b>${W.hhmm(d.at)}</b> — van gone with <b>${d.loaded.id}</b> on it. ` +
+            `Off the bottom of the band — Halvorsen finishes the bore themselves.`);
+          toast(`<b>Collected ${d.loaded.id}.</b> Halvorsen has the housing, ` +
+            `and a note saying why they have to finish it.<br>` +
+            `One drop, one part, off your floor.`, 9000);
+        } else {
+          say('Earl', P.EARL_LINES.courier_satisfied[0] + ' ' + P.EARL_LINES.courier_satisfied[1]);
+          logLine(`<b>${W.hhmm(d.at)}</b> — van gone with <b>${d.loaded.id}</b> on it. ` +
+            `Halvorsen's pump line can be built.`);
+          toast(`<b>Collected ${d.loaded.id}.</b> Halvorsen has their housing.<br>` +
+            `One drop, one part, off your floor.`, 9000);
+        }
       } else {
         say('Earl', P.EARL_LINES.courier_missed[0] + ' ' + P.EARL_LINES.courier_missed[1]);
         logLine(`<b>${W.hhmm(d.at)}</b> — van gone with <b>nothing</b>. ` +
@@ -1863,7 +1888,11 @@ function syncFloor() {
   rackObjects.forEach((o, i) => {
     const r = rack[i];
     o.visible = !!r;
-    if (r) o.children[0].material = r.disposition === 'SEND' ? M_PART_GOOD : M_PART_DEAD;
+    /* A REWORK part is NOT dead — it is a good housing with a bore the
+       customer finishes. Only a real SCRAP part goes dark on the rack. After
+       Round 10A the two racked dispositions are SEND and REWORK, so keying the
+       material off `=== 'SEND'` would paint every recoverable part as scrap. */
+    if (r) o.children[0].material = r.disposition === 'SCRAP' ? M_PART_DEAD : M_PART_GOOD;
   });
   /* (4) the bin */
   const bin = G.binParts(GAME);

@@ -508,12 +508,18 @@ export const CHARGES = {
      computes a CONSEQUENCE, and it is deliberately a CONSEQUENCE and not a
      punishment: a new blank cannot be re-datumed on the original face once a
      finish cut has skimmed it, so the second setup costs money as well as
-     time. It is applied to the part classes that HAVE had a finish cut
-     (accepted, oversize, undersize) and never to a scrap part, which was
-     never finished — a scrap part is caught on the same setup it was cut on
-     and costs one blank and a walk. Scrap parts are therefore the CHEAP
-     recovery, which is the opposite of what a punishment variable would do
-     and is what the process actually does. */
+     time. It is applied to the parts that HAVE had a finish cut and have left
+     the jaws — an accepted part, and the undersize part the customer reworks —
+     and never to a scrap part.
+
+     WHICH PART IS WHICH, after Round 10A's direction correction: cutting a
+     bore only ever makes it LARGER, so an OVERSIZE bore is the dead one (the
+     material cannot be put back) and an UNDERSIZE bore is the recoverable one
+     (there is metal still to come out). A scrap part therefore never left the
+     cut that killed it — it is caught on its own setup, costs one blank and a
+     walk, and needs no re-datum at all. Scrap parts are the CHEAP recovery,
+     which is the opposite of what a punishment variable would do and is what
+     the process actually does. */
   remount_cost: 18,
 };
 
