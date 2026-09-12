@@ -371,7 +371,7 @@ export function newGame(job = JOBS[0], thermal = THERMAL, money = 0) {
     fixture: { parallels_in: false },
     courier: {
       arrived: false, left: false, departed_at: null,
-      loaded: 0, dependency: 'OUTSTANDING',   // OUTSTANDING | SATISFIED | UNSATISFIED
+      loaded: 0, dependency: 'OUTSTANDING',   // OUTSTANDING | SATISFIED | UNFULFILLED
       events: [],                              // { at, kind, text } once each
     },
     /* Mr. Achebe's bench. A dead part becomes his morning, 20 minutes in. */
@@ -824,28 +824,56 @@ export const binParts = (g) =>
   g.part_register.filter((p) => p.state === 'BIN');
 
 /**
- * IS THIS PART ONE THE CUSTOMER CAN STILL WORK WITH?
+ * IS THIS PART ONE THE VAN WILL TAKE?
  *
- * This is the ONE definition of "collectable", and it exists because Round 10A
- * turned `REWORK` from dead code into a real destination. Before the flip the
- * only racked disposition the van could take was `SEND`, because the only
- * disposition reachable off the machine was `SEND`. Now an undersize part is
- * racked as `REWORK` — and a housing with a bore the customer finishes
- * themselves is not a dead part, it is the job going out incomplete. If the
- * courier ignored it, the recovered part would sit on the rack forever and the
- * whole point of the corrected direction would produce no gameplay at all.
+ * This is the ONE definition of "the courier can collect it". Round 10A turned
+ * `REWORK` from dead code into a real destination: an undersize housing with a
+ * bore the customer finishes themselves is not a dead part, it is a job going
+ * out incomplete, and leaving it on the rack helps nobody — it also blocks one
+ * of four slots forever.
+ *
+ * Note carefully what this is NOT. "The van will take it" and "delivering it
+ * fulfils Halvorsen's requirement" are two different questions, and Round 10A
+ * addendum 1 explicitly forbids one helper answering both. See
+ * `doesDeliverySatisfyDependency()` directly below.
  *
  * It lives HERE, next to the states it names, rather than as a
  * `disposition === 'SEND' || disposition === 'REWORK'` test repeated in the
- * courier, the page's rack line, the bay line and the driver's line. Four
- * copies of one fact is how this project has already shipped a disagreement
- * with itself twice.
+ * courier and at three page gates. Four copies of one fact is how this project
+ * has already shipped a disagreement with itself twice.
  */
 export const collectable = (p) =>
   !!p && (p.disposition === 'SEND' || p.disposition === 'REWORK');
 
 /** Everything physically on the finished rack that the van can take. */
 export const collectableParts = (g) => rackParts(g).filter(collectable);
+
+/**
+ * DOES DELIVERING THIS PART FULFIL HALVORSEN'S REQUIREMENT?
+ *
+ * THIS IS A DIFFERENT QUESTION FROM `collectable()` ABOVE, and it must never
+ * share an implementation with it. Logistics completion is not production
+ * acceptance; conflating them is the exact masquerade this project keeps
+ * having to undo.
+ *
+ * The answer comes from the world's own written contract, not from a decision
+ * made here. `world.mjs` `depart()` and this file's courier header both define
+ * the state as it stands: *"Halvorsen's pump line is down and it stays down
+ * until a HOUSING THAT FITS goes out of that door."* A `REWORK` part is
+ * undersize by construction — that is precisely why it is recoverable — so it
+ * does not fit, and it cannot satisfy the dependency. The customer receives a
+ * nonconforming-but-recoverable housing and still has to cut it.
+ *
+ * The test is deliberately on the VERDICT and not on the disposition, because
+ * `courierDepart` relabels the part `SHIPPED` on its way out and the
+ * disposition therefore cannot distinguish the two cases after collection.
+ */
+export function doesDeliverySatisfyDependency(part) {
+  if (!part) return false;
+  /* A part that is still on the rack has not been delivered yet. */
+  const delivered = part.disposition === 'SHIPPED' || part.disposition === 'SEND';
+  return delivered && part.verdict === 'ACCEPTED';
+}
 
 /** A part that is neither on the machine, on the rack, nor in the bin. */
 export const goneParts = (g) =>
@@ -1099,20 +1127,39 @@ export function courierDepart(g) {
             || rack.find(collectable)
             || null;
 
-  /* WHAT KIND OF PART IS GOING OUT. This has to be read BEFORE the mutation
-     below, because `load.disposition` is overwritten with 'SHIPPED' and that
-     write destroys the very fact the departure line needs. Reading it after
-     the write is how the rework sentence silently reverted to the in-spec one. */
-  const collectedRework = !!load && load.disposition === 'REWORK';
+  /* ── WHAT THE DRIVER SEES, READ BEFORE ANYTHING MOVES ─────────────────────
+     `load.disposition` is overwritten with 'SHIPPED' a few lines below, and
+     that write DESTROYS the distinction between "a conforming housing went
+     out" and "a housing went out that the customer still has to finish".
+     Every fact below that depends on the difference must be captured here,
+     before the mutation — including `collected_disposition` on the return
+     value, which is what the page's narration reads. Reconstructing this from
+     `d.loaded` afterwards is impossible, and doing it anyway is how Round 10A
+     added a dead branch (`d.loaded.disposition === 'REWORK'`, never true)
+     while deleting another. */
+  const collectedDisposition = load ? load.disposition : null;
+  const collectedRework = collectedDisposition === 'REWORK';
 
   if (load) {
     load.state = 'GONE';
     load.disposition = 'SHIPPED';
     load.collected_at = g.clock_min;
     g.courier.loaded += 1;
-    g.courier.dependency = 'SATISFIED';
+    /* ── THE DEPENDENCY IS THREE-STATE, AND THIS IS THE WHOLE POINT ─────────
+       "Did the van take something?" and "can Halvorsen build?" are different
+       questions and they get different answers. A REWORK part is undersize by
+       construction: it does not fit, the customer still has to cut it, and
+       the pump line is still down. Marking that SATISFIED would be logistics
+       completion masquerading as production acceptance.
+
+         OUTSTANDING   not collected yet
+         SATISFIED     an in-spec housing went out; the line can be built
+         UNFULFILLED   the van left empty, or carrying a housing that still
+                       needs the customer's own finish pass                     */
+    g.courier.dependency =
+      doesDeliverySatisfyDependency(load) ? 'SATISFIED' : 'UNFULFILLED';
   } else {
-    g.courier.dependency = 'UNSATISFIED';
+    g.courier.dependency = 'UNFULFILLED';
   }
   g.courier.left = true;
   g.courier.departed_at = g.clock_min;
@@ -1120,21 +1167,24 @@ export function courierDepart(g) {
   /* The departure line has to read truthfully for BOTH kinds of collectable
      part. A `SEND` part is a finished housing; a `REWORK` part is a housing
      Halvorsen still has to finish the bore on. Round 10A (i) made the second
-     one collectable, so the sentence can no longer assume the first. */
+     one collectable, so the sentence can no longer assume the first. Note the
+     dependency wording is now conditional too: a rework delivery does NOT
+     restore the pump line, so the old line would have been a second lie. */
   const line = load
     ? `Collected ${load.id} — ${load.verdict} at Ø${load.position_in_band_um === null ? '?' :
         (g.job.band_low_mm + load.position_in_band_um / 1000).toFixed(4)} mm. ` +
       (collectedRework
         ? `${g.job.client} takes it and finishes the bore themselves — ` +
-          `they have the housing, not a finished one.`
+          `they have the housing, not a finished one, so the pump line is still down.`
         : `${g.job.client}'s pump line can be built.`)
     : `Left with nothing. ${g.job.client} gets no housing and the pump line stays down.`;
   log(g, 'courier', line);
   return { ok: true, left: true, at: g.courier.departed_at, loaded: load,
-           /* The page needs to know WHICH kind of part went out, because the
-              two are not the same sentence to the customer and the difference
-              has to survive on the record after the rack is empty. */
-           loaded_disposition: load ? load.disposition : null,
+           /* THE PRE-COLLECTION DISPOSITION. `loaded.disposition` is `SHIPPED`
+              by the time anyone can read it, so the page cannot recover which
+              kind of part went out from `loaded`. This field is the fact the
+              driver actually saw, and it is what the narration must branch on. */
+           collected_disposition: collectedDisposition,
            dependency: g.courier.dependency,
            still_on_rack: rack.filter((p) => p.state === 'RACK').map((p) => p.id),
            line };

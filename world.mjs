@@ -625,9 +625,28 @@ export function depart({ job, clock_min, finished = [], courier = COURIER, load 
     left_behind: finished.filter((p) => !sent || p.id !== sent.id)
       .map((p) => ({ id: p.id, disposition: p.disposition, verdict: p.verdict })),
     /* THE DEPENDENCY. Halvorsen's pump line is down and it stays down until a
-       housing that fits goes out of that door. Nothing in this return value
-       is a score: it is the state of somebody else's factory. */
-    dependency: sent ? 'SATISFIED' : 'UNSATISFIED',
+       housing THAT FITS goes out of that door. Nothing in this return value
+       is a score: it is the state of somebody else's factory.
+
+       ROUND 10A: this is a THREE-state fact, and the third state exists
+       because "the van took something" is not the same as "Halvorsen can
+       build". A REWORK part is undersize by construction — it does not fit —
+       so a van leaving with one leaves the pump line down:
+
+         OUTSTANDING   not collected yet
+         SATISFIED     an in-spec housing went out; the line can be built
+         UNFULFILLED   the van left empty, or carrying a housing that still
+                       needs the customer's own finish pass
+
+       NOTE: this function (`world.depart`) has NO CALLERS anywhere in the
+       build — the live path is `game.mjs courierDepart()`. Its predicate keys
+       on `disposition === 'SEND'`, which is only correct while it stays
+       unreachable, because after collection the live path relabels the part
+       `SHIPPED` and cannot use the disposition to tell the two cases apart.
+       It is left syntactically intact rather than silently "fixed" against
+       the flip; the live implementation is `doesDeliverySatisfyDependency()`
+       in game.mjs. */
+    dependency: sent ? 'SATISFIED' : 'UNFULFILLED',
     note: sent
       ? `${job.client} gets one housing — ${sent.id}. The pump line can be built on Monday.`
       : `${job.client} gets nothing. No housing, no pump, and the line stays down.`,

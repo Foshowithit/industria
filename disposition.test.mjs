@@ -34,6 +34,17 @@
  */
 
 import * as G from './game.mjs';
+import { readFileSync } from 'node:fs';
+
+/* The page source, read as TEXT. The courier narration lives in index.html,
+   which is a page and cannot be imported as a module — but the branch that
+   decides the narration is exactly the branch that shipped dead in the first
+   draft of this round, so it has to be checked somewhere. Reading the source
+   is the only way to assert it from a test that drives the game. */
+let PAGE_SRC = null;
+try {
+  PAGE_SRC = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+} catch { PAGE_SRC = null; }
 
 const RATE = 1850;                       // J1's rate, from JOBS[0] in game.mjs
 const REWORK_FEE_EXPECTED = RATE * 0.35; // 647.5
@@ -174,21 +185,147 @@ function caseRework() {
   ok('4 collectable() sees the REWORK part as collectable',
      G.collectableParts(r2).length === 1,
      JSON.stringify(G.collectableParts(r2).map((p) => p.id + '/' + p.disposition)));
+
+  /* ── 4a. THE TWO QUESTIONS MUST HAVE TWO ANSWERS ─────────────────────────
+     "Will the van take it?" and "does delivering it fulfil Halvorsen's
+     requirement?" are different questions. Round 10A addendum 1 forbids one
+     helper answering both. Asserted as a PROPERTY OF THE FUNCTIONS, not just
+     of this one run: the REWORK part is collectable AND the delivery does not
+     satisfy. */
+  const rackedRework = G.collectableParts(r2)[0];
+  ok('4a collectable(REWORK part) is TRUE', G.collectable(rackedRework) === true,
+     JSON.stringify(rackedRework && rackedRework.disposition));
+  ok('4a doesDeliverySatisfyDependency(REWORK part) is FALSE',
+     G.doesDeliverySatisfyDependency(rackedRework) === false,
+     'undersize by construction — it does not fit, so the pump line stays down');
+  ok('4a the two helpers DISAGREE on the same part (they are different facts)',
+     G.collectable(rackedRework) !== G.doesDeliverySatisfyDependency(rackedRework),
+     'collectable=true, satisfies=false');
+  ok('4a they are not the same function object',
+     G.collectable !== G.doesDeliverySatisfyDependency, 'distinct exports, distinct bodies');
+
   /* Drive the clock to the van's departure with a legal verb, then let it go. */
   const toGo = G.departsMin(r2.job) - r2.clock_min;
   if (toGo > 0) G.warmUp(r2, toGo);
   const d = G.courierDepart(r2);
   ok('4 courierDepart() collects the REWORK part', d.ok === true && !!d.loaded,
      `ok=${d.ok} loaded=${d.loaded ? d.loaded.id + '/' + d.loaded.disposition : null}`);
-  eq('4 dependency is SATISFIED', d.dependency, 'SATISFIED');
+
+  /* ── 4b. THE DEPENDENCY IS *NOT* SATISFIED. This line used to assert
+     SATISFIED and was WRONG on the contract's own written terms. The contract
+     ("a housing THAT FITS") is what decides this, not convenience. ────────── */
+  eq('4b dependency is UNFULFILLED — an undersize housing does not fit',
+     d.dependency, 'UNFULFILLED',
+     'the van left with something, and the pump line is STILL down');
+  ok('4b dependency is NOT satisfied', d.dependency !== 'SATISFIED',
+     JSON.stringify(d.dependency));
+
+  /* ── 4c. THE PRE-COLLECTION FACT SURVIVES THE MUTATION ───────────────────
+     `loaded.disposition` is relabelled 'SHIPPED' before the return, so the
+     page CANNOT recover which kind of part went out from `loaded`. This is
+     why `collected_disposition` exists, and it is asserted here directly. */
+  eq('4c loaded.disposition is relabelled SHIPPED (the trap)',
+     d.loaded ? d.loaded.disposition : null, 'SHIPPED',
+     'proof the object itself no longer carries the fact');
+  eq('4c collected_disposition preserves the pre-collection fact',
+     d.collected_disposition, 'REWORK',
+     'read BEFORE the mutation; this is what the page must branch on');
+  ok('4c the two disagree, so branching on loaded.disposition would be WRONG',
+     d.collected_disposition !== d.loaded.disposition,
+     `collected_disposition=${d.collected_disposition} vs loaded.disposition=${d.loaded.disposition}`);
+
+  /* ── 4d. THE NARRATION TAKES THE REWORK PATH — asserted on the PRODUCED
+     STRING, and specifically chosen so it FAILS on the shipped-before-fix
+     code. There are TWO producers of rework narration and BOTH were checked
+     against commit 0f05bf5 to make sure this test is not vacuous:
+
+       (a) game.mjs's `d.line` — the log line. This one already branched on a
+           pre-mutation read in 0f05bf5, so these two assertions alone would
+           pass on the old code and are NOT sufficient evidence.
+       (b) index.html's toast/say narration, which computed its own
+           `const rework = d.loaded.disposition === 'REWORK'` — ALWAYS FALSE.
+           That branch is genuinely dead in 0f05bf5 and is caught by 4e below,
+           not by these.
+
+     Asserting only (a) would have been the defect the addendum warned about:
+     a test that passes while the branch it is meant to prove is dead. ────── */
+  ok('4d the departure line does NOT claim the pump line can be built',
+     !/pump line can be built/.test(String(d.line || '')),
+     JSON.stringify(d.line));
+  ok('4d the departure line says the customer finishes the bore themselves',
+     /finishes the bore themselves/.test(String(d.line || '')),
+     JSON.stringify(d.line));
+  ok('4d the departure line says the pump line is STILL DOWN',
+     /pump line is still down/.test(String(d.line || '')),
+     JSON.stringify(d.line));
+
+  /* ── 4e. THE PAGE BRANCH ITSELF — the one that shipped DEAD. The narration
+     lives in index.html, which this file cannot import (it is a page, not a
+     module). So the branch is asserted structurally against the page source:
+     the dead predicate must be GONE and the live one must be PRESENT.
+
+     NOTE the comment-stripping. The first version of this assertion matched
+     the PROSE explaining the dead predicate rather than the predicate, and
+     "failed" on correct code. A source-level assertion has to look at code. */
+  if (PAGE_SRC !== null) {
+    const PAGE_CODE = PAGE_SRC
+      .replace(/\/\*[\s\S]*?\*\//g, '')      // block comments
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1'); // line comments (keep `https://`)
+    ok('4e index.html no longer tests the ALWAYS-FALSE predicate',
+       !/d\.loaded\.disposition\s*===\s*'REWORK'/.test(PAGE_CODE),
+       "d.loaded.disposition === 'REWORK' is dead: the object is relabelled SHIPPED");
+    ok('4e index.html branches on collected_disposition',
+       /d\.collected_disposition\s*===\s*'REWORK'/.test(PAGE_CODE),
+       'the pre-collection fact the driver actually saw');
+    /* Prove the dead predicate genuinely cannot hold, rather than asserting
+       its absence on faith: reconstruct both sides of the comparison. */
+    const deadPredicate = d.loaded ? d.loaded.disposition === 'REWORK' : false;
+    ok('4e the dead predicate evaluates FALSE while the live one is TRUE',
+       deadPredicate === false && d.collected_disposition === 'REWORK',
+       `dead=${deadPredicate}, live=${d.collected_disposition === 'REWORK'}`);
+  } else {
+    ok('4e index.html source readable', false, 'index.html not found — narration branch UNVERIFIED');
+  }
+
   eq('4 the collected part left the rack as SHIPPED',
      d.loaded ? d.loaded.disposition : null, 'SHIPPED');
   eq('4 nothing is left blocking a rack slot', G.rackParts(r2).length, 0,
      JSON.stringify(G.rackParts(r2).map((p) => p.id)));
-  ok('4 the departure line is truthful about a rework part',
-     /finishes the bore themselves/.test(String(d.line || '')) &&
-     !/pump line can be built/.test(String(d.line || '')),
-     JSON.stringify(d.line));
+
+  /* ── 4f. A CONFORMING PART IS THE CONTROL: same code path, opposite
+     answers. Without this, 4b/4d could be satisfied by breaking SEND too. ── */
+  const r3 = freshGame();
+  G.roughTo(r3, { target_dia_mm: roughTargetFor(r3), bite_mm: ROUGH_BITE_MM,
+                  feed_mm_rev: ROUGH_FEED_MM_REV, vc: 120 });
+  for (let i = 0; i < 200; i++) {
+    if (G.inspect(r3).inSpec) break;
+    G.cutOnce(r3, { bite_mm: 0.010, feed_mm_rev: ROUGH_FEED_MM_REV, vc: 120, label: 'bored' });
+  }
+  const s3 = G.ship(r3);
+  eq('4f control: the in-spec part is racked SEND', s3.disposition, 'SEND');
+  /* Assert collectable on the part WHILE IT IS ON THE RACK — after collection
+     it is relabelled SHIPPED and is no longer a collectable rack item at all,
+     so asking afterwards tests nothing about the pre-collection fact. */
+  ok('4f control: the in-spec racked part is collectable',
+     G.collectableParts(r3).length === 1 &&
+     G.collectable(G.collectableParts(r3)[0]) === true,
+     JSON.stringify(G.collectableParts(r3).map((p) => p.disposition)));
+  ok('4f control: an in-spec racked part ALREADY satisfies the dependency',
+     G.doesDeliverySatisfyDependency(G.collectableParts(r3)[0]) === true,
+     'a housing that fits — the delivery does fulfil the requirement');
+  const toGo3 = G.departsMin(r3.job) - r3.clock_min;
+  if (toGo3 > 0) G.warmUp(r3, toGo3);
+  const d3 = G.courierDepart(r3);
+  eq('4f control: collected_disposition is SEND', d3.collected_disposition, 'SEND');
+  eq('4f control: dependency IS satisfied by a housing that fits',
+     d3.dependency, 'SATISFIED');
+  ok('4f control: the line says the pump line can be built',
+     /pump line can be built/.test(String(d3.line || '')), JSON.stringify(d3.line));
+  ok('4f control: the same two questions give the SEND part a YES on both',
+     G.doesDeliverySatisfyDependency(d3.loaded) === true &&
+     d3.dependency === 'SATISFIED',
+     'collectable=true (on the rack) and satisfies=true — distinct facts that ' +
+     'happen to agree here and DISAGREE on the rework part in 4a/4b');
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

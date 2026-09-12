@@ -1831,17 +1831,34 @@ function courierBeat(now_min, dt_real_s) {
            see. Now a `REWORK` part — undersize, customer finishes the bore —
            is collectable too, and telling the player "Halvorsen has their
            housing" over a part Halvorsen still has to cut would be the game
-           claiming something the evidence does not support. The dependency
-           IS satisfied in both cases: a housing that arrives needing one
-           finishing pass is not a housing that failed to arrive. */
-        const rework = d.loaded.disposition === 'REWORK';
+           claiming something the evidence does not support.
+           THE DEPENDENCY IS NOT SATISFIED FOR BOTH. "The van took it" and
+           "Halvorsen can build" are different questions. Their pump line is
+           down until a housing THAT FITS goes out of the door, and a rework
+           part is undersize by construction — so the van leaving with it
+           leaves the line down. Earl is told off for a failed delivery, not
+           congratulated. */
+        /* `collected_disposition`, NOT `d.loaded.disposition`. `courierDepart`
+           relabels the part `SHIPPED` before it returns, and `d.loaded` is
+           that same relabelled object — so the obvious `d.loaded.disposition
+           === 'REWORK'` is ALWAYS FALSE and the rework narration below would
+           be dead code. That is the defect class this round exists to delete,
+           so this branch reads the pre-collection fact the driver saw. */
+        const rework = d.collected_disposition === 'REWORK';
         if (rework) {
-          say('Earl', P.EARL_LINES.courier_satisfied[0] + ' ' + P.EARL_LINES.courier_satisfied[1]);
+          /* THE HOUSING WENT, THE LINE DID NOT COME BACK. Earl is not
+             congratulating anybody: the van took the part, and Halvorsen still
+             has to put a boring bar through it. `courier_missed` is not reused
+             here because its second line says "there's nothing on that rack",
+             which would be false — something WAS on the rack and it DID go. */
+          say('Earl', "\u201cThey've taken it. They're not building anything with it " +
+            "until they've finished it themselves, mind.\u201d");
           logLine(`<b>${W.hhmm(d.at)}</b> — van gone with <b>${d.loaded.id}</b> on it. ` +
-            `Off the bottom of the band — Halvorsen finishes the bore themselves.`);
+            `Off the bottom of the band — Halvorsen finishes the bore themselves. ` +
+            `<b>Their pump line is still down.</b>`);
           toast(`<b>Collected ${d.loaded.id}.</b> Halvorsen has the housing, ` +
             `and a note saying why they have to finish it.<br>` +
-            `One drop, one part, off your floor.`, 9000);
+            `They still can't build — it doesn't fit yet.`, 9000);
         } else {
           say('Earl', P.EARL_LINES.courier_satisfied[0] + ' ' + P.EARL_LINES.courier_satisfied[1]);
           logLine(`<b>${W.hhmm(d.at)}</b> — van gone with <b>${d.loaded.id}</b> on it. ` +
