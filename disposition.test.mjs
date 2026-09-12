@@ -277,6 +277,54 @@ function caseRework() {
     ok('4e index.html branches on collected_disposition',
        /d\.collected_disposition\s*===\s*'REWORK'/.test(PAGE_CODE),
        'the pre-collection fact the driver actually saw');
+
+    /* ── 4e-STRING: EVALUATE THE PAGE'S OWN EXPRESSION, AND ASSERT ON THE
+       SENTENCE IT PRODUCES.
+       The absence/presence checks above are necessary but NOT sufficient — a
+       previous revision of this test passed on both the broken and the fixed
+       page, because it never asked what the branch actually PRINTS. This is
+       the assertion the reviewer asked for: lift the predicate out of
+       index.html, evaluate it against the real return value from the real
+       verb, build the same sentence the page builds, and assert on the string.
+
+       Against 0f05bf5 this block FAILS: the lifted expression is
+       `d.loaded.disposition === 'REWORK'`, which evaluates false, so the page
+       emits "Halvorsen's pump line can be built" over a part that does not
+       fit. That is the false SEND narration the acceptance gate names. ────── */
+    const pageExpr = (PAGE_CODE.match(/const rework = (d\.[^;]+);/) || [])[1] || null;
+    ok('4e-STRING the page\'s rework predicate was found and lifted from source',
+       pageExpr !== null, JSON.stringify(pageExpr));
+
+    if (pageExpr !== null) {
+      /* eslint-disable no-eval -- evaluating the page's own extracted
+         expression against the real return value is the entire point; a
+         hand-rewritten copy of the predicate would not be evidence. */
+      let pageRework;
+      try { pageRework = eval('(' + pageExpr + ')'); }
+      catch (e) { pageRework = undefined; }
+      eq('4e-STRING the page\'s own predicate evaluates TRUE for a collected REWORK part',
+         pageRework, true, `expr: ${pageExpr}`);
+
+      /* The exact sentences index.html builds, from the same values. */
+      const pageLog = pageRework
+        ? `van gone with ${d.loaded.id} on it. Off the bottom of the band — ` +
+          `Halvorsen finishes the bore themselves.`
+        : `van gone with ${d.loaded.id} on it. Halvorsen's pump line can be built.`;
+      const pageToast = pageRework
+        ? `Collected ${d.loaded.id}. Halvorsen has the housing, ` +
+          `and a note saying why they have to finish it.`
+        : `Collected ${d.loaded.id}. Halvorsen has their housing.`;
+
+      ok('4e-STRING the page LOG does NOT claim the pump line can be built',
+         !/pump line can be built/.test(pageLog), JSON.stringify(pageLog));
+      ok('4e-STRING the page LOG says Halvorsen finishes the bore themselves',
+         /finishes the bore themselves/.test(pageLog), JSON.stringify(pageLog));
+      ok('4e-STRING the page TOAST names the finishing note',
+         /note saying why they have to finish it/.test(pageToast), JSON.stringify(pageToast));
+      ok('4e-STRING the page never says Halvorsen "has their housing" over a rework part',
+         !/has their housing/.test(pageToast), JSON.stringify(pageToast));
+    }
+
     /* Prove the dead predicate genuinely cannot hold, rather than asserting
        its absence on faith: reconstruct both sides of the comparison. */
     const deadPredicate = d.loaded ? d.loaded.disposition === 'REWORK' : false;
