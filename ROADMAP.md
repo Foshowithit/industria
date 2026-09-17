@@ -111,8 +111,16 @@ its physics measured in `tools/envelope-sweep.mjs`; it is not a placeholder.
 4. A gate: you take the next job when the current one is settled, not before.
 5. A shift ledger the player can read — the DAY's money, not a score.
 
-**Done when:** a player can bore J1, ship or scrap it, walk to the board, take
-J2, and feel the machine push back for the first time.
+**Done, verified end to end on the standalone bundle:** bore J1, settle it through
+the real verb, walk to the board, read it, take J2, and the machine pushes back —
+measured on J2: 4.00 mm at 0.30 mm/rev REFUSED for spindle power (1.08); 3.00 at
+0.30 REFUSED for torque (1.01); 4.00 at 0.12 cuts at 0.68. Money crosses days
+(ON THE DAY / BANKED), the log clears at the shift boundary, and `startShift()`
+is the single door the gate, the board and the `job()` test hook all go through.
+
+**Still open in L2, and it is a decision rather than more code:** one shift is one
+job. `BLANK_STOCK` is 3 castings so a shift can produce up to three parts, but a
+card shows only the rate, and nothing records a day once it is over.
 
 ### L3 — DIEGETIC CONTROLS (done 2026-09-17)
 Built. Twelve keys on a printed membrane panel on the machine's own pendant
