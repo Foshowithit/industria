@@ -1,5 +1,7 @@
 # INDUSTRIA — live slice
 
+![INDUSTRIA](assets/readme-hero.png)
+
 A playable model of the physical economy. This repository is the **first live slice** of
 INDUSTRIA: one self-contained page backed by a real causal kernel, with no build step.
 
