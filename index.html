@@ -193,7 +193,7 @@ import { createAudio } from './audio.mjs';
 import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS, unreported, markReported, letterFor } from './shop.mjs';
 /* The shop's surfaces. Drawn in the page, deterministic, no assets — see the
    header of materials.mjs for why they are not files. */
-import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace, consoleScreen } from './materials.mjs';
+import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace, consoleScreen, drawingSheet } from './materials.mjs';
 /* Playtest instrumentation. Dark unless the URL asks for it (`?rec=1`), so the
    public build behaves exactly as before — see recorder.mjs and PLAYTEST-KIT.md.
    Every call below is a no-op returning early when `REC` is null. */
@@ -1075,11 +1075,31 @@ const TRAVELER = new THREE.Group(); TRAVELER.position.set(1.05, 0.99, 1.5); TRAV
 const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.21, 0.29),
   new THREE.MeshStandardMaterial({ color: 0xdedad1, roughness: 0.92 }));
 paper.rotation.x = -Math.PI / 2; TRAVELER.add(paper);
+/* ══ THE DRAWING, ON THE WALL, AS A DRAWING ═══════════════════════════════
+   It was a blank cream rectangle with a yellow frame round it. §101 makes the
+   drawing the centre of the trade, Gate A asks whether a machinist would
+   recognise their world, and a machinist reads a drawing faster than they read
+   anything else — so a blank sheet is the most conspicuous missing object in the
+   building, and it sat in the middle of the shop floor.
+
+   The sheet is repainted from `drawingFor(job)` every time a shift starts,
+   because the drawing IS the job: a different bore, a different band, a
+   different client. See `drawingSheet` in materials.mjs for what makes it read
+   as a drawing rather than a diagram. */
 const DRAWING = new THREE.Group(); DRAWING.position.set(0.6, 1.62, -ROOM.d / 2 + 0.42); scene.add(DRAWING);
 const sheet = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.64),
-  new THREE.MeshStandardMaterial({ color: 0xd9d4c8, roughness: 0.95 }));
+  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.93 }));
 DRAWING.add(sheet);
 box(0.98, 0.72, 0.02, M.warn, 0, 0, -0.012, DRAWING);
+/** Put THIS JOB on the wall. Called from the one reset path and nowhere else. */
+function paintDrawing(job) {
+  const d = G.drawingFor(job, { client: clientName(job.client_id) });
+  const tex = drawingSheet(d, { width: 1400 });
+  if (sheet.material.map) sheet.material.map.dispose();
+  sheet.material.map = tex;
+  sheet.material.needsUpdate = true;
+  return d;
+}
 
 /* the boiler / blower that keeps running whether or not you exist (§1) */
 const clutter = new THREE.Group(); clutter.position.set(-14, 0, -12); scene.add(clutter);
@@ -1426,9 +1446,21 @@ add(TRAVELER, "Traveler — Halvorsen Pumps", 'read it', () => {
   logLine('Read the traveler. <b>Ø40 H6, 30 deep.</b> Band is 16 µm wide. That is the whole game.');
 }, () => true);
 
-add(DRAWING, 'Drawing 4471-02 — rev C', 'read it', () => {
-  say('You', 'Ø40 H6. Bore from the finished face, 30 deep. Datum A is the base.');
-  logLine('Drawing rev <b>C</b>. Bore 30 deep from Datum A.');
+add(DRAWING, 'Drawing — the job on the wall', 'read it', () => {
+  /* EVERY FIGURE OFF THE SHEET, not retyped here. `drawingFor` is the same
+     object the texture is drawn from, so what the player reads and what they
+     see on the paper cannot disagree. */
+  const d = G.drawingFor(GAME.job, { client: clientName(GAME.job.client_id) });
+  const dim = (id) => d.dims.find((x) => x.id === id);
+  const d1 = dim('D1'), d2 = dim('D2'), d3 = dim('D3'), d4 = dim('D4');
+  say('Drawing ' + d.number + ' — rev ' + d.rev,
+    `<b>${d1.text}</b> &nbsp; <b>${d1.tol_text}</b> &nbsp; ${d2.text} deep<br>` +
+    `${d4.text} ${d4.tol_text} · ${d3.text} ${d3.tol_text}<br>` +
+    `DATUM ${d.datums[0].letter} — ${d.datums[0].feature}<br>` +
+    `<i>${d.material} · ${d.projection} · ${d.scale}</i>`);
+  logLine(`Drawing <b>${d.number}</b> rev <b>${d.rev}</b>: ${d1.text} ` +
+    `(${d1.tol_text}), ${d2.text} deep from Datum ${d.datums[0].letter}. ` +
+    `Band is <b>${d1.band_um} µm</b>.`);
 }, () => true);
 
 add(cell, 'VMC — 40 taper, 7.5 kW', 'operate', () => { /* panel is always on near it */ },
@@ -1916,6 +1948,13 @@ add(FIXTURE, 'Holding fixture — parallels and two strap clamps', 'look at the 
   logLine(on
     ? `Fixture: <b>${p ? p.id : 'part'}</b> clamped. Dial reference is this bore.`
     : 'Fixture: <b>empty</b>. Clamps thrown back. Touch off again — the old datum is gone.');
+}, () => true);
+
+add(RADIO, "Someone's radio", 'listen', () => {
+  say('You', 'An old one, on the shelf, tuned to nothing in particular. ' +
+    'Hiss, a whistle, and every so often the shape of a voice you cannot catch. ' +
+    'Nobody has moved the dial since before you got here.');
+  logLine('<b>The radio</b> — not on a station. It has been like that all shift.');
 }, () => true);
 
 add(APRON, 'Loading bay — one drop on the ticket', 'read the board', () => {
@@ -3249,6 +3288,8 @@ function startShift(jobId, { announce = true, carry = true, newDay = null } = {}
   achebeDue = null; shipWindow = null; GONE_SENT = false;
   roughBite_mm = 0.3; roughFeed_mm_rev = 0.12;
 
+  /* THE DRAWING ON THE WALL IS THIS JOB. */
+  paintDrawing(spec);
   buildPartMesh(spec.start_hole_dia_mm, spec.bore_depth_mm);
   /* THE SYSTEM READS THE MACHINE WHEN IT CLOCKS ON, and not again until it is
      asked. A fresh survey on a fresh morning is what makes the drift WITHIN a
@@ -3455,6 +3496,14 @@ function frame(now) {
         { chatter_Hz: 900 });
       /* AND THE COMPRESSOR, which runs all day and belongs to nobody. */
       driveMachineVoice('comp', COMP.position, W.compressorAcoustics(), { gain: 1 });
+      /* AND SOMEBODY'S RADIO. It is a room object rather than a machine — see
+         `radioVoice` in audio.mjs: it is tuned between stations, and that is the
+         honest version rather than a synthesised tune pretending to be content. */
+      if (audioReady) {
+        const d = eye.distanceTo(RADIO.position);
+        AUD.setRadio(W.radioAcoustics(), { distance_m: d,
+          pan: cl((RADIO.position.x - eye.x) / 6, -1, 1) });
+      }
     }
     /* footsteps — you are a body, and a body makes noise (§50, §51) */
     if (mv.lengthSq()) {

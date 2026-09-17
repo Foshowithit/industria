@@ -131,6 +131,23 @@ export function idleAcoustics(machine, { rpmFrac = 0, spindle_on = false } = {})
 }
 
 /**
+ * SOMEBODY'S RADIO, NOT ON A STATION. See the long note on `radioVoice` in
+ * audio.mjs for why it is a texture rather than music: at half five in the
+ * morning a shop radio is hiss, a heterodyne whistle, a slow fade and bursts of
+ * something you cannot make out, and every one of those is synthesizable and
+ * none of them is content.
+ *
+ * `level` is how loud across the shop; the two band centres and the whistle are
+ * the receiver's own character and are not varied in play.
+ */
+export function radioAcoustics({ on = true, level = 0.5, band1_Hz = 760, band2_Hz = 1750,
+                                 whistle_Hz = 2480 } = {}) {
+  if (!on) return { state: 'OFF', level: 0, label: 'the radio is off' };
+  return { state: 'RADIO', level, band1_Hz, band2_Hz, whistle_Hz,
+    label: "somebody's radio, not quite on a station" };
+}
+
+/**
  * A RECIPROCATING COMPRESSOR — the one machine in the building that belongs to
  * nobody and never stops. The arrival text has promised it since it was
  * written ("three spindles already running, a compressor, and somebody's

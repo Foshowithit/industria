@@ -39,47 +39,107 @@ starting anything new, or if it cannot be fixed, leave the tree clean and say so
 
 ---
 
-## 2. THE ORDER OF WORK
+## 2. THE PLAN
 
-Take the FIRST item that is not done. Do not start the second before the first
-is shipped.
+**ONE TURN IS NOT ONE ITEM.** Adam, twice: *"dont stop"*, and then *"plan way more
+cus ur stopping too fast."* The lesson is about ambition per turn, not about the
+loop: pick the next item, but keep going through the list while the work is still
+verifiable, and only end the turn when something needs a decision or the run is
+out of room. A run that ships three items and reports them honestly beats three
+runs that each ship one.
 
-1. ~~**THE SYSTEM MADE VISIBLY WRONG TO A STRANGER.**~~ **DONE 2026-09-17.** The
-   claim is on the machine panel beside the player's own expectation, and it is
-   settled in the log the moment the metal moves: *"The system said Ø36.9074. It
-   is Ø36.9114 — 4.0 µm out, which is 36% of the band."* Measured against the
-   tight job, exact when surveyed (0.0 µm) and 36% of the band once the machine
-   has worn away from the survey. **What remains for a future run:** nobody
-   outside this loop has actually watched it happen yet. The next natural test is
-   whether the moment lands on a first-time player, and that is a human session,
-   not a build.
-2. ~~**SOUND.**~~ **DONE 2026-09-17, except two voices.** The probe found the
-   showstopper: every machine voice was wired to a gain of zero and had been
-   silent since it was written. Fixed, and `tools/audio-probe.html` now renders
-   each scene offline against a room-only baseline and asserts ten claims from
-   `world.mjs` — **13/13**, with a cut measuring 759× the room tone at the tooth
-   frequency and the machines audible at all. **THE COMPRESSOR IS VOICED** (a
-   14 Hz pump chug under a 24 Hz motor, 6.8× the room at 9 m), and **THE THIRD
-   MACHINE TOO** — `AUD_MACHINES` had declared `OTHER3: 'vmc4'` since the machine
-   was added and the frame loop never drove it, so it had been drawn, lit,
-   cutting and silent. **THE RADIO IS DELIBERATELY STILL SILENT:** a radio needs
-   music, music is content rather than synthesis, and a synthesised texture
-   called "somebody's radio" would be a fake in a build whose ethic is not to
-   print what it cannot defend. That needs an audio-content decision and it is
-   the one thing left in this item. **AND NO HUMAN HAS HEARD ANY OF IT** — the
-   probe says so above its own results, and a future run must keep saying so
-   until somebody listens.
-3. **THE PROCESS RUNG (`L4`)** — routes, datums, first-article inspection,
-   rework. Read ROADMAP §5 before starting: rungs 1–3 are one game, rung 4 is a
-   second game with the same machine at the bottom, and the roadmap says not to
-   start it until the first has been played by somebody who is not us.
-4. **THE SOUND OF THE LADDER BELOW THE CHIP** and any remaining `L1` dressing —
-   swarf, cable runs, glazing.
-
-Rung 5 and above (supplier, standard, the wider economy) are designed in
-`VISION.md` and must not be started from this loop.
+**Sizes.** S = one sitting. M = a few hours. L = a session of its own. Anything
+marked **GATED** needs a decision that is not the loop's to make.
 
 ---
+
+### A. THE MACHINE RUNG, FINISHED
+
+- ~~**A1 · SOUND**~~ ✅ 2026-09-17. Probe 13/13 at `tools/audio-probe.html`.
+- **A2 · THE RADIO** (S). Deliberately still silent because it needs music and
+  music is content. **THE HONEST WAY OUT, decided here so it is not re-litigated:
+  the radio is TUNED BETWEEN STATIONS.** At half five in the morning a shop radio
+  is hiss, a heterodyne whistle, slow fading and the occasional burst of something
+  you cannot make out. That is a *texture*, it is fully synthesizable, it promises
+  no content it does not have, and it is more honest than inventing music and
+  calling it somebody's station. Band-limited noise + one drifting heterodyne +
+  slow amplitude fade, from a fixed position, quiet.
+- **A3 · THE DRAWING** (L). **The single biggest credibility gap left.** The
+  brief's §101 makes the drawing the centre of the trade and §17 makes it a
+  teaching law ("a part is rejected, someone says you controlled the diameter but
+  not where the hole is, and *then* the drawing opens"). Today `DRAWING` is a
+  `say()` with one line of text. It has to become a real sheet: a view of the
+  housing, the bore, dimensions with real tolerances off the job spec, a datum
+  flag, and a title block with part number, material, rev, scale and client.
+  **ARCHITECTURE, so it is testable: `drawingFor(job)` in `game.mjs` returns the
+  drawing AS DATA** (views, dimensions, tolerances, title block) and
+  `materials.mjs` renders that data to a canvas. The data is what a test asserts
+  against the job spec — a drawing whose tolerance text disagrees with the band
+  the part is judged against is the worst possible defect in this build.
+- **A4 · THE PART IN YOUR HAND** (M). §73's `Part` rung: "the housing in your
+  hand, rotatable, with the bore visible". Today the part exists only inside the
+  machine. It needs to be liftable off the parallels and lookable — the bore at
+  the size the kernel says, the surface the last pass left.
+- **A5 · THE TOOL RUNG** (S). §73's `Tool`. The bar is loadable and readable; what
+  is missing is that a bar is an object with a life — see B3.
+- **A6 · DAYLIGHT AND LIFE IN THE BUILDING** (S). `daylight()` drives the lamps
+  and there is a wall clock, but nothing else in the shop moves on its own. The
+  machines cycle (`machineMotion`), chips should accumulate, the coolant puddle
+  should grow. Verify what already exists before adding anything: a model that is
+  correct and never called is this build's most frequent defect (ROADMAP §3b).
+
+### B. THE MACHINE AS A THING THAT WEARS
+
+- **B1 · CALIBRATION** (M). Wear is in (B1 landed: condition → TIR). Calibration
+  is a *different* failure: the datum itself drifts, so the machine is
+  repeatable and wrong. That is the one that produces parts that all measure the
+  same and are all outside the band.
+- **B2 · TOOL LIFE** (M). An insert that wears mid-job, so the same dial stops
+  taking the same cut. This is the honest way for a long run to go wrong without
+  the machine being at fault, and it is what makes A5's tool rung matter.
+- **B3 · DOWNTIME** (S). A machine that stops and eats the deadline. Ported
+  hazard shape from the second build's `machines.ts`: failures per 100k hours
+  rising as condition falls.
+- **B4 · THE DAY LEDGER** (S). The shop's own record, readable — what went out,
+  what it was worth, what came back. `describeShop()` and `shop.shipper` exist and
+  only the board shows them.
+
+### C. THE SYSTEM'S SEAT, EXTENDED
+
+- ~~**C1 · the seat**~~ ✅ forecast by running the machine's own physics, with the
+  survey as its single assumption.
+- ~~**C2 · visibly wrong**~~ ✅ settled in the open, 36% of the band at full wear.
+- **C3 · THE SYSTEM AT THE NEXT RUNG** (M). VISION §3: the system advises at
+  every rung. At the shop rung that means it should have an opinion about *which
+  job to take* and *what to quote* — and it should be wrong in a way that is
+  checkable, the same way. It must never hold the answer.
+- **C4 · THE ADAPTER, WRITTEN DOWN** (S). A documented seam at `forecastPass` so
+  a real model can be wired in: returns a number AND its assumptions, is never
+  told the outcome, the shop keeps the record. The three conditions are already in
+  the code comment; they need to be an interface rather than a paragraph.
+
+### D. THE PROCESS RUNG (`L4`) — **GATED**
+
+Routes, datums, first-article inspection, rework. **Do not start.** ROADMAP §5:
+rungs 1–3 are one game, rung 4 is a second game with the same machine at the
+bottom, and it should not begin until somebody who is not us has played the
+first. Plan it, do not build it.
+
+### E. THE LADDER ABOVE (supplier, standard, the wider economy) — **GATED**
+
+Designed in `VISION.md` §1. Not from this loop.
+
+---
+
+### WHAT A TURN SHOULD LOOK LIKE
+
+1. `git pull --ff-only`; run the suites.
+2. Take the first unfinished item above. Then take the NEXT one if the first is
+   verified and there is room. **Do not stop at one.**
+3. Verify by looking at anything visible; measure anything audible; assert
+   anything numeric.
+4. Ship gate. Then update §2 and the §7 log.
+5. Report everything in the run together, plainly.
 
 ## 3. THE RULES — NON-NEGOTIABLE
 
@@ -180,7 +240,11 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
-- **2026-09-17** — Loop armed. **Item 1 SHIPPED the same day**: the system's
+- **2026-09-17** — Loop armed, then item 1 and item 2 the same day. Plan expanded
+  from four items to a sized, ordered list after Adam asked for more planning and
+  bigger turns. **Next: A3 the drawing** (the biggest credibility gap left), then
+  A2 the radio, then A4 the part in your hand.
+- **2026-09-17** — (earlier) Loop armed. **Item 1 SHIPPED the same day**: the system's
   claim is on the machine panel and settled in the log, measured at 36% of the
   band on a worn machine, and visible on one screen with the worn machine and
   the runout term that explains it. One bug of my own found by running the page

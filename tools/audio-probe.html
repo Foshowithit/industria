@@ -121,6 +121,11 @@ async function render(label, build) {
        different filters and says nothing — which is the third time in this file
        that a measurement error looked like an audio failure. */
     chug: toneEnergy(x, 14),
+    /* AND A FIXED BIN AT THE RADIO'S HETERODYNE, for the same reason as the
+       chug bin: a line is only evidence against another machine measured at the
+       same frequency. Comparing 2480 against 760 was the fourth time in this
+       file that a mismatched frequency looked like a failed sound. */
+    whistle: toneEnergy(x, 2480),
     high: toneEnergy(x, 6000),
     state: claimed.state,
   };
@@ -190,6 +195,12 @@ const scenes = [
       claim: 'a pump chug at ' + c.chug_Hz.toFixed(0) + ' Hz under a motor at ' +
              c.spindle_Hz.toFixed(0) + ' Hz' };
   }],
+  ["somebody's radio", (AUD) => {
+    const rd = W.radioAcoustics();
+    AUD.setRadio(rd, { distance_m: 7, gain: 1 });
+    return { probe: { tooth_Hz: rd.whistle_Hz, spindle_Hz: rd.band1_Hz }, state: rd.state,
+      claim: 'hiss in two bands, a heterodyne whistle, a slow fade' };
+  }],
   ['the bar chattering', (AUD) => {
     const a = { ...chatA, rpm: N, spindle_Hz: N / 60, tooth_Hz: N / 60 };
     AUD.setMachine('mine', a, { distance_m: 2, gain: 1 });
@@ -247,6 +258,7 @@ for (const [label] of scenes.slice(1)) {
 }
 
 const CO = R['the compressor'];
+const RD = R["somebody's radio"];
 const checks = [];
 const c = (id, claim, pass, detail) => checks.push({ id, claim, pass: !!pass, detail });
 
@@ -278,16 +290,24 @@ c('A12', 'and it is a different sound from a cut at the same distance',
   `compressor ${F(CO.rms)} vs cut ${F(CU.rms)}`);
 
 say('');
-let pass = 0, fail = 0;
+/* ══ COUNTED FROM THE ARRAY, AT THE END, IN ONE PLACE ══════════════════════
+   A RUNNING TALLY WAS WRONG, AND IT FAILED IN THE WORST POSSIBLE DIRECTION.
+   The tally loop sat in the middle of the file and the last three checks were
+   pushed after it, so the probe reported "11/11 — ALL PASS" while `checks`
+   contained two failures. A measurement harness that under-reports its own
+   failures is worse than no harness: it is the exact "a check that cannot fail"
+   defect this project has a memory about, and it was introduced here by adding
+   checks in the wrong place rather than by any mistake in the checks.
+
+   So there is no counter to fall out of step. `pass` and `fail` are derived from
+   `checks` at the moment the result blob is built, which is after every check has
+   been pushed, by construction. */
 for (const k of checks) {
-  if (k.pass) pass++; else fail++;
   say((k.pass ? '<span class="ok">PASS</span>' : '<span class="bad">FAIL</span>') +
       '  ' + k.id.padEnd(5) + k.claim +
       '\n      <span class="dim">' + k.detail + '</span>');
 }
-say('');
-say((fail === 0 ? '<span class="ok">PASS</span>' : '<span class="bad">FAIL</span>') +
-    `  ${pass} passed, ${fail} failed, ${checks.length} total`);
+
 say('<span class="warn">NO HUMAN HAS LISTENED TO THIS.</span> ' +
     '<span class="dim">These numbers say the model does what it claims. They cannot say whether the shop sounds good.</span>');
 
@@ -309,9 +329,16 @@ say('<span class="warn">NO HUMAN HAS LISTENED TO THIS.</span> ' +
   for (let i = 0; i < x4.length; i++) { const v = Math.abs(x4[i]); if (v > peak) peak = v; }
   const one = R['a clean cut at the same speed'];
   const rms4 = Math.sqrt(x4.reduce((s, v) => s + v * v, 0) / x4.length);
+  /* ── the radio, and the two it shares with the machines ─────────────────── */
   c('A13', 'no acoustics value in any scene was refused by the graph',
-  badParams === 0, `${badParams} refused`);
-c('A8', 'four machines at once do not clip',
+    badParams === 0, `${badParams} refused`);
+  c('A14', 'the radio is audible across the shop',
+    RD.rms > ROOM.rms * 1.3, `at 7 m: radio ${F(RD.rms)} vs room ${F(ROOM.rms)}`);
+  c('A15', 'and it is QUIETER than a machine at a similar distance — a backdrop',
+    RD.rms < CO.rms * 1.2, `radio ${F(RD.rms)} vs compressor at 9 m ${F(CO.rms)}`);
+  c('A16', 'it has a heterodyne whistle the room does not',
+    RD.whistle > ROOM.whistle * 5, `at 2480 Hz: radio ${F(RD.whistle)} vs room ${F(ROOM.whistle)}`);
+  c('A8', 'four machines at once do not clip',
     peak < 0.99, `peak ${peak.toFixed(3)} (1.0 is full scale)`);
   c('A9', 'the mix bus compresses — four machines are not four times one',
     rms4 / one.rms < 3.0, `4 machines = ${(rms4 / one.rms).toFixed(2)}x one machine`);
@@ -321,6 +348,22 @@ c('A8', 'four machines at once do not clip',
   R['four machines'] = { rms: rms4 };
 }
 
+/* ══ COUNTED HERE, IMMEDIATELY BEFORE THE RESULT IS BUILT ══════════════════
+   AND THIS IS THE ONLY PLACE IT MAY BE COUNTED. The first attempt at fixing the
+   miscount moved the derivation to a point that STILL was not after the last
+   check — it sat above six checks pushed further down the file, so the probe
+   reported "11 passed, 0 failed, 17 total" and called it ALL PASS. A tally whose
+   correctness depends on where it sits relative to the checks will be wrong
+   again; the only safe position is adjacent to the report, reading the array that
+   the report is about to publish. */
+const failedChecks = checks.filter((k) => !k.pass);
+const pass = checks.length - failedChecks.length;
+const fail = failedChecks.length;
+if (checks.length === 0) throw new Error('audio-probe: no checks ran at all');
+say('');
+say((fail === 0 && pass > 0 ? '<span class="ok">PASS</span>' : '<span class="bad">FAIL</span>') +
+    `  ${pass} passed, ${fail} failed, ${checks.length} total`);
+
 /* A machine-readable blob for a probe to read without parsing the page. */
-window.__audioProbe = { ok: fail === 0, pass, fail, checks, scenes: R };
+window.__audioProbe = { ok: fail === 0 && pass > 0, pass, fail, checks, scenes: R };
 </script>

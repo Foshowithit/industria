@@ -323,6 +323,56 @@ function rigged({ condition = WEAR.condition_open } = {}) {
     CHIP_HEAT.frac_at_vc(9999) <= 0.80 && CHIP_HEAT.frac_at_vc(-99) >= 0.30);
 }
 
+/* ── DWG-*  THE DRAWING AND THE JOB MUST AGREE ────────────────────────────
+   The worst defect this build could ship is a drawing whose tolerance text does
+   not match the band the part is judged against — a player reading one number and
+   being graded on another, with nothing on screen to say so. These assertions
+   run over EVERY job rather than the default one, because a drawing that is
+   right for J1 and wrong for J3 is exactly the failure being guarded against. */
+{
+  const { drawingFor, JOBS } = await import('./game.mjs');
+  const plus3 = (job) => '+' + (job.band_high_mm - job.nominal_mm).toFixed(3);
+  const minus3 = (job) => ((job.band_low_mm - job.nominal_mm) >= 0 ? '+' : '') +
+    (job.band_low_mm - job.nominal_mm).toFixed(3);
+  for (const job of JOBS) {
+    const d = drawingFor(job);
+    const g = d.geometry;
+    eq(`DWG-${job.id}-nominal`, `${job.id}: the drawing bores to the job's nominal`,
+      g.bore_dia_mm, job.nominal_mm);
+    eq(`DWG-${job.id}-depth`, `${job.id}: and to its depth`,
+      g.bore_depth_mm, job.bore_depth_mm);
+    eq(`DWG-${job.id}-cast`, `${job.id}: and the as-cast bore is the job's`,
+      g.as_cast_dia_mm, job.start_hole_dia_mm);
+
+    const d1 = d.dims.find((x) => x.id === 'D1');
+    near(`DWG-${job.id}-plus`, `${job.id}: the upper tolerance IS the job's band top`,
+      d1.plus_mm, job.band_high_mm - job.nominal_mm, 1e-12);
+    near(`DWG-${job.id}-minus`, `${job.id}: and the lower IS its band bottom`,
+      d1.minus_mm, job.band_low_mm - job.nominal_mm, 1e-12);
+    eq(`DWG-${job.id}-band`, `${job.id}: the band width on the sheet is the job's band`,
+      d1.band_um, Math.round((job.band_high_mm - job.band_low_mm) * 1000));
+    /* H6, NOT IT6 — see the note in `drawingFor`. A hole on a drawing is called
+       out by its fit designation; the grade is the width behind it. */
+    eq(`DWG-${job.id}-grade`, `${job.id}: the sheet calls the bore by its FIT, not its grade`,
+      d1.text, `Ø${job.nominal_mm} H${String(job.grade).replace(/^IT/i, '')}`);
+    /* The tolerance text must carry the band to three places, because that is
+       the resolution the band is defined at and a rounded callout is a lie. */
+    /* ASSERTED ON THE FIGURES, NOT ON THE LAYOUT. The first version of this
+       compared the whole string and failed on the SPACES around the slash — an
+       over-specified test is a test that will break on a formatting change and
+       teach nobody anything. It checks that the callout carries both limits to
+       three places, which is the property that matters. */
+    ok(`DWG-${job.id}-text`, `${job.id}: the callout carries both limits to three places`,
+      d1.tol_text.includes(plus3(job)) && d1.tol_text.includes(minus3(job)));
+  }
+  /* And the sheet is a sheet: a drawing with no title block or no datum is a
+     sketch, and the brief's Gate A asks whether the drawing READS right. */
+  const d = drawingFor(JOBS[0]);
+  ok('DWG-title', 'the sheet carries a title block', !!(d.number && d.rev && d.scale && d.drawn_by));
+  ok('DWG-datum', 'and a datum', d.datums.length > 0 && d.datums[0].letter === 'A');
+  ok('DWG-notes', 'and the material note', d.notes.some((n) => /MATERIAL/.test(n)));
+}
+
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);
 if (failed.length) {
@@ -334,6 +384,7 @@ if (failed.length) {
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'}  ${pass} passed, ${fail} failed, ${rows.length} total`);
 if (fail === 0) console.log('the system forecasts the machine it surveyed, and is wrong exactly when that is not the machine');
 process.exit(fail === 0 ? 0 : 1);
+
 
 
 

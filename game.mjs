@@ -423,6 +423,88 @@ export const JOBS = [
   },
 ];
 
+/* ══ THE DRAWING ═══════════════════════════════════════════════════════════
+   The brief's §101 makes the drawing the centre of the trade and §17 makes it a
+   teaching law: a part is rejected, somebody says *you controlled the diameter
+   but not where the hole is*, and THEN the drawing opens and true position means
+   something. Until now `DRAWING` in the page was a `say()` with one line of text
+   and a blank cream sheet on the wall behind it.
+
+   IT IS DATA FIRST AND A PICTURE SECOND. `drawingFor(job)` returns the sheet as
+   an object — dimensions, tolerances, datums, title block — and a renderer in
+   `materials.mjs` draws that object. The split is not tidiness: it is so that a
+   test can assert the drawing agrees with the JOB, because the worst defect this
+   build could ship is a drawing whose tolerance text does not match the band the
+   part is actually judged against. A player would then be reading one number and
+   being graded on another, and there would be nothing on screen to say so.
+
+   EVERY FIGURE HERE COMES OFF THE JOB SPEC. Nominal, grade, both band limits,
+   the as-cast bore and the depth. Nothing is typed twice. */
+export function drawingFor(job = JOBS[0], { partO_dia_mm = 124, drawn_by = 'E. ROWNTREE', date = null } = {}) {
+  const plus = job.band_high_mm - job.nominal_mm;
+  const minus = job.band_low_mm - job.nominal_mm;
+  const mm3 = (v) => (v >= 0 ? '+' : '') + v.toFixed(3);
+  /* ── THE DRAWING SAYS H6, NOT IT6 ─────────────────────────────────────────
+     `job.grade` is `IT6`, which is the TOLERANCE GRADE — a width, and the thing
+     the kernel looks up. What goes on a drawing for a hole is the FIT
+     DESIGNATION: a fundamental deviation letter and the grade, so Ø40 H6. The
+     two are not the same statement and the first version of this sheet printed
+     the grade, so it read "Ø40 IT6" next to tolerances of +0.016/+0.000.
+
+     THE DEVIATION IS DERIVED, not typed: a hole whose lower limit sits exactly on
+     nominal is H-basis, which is what every job in this build is — the whole
+     point of the game is that the band runs one way. If a job ever arrives whose
+     band straddles nominal, this falls back to the grade rather than inventing a
+     letter for it. */
+  const holeBasis = (job.band_low_mm - job.nominal_mm) === 0 && plus > 0;
+  const fit = holeBasis ? `H${String(job.grade).replace(/^IT/i, '')}` : job.grade;
+  const mat = MATERIALS[job.material];
+  /* ROUNDED, because it is written on a drawing and a drawing does not say
+     15.999999999998238 µm. The band is DEFINED by two decimal millimetres and the
+     difference of those is a float; the sheet carries the figure a draughtsman
+     would put on it, and the exact band stays where it belongs — in the job spec
+     and in the kernel. */
+  const band_um = Math.round((job.band_high_mm - job.band_low_mm) * 1000);
+  return {
+    number: '4471-02', rev: 'C', sheet: '1 of 1', scale: '1:1', units: 'mm',
+    projection: 'THIRD ANGLE',
+    grade: job.grade, fit, hole_basis: holeBasis,
+    title: job.title,
+    client: job.client,
+    material: mat ? mat.label : job.material,
+    drawn_by, date, approved_by: 'E. ROWNTREE',
+    /* The part is a Ø124 x depth housing; the bore is the feature under the
+       tolerance and the as-cast hole is what arrives from the foundry. */
+    geometry: {
+      od_dia_mm: partO_dia_mm,
+      bore_dia_mm: job.nominal_mm,
+      bore_depth_mm: job.bore_depth_mm,
+      as_cast_dia_mm: job.start_hole_dia_mm,
+    },
+    dims: [
+      /* THE GOVERNING DIMENSION. Its tolerance text is the job's own band, to
+         three places, and a test asserts that equality rather than trusting it. */
+      { id: 'D1', kind: 'diameter', feature: 'bore',
+        text: `Ø${job.nominal_mm} ${fit}`,
+        tol_text: `${mm3(plus)} / ${mm3(minus)}`,
+        plus_mm: plus, minus_mm: minus, band_um },
+      { id: 'D2', kind: 'depth', feature: 'bore',
+        text: `${job.bore_depth_mm}`, tol_text: '±0.2' },
+      { id: 'D3', kind: 'diameter_ref', feature: 'as_cast',
+        text: `(Ø${job.start_hole_dia_mm})`, tol_text: 'AS CAST' },
+      { id: 'D4', kind: 'diameter', feature: 'od',
+        text: `Ø${partO_dia_mm}`, tol_text: '±0.3' },
+    ],
+    datums: [{ letter: 'A', feature: 'base face' }],
+    notes: [
+      `MATERIAL: ${(mat ? mat.label : job.material).toUpperCase()}`,
+      'BORE FROM DATUM A',
+      'BREAK ALL EDGES 0.3',
+      `${job.grade} BAND IS ${band_um} µm — H-BASIS, ONE-SIDED FROM NOMINAL`,
+    ],
+  };
+}
+
 /** The job the machine is currently set up for. J1 stays the default: it is the
  *  one that teaches the one-directional error first, and a player who has never
  *  held a tolerance has no business being handed a 4 mm roughing cut. */

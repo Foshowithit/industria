@@ -1019,3 +1019,264 @@ export function consoleScreen({ title = 'SYSTEM', status = 'READY', lines = [],
   tex.anisotropy = 8;
   return tex;
 }
+
+/* ══ THE DRAWING SHEET ═════════════════════════════════════════════════════
+   A real engineering drawing, drawn from the data `drawingFor(job)` returns.
+   The brief's §101 puts the drawing at the centre of the trade and its Gate A
+   asks whether a machinist would recognise their world — and a machinist reads
+   a drawing faster than they read anything else, so this is the single most
+   credibility-dense object in the build.
+
+   WHAT MAKES A DRAWING READ AS A DRAWING, and every one of these is why the
+   first version of anything on a screen looks like a diagram instead:
+
+     · LINE WEIGHTS. Outlines are thick, dimensions are thin, hidden edges are
+       dashed, centre lines are dash-dot and thin. A drawing where everything is
+       one weight is a sketch.
+     · A ZONE FRAME with letters and numbers down the edges, because that is how
+       a drawing is referred to and it costs four lines to draw.
+     · THE ARROWHEADS. A dimension line without arrowheads is a line.
+     · A TITLE BLOCK in the bottom right, in a grid, with the projection symbol.
+     · HATCHING on a section, at 45 degrees, with real line spacing.
+     · AND THE CALLBACK: the tolerance is stacked under the diameter, above the
+       dimension line, in the two-place figures a drawing actually uses.
+
+   DRAWN FROM DATA, so the figures on the paper and the band the part is judged
+   against cannot disagree — `system.test.mjs` asserts that for every job.
+   ------------------------------------------------------------------------ */
+export function drawingSheet(d, { width = 1400 } = {}) {
+  /* THE CANVAS ASPECT MATCHES THE PLANE THE SHEET IS DRAWN ON. A drawing rendered
+     1.414 and mapped onto a 1.406 surface is a drawing whose circles are slightly
+     ellipses — the kind of wrongness nobody names and everybody feels. */
+  const W = width, H = Math.round(width * (0.64 / 0.9));
+  const c = canvas(W); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  const INK = '#1d2126', FAINT = '#5b6169', GRID = '#b9b2a4';
+  ctx.fillStyle = '#f2efe6'; ctx.fillRect(0, 0, W, H);
+  /* A sheet is not clean. It has been on a bench. */
+  for (let i = 0; i < 340; i++) {
+    ctx.globalAlpha = 0.02 + Math.random() * 0.05;
+    ctx.fillStyle = i % 5 === 0 ? '#7a6a4a' : '#6a7078';
+    ctx.beginPath(); ctx.arc(Math.random() * W, Math.random() * H,
+      0.6 + Math.random() * 2.4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  const M = W * 0.018;                                  // sheet margin
+  const Z = W * 0.010;                                  // zone frame inset
+  const line = (w, col = INK) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.setLineDash([]); };
+  const lineDash = (w, dash, col = INK) => { ctx.strokeStyle = col; ctx.lineWidth = w;
+    ctx.setLineDash(dash); };
+  const rect = (x, y, w, h) => { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.stroke(); };
+  const label = (t, x, y, size, col = INK, align = 'left', weight = 400, spacing = null) => {
+    ctx.fillStyle = col; ctx.textAlign = align; ctx.textBaseline = 'middle';
+    ctx.font = `${weight} ${size}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+    if (spacing) { let cx = align === 'center' ? x - (t.length * spacing) / 2 : x;
+      for (const ch of t) { ctx.fillText(ch, cx, y); cx += spacing; } }
+    else ctx.fillText(t, x, y);
+  };
+
+  /* ── the sheet frame and its zones ─────────────────────────────────────── */
+  line(W * 0.004); rect(M, M, W - M * 2, H - M * 2);
+  line(W * 0.0012, FAINT); rect(M + Z, M + Z, W - (M + Z) * 2, H - (M + Z) * 2);
+  /* zone letters across, numbers down, with the ticks between them */
+  const zc = 4, zr = 4;
+  for (let i = 1; i < zc; i++) {
+    const x = M + Z + ((W - (M + Z) * 2) / zc) * i;
+    line(W * 0.0012, FAINT); ctx.beginPath(); ctx.moveTo(x, M); ctx.lineTo(x, M + Z); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, H - M - Z); ctx.lineTo(x, H - M); ctx.stroke();
+  }
+  for (let i = 1; i < zr; i++) {
+    const y = M + Z + ((H - (M + Z) * 2) / zr) * i;
+    line(W * 0.0012, FAINT); ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(M + Z, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W - M - Z, y); ctx.lineTo(W - M, y); ctx.stroke();
+  }
+  const LETTERS = ['A', 'B', 'C', 'D'], NUMBERS = ['4', '3', '2', '1'];
+  for (let i = 0; i < zc; i++) {
+    const cx = M + Z + ((W - (M + Z) * 2) / zc) * (i + 0.5);
+    label(LETTERS[i], cx, M + Z / 2, W * 0.011, FAINT, 'center');
+    label(LETTERS[i], cx, H - M - Z / 2, W * 0.011, FAINT, 'center');
+  }
+  for (let i = 0; i < zr; i++) {
+    const cy = M + Z + ((H - (M + Z) * 2) / zr) * (i + 0.5);
+    label(NUMBERS[i], M + Z / 2, cy, W * 0.011, FAINT, 'center');
+    label(NUMBERS[i], W - M - Z / 2, cy, W * 0.011, FAINT, 'center');
+  }
+
+  /* ── geometry, in sheet millimetres, scaled to fit the drawing area ────── */
+  const g = d.geometry;
+  const TBW = W * 0.46, TBH = H * 0.26;                 // title block
+  const area = { x: M + Z, y: M + Z, w: W - (M + Z) * 2 - TBW, h: H - (M + Z) * 2 };
+  const planCx = area.x + area.w * 0.30, planCy = area.y + area.h * 0.52;
+  const sectX = area.x + area.w * 0.60, sectY = planCy;
+  const scale = (area.h * 0.62) / (g.od_dia_mm * 1.6);  // one scale for both views
+  const R = (mm) => mm * scale;
+
+  /* ── VIEW 1: the plan — the bore seen down its axis ────────────────────── */
+  const cl = W * 0.0011;
+  const cross = (x, y, r) => {                          // a centre line cross
+    lineDash(cl, [W * 0.012, W * 0.004, W * 0.002, W * 0.004], FAINT);
+    ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x + r, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x, y + r); ctx.stroke();
+  };
+  cross(planCx, planCy, R(g.od_dia_mm / 2) * 1.16);
+  line(W * 0.0032); ctx.beginPath();
+  ctx.arc(planCx, planCy, R(g.od_dia_mm / 2), 0, Math.PI * 2); ctx.stroke();
+  lineDash(W * 0.0016, [W * 0.008, W * 0.005], FAINT); ctx.beginPath();
+  ctx.arc(planCx, planCy, R(g.as_cast_dia_mm / 2), 0, Math.PI * 2); ctx.stroke();
+  line(W * 0.0032); ctx.beginPath();
+  ctx.arc(planCx, planCy, R(g.bore_dia_mm / 2), 0, Math.PI * 2); ctx.stroke();
+
+  /* the bore callout — a leader out to the right, with the tolerance STACKED
+     under the diameter the way a drawing puts it */
+  {
+    const a = -Math.PI / 4;
+    const x0 = planCx + Math.cos(a) * R(g.bore_dia_mm / 2) * 0.7;
+    const y0 = planCy + Math.sin(a) * R(g.bore_dia_mm / 2) * 0.7;
+    const x1 = planCx + R(g.od_dia_mm / 2) * 1.05, y1 = planCy - R(g.od_dia_mm / 2) * 1.05;
+    line(W * 0.0016); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+    ctx.lineTo(x1 + W * 0.075, y1); ctx.stroke();
+    const d1 = d.dims.find((x) => x.id === 'D1');
+    label(d1.text, x1 + W * 0.006, y1 - W * 0.012, W * 0.0155, INK, 'left', 700);
+    const [up, dn] = d1.tol_text.split(' / ');
+    label(up, x1 + W * 0.006, y1 + W * 0.004, W * 0.0135, INK, 'left');
+    label(dn, x1 + W * 0.006, y1 + W * 0.019, W * 0.0135, INK, 'left');
+  }
+  /* the outside diameter, dimensioned across the view */
+  {
+    const y = planCy + R(g.od_dia_mm / 2) * 1.30;
+    line(W * 0.0016);
+    ctx.beginPath(); ctx.moveTo(planCx - R(g.od_dia_mm / 2), planCy + R(g.od_dia_mm / 2) * 1.08);
+    ctx.lineTo(planCx - R(g.od_dia_mm / 2), y + W * 0.006);
+    ctx.moveTo(planCx + R(g.od_dia_mm / 2), planCy + R(g.od_dia_mm / 2) * 1.08);
+    ctx.lineTo(planCx + R(g.od_dia_mm / 2), y + W * 0.006);
+    ctx.moveTo(planCx - R(g.od_dia_mm / 2), y); ctx.lineTo(planCx + R(g.od_dia_mm / 2), y);
+    ctx.stroke();
+    for (const [ax, dir] of [[planCx - R(g.od_dia_mm / 2), 1], [planCx + R(g.od_dia_mm / 2), -1]]) {
+      ctx.beginPath(); ctx.moveTo(ax, y); ctx.lineTo(ax + dir * W * 0.012, y - W * 0.004);
+      ctx.lineTo(ax + dir * W * 0.012, y + W * 0.004); ctx.closePath();
+      ctx.fillStyle = INK; ctx.fill();
+    }
+    const d4 = d.dims.find((x) => x.id === 'D4');
+    label(`${d4.text} ${d4.tol_text}`, planCx, y - W * 0.011, W * 0.0135, INK, 'center');
+  }
+  label('VIEW A — PLAN', planCx, area.y + area.h * 0.055, W * 0.0115, FAINT, 'center', 400, W * 0.0175);
+
+  /* ── VIEW 2: the section — the bore through its depth, hatched ─────────── */
+  {
+    const halfW = R(g.od_dia_mm / 2), dep = R(g.bore_depth_mm);
+    const x0 = sectX - halfW, y0 = sectY - dep * 0.5, hgt = dep;
+    const boreHalf = R(g.bore_dia_mm / 2);
+    /* material, hatched at 45 degrees */
+    const hatch = (rx, ry, rw, rh) => {
+      ctx.save(); ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
+      lineDash(W * 0.0009, [], FAINT);
+      const step = W * 0.0085;
+      for (let i = -rh; i < rw + rh; i += step) {
+        ctx.beginPath(); ctx.moveTo(rx + i, ry + rh); ctx.lineTo(rx + i + rh, ry); ctx.stroke();
+      }
+      ctx.restore();
+    };
+    hatch(x0, y0, halfW - boreHalf, hgt);
+    hatch(sectX + boreHalf, y0, halfW - boreHalf, hgt);
+    line(W * 0.0032); rect(x0, y0, halfW * 2, hgt);
+    line(W * 0.0032);
+    ctx.beginPath(); ctx.moveTo(sectX - boreHalf, y0); ctx.lineTo(sectX - boreHalf, y0 + hgt);
+    ctx.moveTo(sectX + boreHalf, y0); ctx.lineTo(sectX + boreHalf, y0 + hgt); ctx.stroke();
+    lineDash(W * 0.0016, [W * 0.008, W * 0.005], FAINT);
+    ctx.beginPath(); ctx.moveTo(sectX, y0); ctx.lineTo(sectX, y0 - R(6));
+    ctx.moveTo(sectX, y0 + hgt); ctx.lineTo(sectX, y0 + hgt + R(6)); ctx.stroke();
+    cross(sectX, y0 + hgt / 2, halfW * 1.12);
+    /* the depth, dimensioned on the right */
+    const dx = sectX + halfW * 1.45;
+    line(W * 0.0016);
+    ctx.beginPath();
+    ctx.moveTo(sectX + halfW, y0); ctx.lineTo(dx + W * 0.006, y0);
+    ctx.moveTo(sectX + halfW, y0 + hgt); ctx.lineTo(dx + W * 0.006, y0 + hgt);
+    ctx.moveTo(dx, y0); ctx.lineTo(dx, y0 + hgt); ctx.stroke();
+    for (const [ay, dir] of [[y0, 1], [y0 + hgt, -1]]) {
+      ctx.beginPath(); ctx.moveTo(dx, ay); ctx.lineTo(dx - W * 0.004, ay + dir * W * 0.012);
+      ctx.lineTo(dx + W * 0.004, ay + dir * W * 0.012); ctx.closePath();
+      ctx.fillStyle = INK; ctx.fill();
+    }
+    const d2 = d.dims.find((x) => x.id === 'D2');
+    label(`${d2.text} ${d2.tol_text}`, dx + W * 0.010, y0 + hgt / 2, W * 0.013, INK, 'left');
+    label('SECTION B—B', sectX, area.y + area.h * 0.055, W * 0.0115, FAINT, 'center', 400, W * 0.0175);
+  }
+
+  /* ── the datum flag, on the base face of the section ───────────────────── */
+  {
+    const x = sectX - R(g.od_dia_mm / 2) - W * 0.012, y = sectY + R(g.bore_depth_mm) * 0.5;
+    line(W * 0.0016);
+    ctx.beginPath(); ctx.moveTo(sectX - R(g.od_dia_mm / 2), y); ctx.lineTo(x, y);
+    ctx.lineTo(x, y + W * 0.026); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - W * 0.014, y + W * 0.026); ctx.lineTo(x + W * 0.014, y + W * 0.026);
+    ctx.lineTo(x, y + W * 0.058); ctx.closePath();
+    line(W * 0.0032); ctx.stroke();
+    label('A', x, y + W * 0.040, W * 0.017, INK, 'center', 700);
+  }
+
+  /* ── the notes block ──────────────────────────────────────────────────── */
+  {
+    let y = area.y + area.h * 0.925;
+    label('NOTES:', M + Z + W * 0.012, y, W * 0.0125, INK, 'left', 700);
+    y += W * 0.019;
+    for (const n of d.notes) {
+      label(n, M + Z + W * 0.012, y, W * 0.0115, FAINT);
+      y += W * 0.0165;
+    }
+  }
+
+  /* ── the title block ──────────────────────────────────────────────────── */
+  {
+    const bx = W - M - Z - TBW, by = H - M - Z - TBH;
+    line(W * 0.004); rect(bx, by, TBW, TBH);
+    const row = (i) => by + (TBH / 4) * i;
+    line(W * 0.0012, FAINT);
+    for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(bx, row(i)); ctx.lineTo(bx + TBW, row(i)); ctx.stroke(); }
+    const col = (f) => bx + TBW * f;
+    ctx.beginPath();
+    ctx.moveTo(col(0.52), row(1)); ctx.lineTo(col(0.52), by + TBH);
+    ctx.moveTo(col(0.78), row(2)); ctx.lineTo(col(0.78), by + TBH);
+    ctx.stroke();
+    const p = W * 0.010;
+    label('CLIENT', bx + p, row(0) + TBH * 0.12, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(String(d.client).toUpperCase(), bx + p, row(0) + TBH * 0.30, W * 0.0135, INK, 'left', 700);
+    label('TITLE', bx + p, row(1) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(String(d.title).slice(0, 40), bx + p, row(1) + TBH * 0.28, W * 0.0125, INK, 'left', 600);
+    label('MATERIAL', bx + p, row(2) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(String(d.material).toUpperCase(), bx + p, row(2) + TBH * 0.28, W * 0.0115, INK, 'left', 600);
+    label('DRAWN', bx + p, row(3) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(d.drawn_by, bx + p, row(3) + TBH * 0.28, W * 0.0115, INK, 'left', 600);
+    /* the right-hand cells: the numbers a shop actually reads */
+    label('DWG No.', col(0.54) + p, row(1) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(d.number, col(0.54) + p, row(1) + TBH * 0.30, W * 0.0155, INK, 'left', 700);
+    label('REV', col(0.54) + p, row(2) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(d.rev, col(0.54) + p, row(2) + TBH * 0.30, W * 0.017, INK, 'left', 700);
+    label('SCALE', col(0.54) + p, row(3) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(d.scale, col(0.54) + p, row(3) + TBH * 0.30, W * 0.0125, INK, 'left', 600);
+    label('SHEET', col(0.80) + p, row(2) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(d.sheet, col(0.80) + p, row(2) + TBH * 0.30, W * 0.0125, INK, 'left', 600);
+    label('UNITS', col(0.80) + p, row(3) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(d.units, col(0.80) + p, row(3) + TBH * 0.30, W * 0.0125, INK, 'left', 600);
+    /* the third-angle projection symbol: two circles and a trapezoid, which is
+       the single most recognisable mark on any drawing */
+    {
+      const sx = col(0.80) + p * 2, sy = row(1) + TBH * 0.34, s = TBH * 0.16;
+      line(W * 0.0016);
+      ctx.beginPath(); ctx.arc(sx, sy, s, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(sx + s * 2.1, sy, s * 0.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.7, sy + s * 1.6); ctx.lineTo(sx + s * 0.7, sy + s * 1.6);
+      ctx.lineTo(sx + s * 0.35, sy + s * 2.4); ctx.lineTo(sx - s * 0.35, sy + s * 2.4);
+      ctx.closePath(); ctx.stroke();
+      label('THIRD ANGLE', sx + s * 1.0, sy + s * 3.1, W * 0.0075, FAINT, 'center', 400, W * 0.0105);
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 16;
+  return tex;
+}

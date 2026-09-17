@@ -181,6 +181,107 @@ export function createAudio({ busy = false, context = null } = {}) {
     return true;
   }
 
+  /* ══ THE RADIO — AND WHY IT IS TUNED BETWEEN STATIONS ════════════════════
+     The arrival text has promised "somebody's radio" since it was written. It
+     stayed silent through two passes at this build because a radio implies
+     music, music is content rather than synthesis, and inventing a tune and
+     calling it somebody's station would be a fake in a build whose whole ethic
+     is not to print what it cannot defend.
+
+     THE WAY OUT IS THE HONEST ONE: AT HALF FIVE IN THE MORNING IT IS NOT ON A
+     STATION. What a shop radio actually is at that hour is hiss, a heterodyne
+     whistle from two carriers beating against each other, slow fading, and the
+     occasional burst of something you cannot make out. Every one of those is a
+     TEXTURE and every one is synthesizable exactly:
+
+       · two band-passed noise bands — the receiver's IF, which is narrow and
+         mid-heavy and is why a radio sounds like a radio
+       · a slow amplitude wobble at speech rates, so the hiss rises and falls
+         the way a voice does without being one. It is the SHAPE of speech with
+         no content in it, which is precisely what you hear from across a shop.
+       · a heterodyne whistle, one thin tone high up with a slow drift, which is
+         the single most recognisable thing about a radio that is not tuned
+       · a slow fade, because a carrier you are not locked to drifts in and out
+
+     It never claims to be playing something. Nothing on it can be understood,
+     which is the truth about a radio at 5:55 in the morning. */
+  function radioVoice() {
+    if (voices.has('radio')) return voices.get('radio');
+    if (!ensure()) return null;
+
+    const out = ctx.createGain(); out.gain.value = 1;
+    const pan = ctx.createStereoPanner();
+    out.connect(pan).connect(master);
+
+    /* the receiver: two narrow bands of noise, which is what an IF strip does
+       to a signal it has not locked on to */
+    const src = noiseSource();
+    const band1 = ctx.createBiquadFilter();
+    band1.type = 'bandpass'; band1.frequency.value = 760; band1.Q.value = 1.2;
+    const band2 = ctx.createBiquadFilter();
+    band2.type = 'bandpass'; band2.frequency.value = 1750; band2.Q.value = 2.4;
+    const g1 = ctx.createGain(); g1.gain.value = 0.0;
+    const g2 = ctx.createGain(); g2.gain.value = 0.0;
+    src.connect(band1).connect(g1).connect(out);
+    src.connect(band2).connect(g2).connect(out);
+
+    /* THE SHAPE OF SPEECH WITH NO CONTENT IN IT: a saw at a talking rate,
+       rectified by being pushed into the noise gains. It rises and falls like
+       somebody talking across the shop and there is nothing in it to catch. */
+    const talk = ctx.createOscillator(); talk.type = 'sawtooth'; talk.frequency.value = 3.6;
+    const talkG = ctx.createGain(); talkG.gain.value = 0;
+    talk.connect(talkG);
+    talkG.connect(g1.gain); talkG.connect(g2.gain);
+
+    /* the heterodyne, and its drift off the carrier */
+    const whistle = ctx.createOscillator(); whistle.type = 'sine'; whistle.frequency.value = 2480;
+    const whistleG = ctx.createGain(); whistleG.gain.value = 0;
+    whistle.connect(whistleG).connect(out);
+    const drift = ctx.createOscillator(); drift.type = 'sine'; drift.frequency.value = 0.06;
+    const driftG = ctx.createGain(); driftG.gain.value = 60;      // ±60 Hz, slowly
+    drift.connect(driftG).connect(whistle.frequency);
+
+    /* and the fade, which is a carrier it is not locked to coming and going */
+    const fade = ctx.createOscillator(); fade.type = 'sine'; fade.frequency.value = 0.11;
+    const fadeG = ctx.createGain(); fadeG.gain.value = 0;
+    fade.connect(fadeG).connect(out.gain);
+
+    for (const o of [talk, whistle, drift, fade]) o.start();
+    const v = { id: 'radio', out, pan, band1, band2, g1, g2, talk, talkG, whistle, whistleG, drift, driftG, fade, fadeG };
+    voices.set('radio', v);
+    return v;
+  }
+
+  /** Drive the radio. Quiet by nature: it is a foreground object in somebody
+   *  else's corner and a background one in yours. */
+  function setRadio(a, opts = {}) {
+    if (!started) return;
+    const v = radioVoice();
+    if (!v) return;
+    const t = ctx.currentTime, tau = 0.35;                 // radios fade, they do not switch
+    const at = (param, value) => {
+      if (!Number.isFinite(value)) { badParams++; lastBadParam = { id: 'radio', value }; return; }
+      param.setTargetAtTime(value, t, tau);
+    };
+    const on = (a?.state === 'RADIO');
+    const gain = (opts.gain ?? 1) * attenuation(opts.distance_m ?? 6, opts);
+    const level = on ? (a?.level ?? 0.5) * gain : 0;
+    at(v.pan.pan, clamp(opts.pan ?? 0, -1, 1));
+    /* LEVELLED AGAINST THE ROOM, not guessed. The first pass measured 1.13x the
+       room bed at 7 m, which is present but not AUDIBLE — a radio across a shop
+       should be a backdrop you can tell is on, not something you have to strain
+       for. These are set so it sits a few times the room and still well under a
+       machine at a similar distance; A14 and A15 assert both halves. */
+    at(v.g1.gain, 0.34 * level);
+    at(v.g2.gain, 0.18 * level);
+    at(v.talkG.gain, 0.11 * level);           // the wobble rides ON those gains
+    at(v.whistleG.gain, 0.050 * level);
+    at(v.fadeG.gain, 0.28 * level);           // the fade rides ON the output
+    at(v.band1.frequency, clamp(a?.band1_Hz ?? 760, 120, 6000));
+    at(v.band2.frequency, clamp(a?.band2_Hz ?? 1750, 200, 8000));
+    at(v.whistle.frequency, clamp(a?.whistle_Hz ?? 2480, 300, 9000));
+  }
+
   /* ══════════════════════════════════════════════════════════════════════════
      MACHINE VOICE — one per machine, persistent, retuned every frame.
      ══════════════════════════════════════════════════════════════════════════
@@ -603,7 +704,7 @@ export function createAudio({ busy = false, context = null } = {}) {
   return {
     start, get ready() { return started; },
     get context() { return ctx; },
-    setMachine, machineVoice, setListener,
+    setMachine, machineVoice, setListener, setRadio, radioVoice,
     /* How many acoustics values this graph has had to refuse. Zero is the only
        acceptable reading; a probe asserts it. */
     get bad_params() { return badParams; },
