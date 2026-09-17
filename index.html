@@ -322,6 +322,17 @@ const M = {
   roof:  MATS.roof,
   steel: MATS.steel,
   dark:  tint(MATS.paint, 0x454c54),
+  /* THE FOUR VALUES THAT MAKE A MACHINE READ AS ONE, after both cold viewers
+     said the machine was "a pile of grey boxes". Everything in the cavity used
+     to be castIron (94) or toolSteel (122) under a light-grey wall, so the
+     whole frame sat inside one value. These four separate it: ground steel is
+     the bright datum faces, rubber is the black that the light is measured
+     against, the enclosure flanks are the machine's own faded paint, and the
+     e-stop is the one saturated thing in the room. */
+  ground: MATS.ground,
+  cover:  MATS.cover,
+  enamel: tint(MATS.paint, 0x8e9aa6),
+  red:   tint(MATS.paint, 0xb03a2e),
   paint: MATS.paint,
   warn:  tint(MATS.paint, 0xc9a227),
   wood:  MATS.wood,
@@ -347,6 +358,23 @@ const box = (w, h, d, mat, x = 0, y = 0, z = 0, parent = scene) => {
   m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
 };
 const cyl = (rt, rb, h, mat, seg = 24) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+
+/* ── CONTACT SHADOWS ──────────────────────────────────────────────────────
+   See `contactShade()` in materials.mjs for why this is a decal and not a
+   shadow. `w` and `d` are the FOOTPRINT plus a quarter either side, because
+   what the quad draws is the falloff around an object, not the object. */
+const CONTACT_MAT = new THREE.MeshBasicMaterial({ map: MATS.shade, transparent: true,
+  opacity: 0.55, depthWrite: false, color: 0xffffff });
+function contactShadow(parent, w, d, x = 0, y = 0, z = 0, opacity = null) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d),
+    opacity === null ? CONTACT_MAT
+      : new THREE.MeshBasicMaterial({ map: MATS.shade, transparent: true,
+          opacity, depthWrite: false, color: 0xffffff }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(x, y, z);
+  m.renderOrder = 2;
+  parent.add(m); return m;
+}
 
 /* ── THE BUILDING ───────────────────────────────────────────────────────── */
 const ROOM = { w: 42, d: 34, h: 6.2 };
@@ -457,13 +485,18 @@ for (const cx of [-ROOM.w / 2 + 0.9, ROOM.w / 2 - 0.9]) {
 const cell = new THREE.Group(); cell.position.set(0, 0, -7); scene.add(cell);
 /* plinth and column — the mass lives at the REAR */
 box(3.2, 0.44, 2.6, M.dark, 0, 0.22, 0, cell);
-box(3.2, 3.2, 0.95, M.paint, 0, 2.2, -0.82, cell);          // column casting
-box(3.2, 0.30, 2.6, M.paint, 0, 3.85, 0, cell);             // top cap
-/* the enclosure: floor, roof, two side walls — leaving a C-shaped cavity */
-box(3.2, 0.10, 2.6, M.interior, 0, 1.02, 0, cell);
+contactShadow(cell, 4.3, 3.7, 0, 0.006, 0, 0.62);          // the machine on the slab
+box(3.2, 3.2, 0.95, M.enamel, 0, 2.2, -0.82, cell);         // column casting
+box(3.2, 0.30, 2.6, M.enamel, 0, 3.85, 0, cell);            // top cap
+/* the enclosure: floor, roof, two side walls — leaving a C-shaped cavity.
+   THE FLOOR IS THE CHIP PAN AND IT IS BLACK. It was machineInterior, the same
+   light paint as the walls, so the cavity had no bottom and the table floated
+   in a grey wash; a real enclosure drains into a dark pan and the table sits in
+   it. This is also the surface the table casts its contact shadow onto. */
+box(3.2, 0.10, 2.6, M.cover, 0, 1.02, 0, cell);
 box(3.2, 0.10, 2.6, M.dark, 0, 3.70, 0, cell);
-box(0.10, 2.7, 2.6, M.paint, -1.55, 2.36, 0, cell);
-box(0.10, 2.7, 2.6, M.paint,  1.55, 2.36, 0, cell);
+box(0.10, 2.7, 2.6, M.enamel, -1.55, 2.36, 0, cell);
+box(0.10, 2.7, 2.6, M.enamel,  1.55, 2.36, 0, cell);
 /* liner panels: the INSIDE faces of the cavity are coolant-stained cast, the
    outside flanks are painted sheet. One box cannot be both, so the inner skin
    is its own thin panel and the machine stops looking like a white cabinet. */
@@ -477,6 +510,66 @@ workLight.position.set(0.9, 3.5, 0.7); cell.add(workLight);
 const workLamp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8),
   new THREE.MeshStandardMaterial({ color: 0xfff6e2, emissive: 0xfff2d8, emissiveIntensity: 3.0 }));
 workLamp.position.copy(workLight.position); cell.add(workLamp);
+/* ══ THE POSITION READOUT — the machine's own numbers, on the machine ══════
+   Both cold viewers, shown only pictures: "it is called a 3-AXIS VMC and there
+   is no axis readout anywhere on it." They are right, and it is the cheapest
+   credibility in the shot: every real machine has one and an operator reads it
+   without thinking.
+
+   WHAT IT MAY SHOW, and this is the whole constraint:
+     X — the bar's cutting edge position on the MACHINE'S OWN SCALE, read
+         straight off `edgeR_cold_mm`, which is the value the kernel cuts with.
+     Z — the depth the tool is programmed to travel, from the job.
+     And the spindle's state, which is `spindle_on` — the same one derivation
+     the pendant reads, never a second one.
+
+   TWO DECIMALS, NOT THREE, AND THAT IS A RESOLUTION DECISION, NOT A STYLE ONE.
+   After a pass `edgeR_cold_mm` holds the position the edge ACTUALLY reached,
+   so at three decimals this panel would be a micrometre-resolution readout of
+   the achieved bore radius — it would replace the gauge, and it would beat it,
+   because the gauge in this game carries a calibration error of its own. The
+   whole finish sequence is played in 2–6 µm nudges; at 2 dp this scale cannot
+   resolve a single one of them, which is exactly as much as a machine-mounted
+   display is entitled to. The achieved size is MEASURED in this shop, and the
+   panel that says otherwise is the customer's CMM.
+
+   What it must NEVER show is the part's size against the drawing. The DRO is
+   what the machine believes; the gauge is what it measured; the CMM is what is
+   true. Those three being different is the game. */
+const droC = canvasFor(512, 256);
+const droTex = new THREE.CanvasTexture(droC);
+const droBezel = box(0.52, 0.28, 0.035, M.dark, 1.02, 2.60, -0.2725, cell);
+const dro = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.225),
+  new THREE.MeshStandardMaterial({ map: droTex, emissiveMap: droTex, emissive: 0xffffff,
+    emissiveIntensity: 0.9, roughness: 0.34, metalness: 0.0 }));
+dro.position.set(1.02, 2.60, -0.2545); cell.add(dro);
+let droKey = '';
+function paintDRO() {
+  const g = GAME; if (!g) return;
+  const x = g.machine.edgeR_cold_mm;
+  const key = `${x === null || x === undefined ? 'null' : x.toFixed(2)}|${g.job.bore_depth_mm}|${g.machine.spindle_on}`;
+  if (key === droKey) return;
+  droKey = key;
+  const ctx = droC.getContext('2d');
+  ctx.fillStyle = '#0a0c0b'; ctx.fillRect(0, 0, 512, 256);
+  const row = (y, k, v, hot = false) => {
+    ctx.font = '400 21px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#6d6a3f';
+    ctx.textAlign = 'left'; ctx.fillText(k, 20, y);
+    ctx.font = '700 44px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = hot ? '#ffb43c' : '#e5a52c'; ctx.textAlign = 'right';
+    ctx.fillText(v, 492, y);
+  };
+  ctx.font = '400 19px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#6d6a3f';
+  ctx.fillText('POSITION  mm', 20, 28);
+  row(84, 'X', x === null || x === undefined ? '- - . - -' : x.toFixed(2), x !== null && x !== undefined);
+  row(148, 'Z', `-${g.job.bore_depth_mm.toFixed(2)}`);
+  ctx.font = '400 21px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#6d6a3f';
+  ctx.textAlign = 'left'; ctx.fillText('S', 20, 218);
+  ctx.font = '700 26px ui-monospace, Menlo, monospace'; ctx.textAlign = 'right';
+  ctx.fillStyle = g.machine.spindle_on ? '#8fd6a4' : '#7c7a55';
+  ctx.fillText(g.machine.spindle_on ? 'RUNNING' : 'STOPPED', 492, 220);
+  droTex.needsUpdate = true;
+}
 /* spindle head, hung from the top of the cavity, nose pointing down */
 const headBlock = box(0.66, 0.52, 0.66, M.paint, 0, 3.28, 0.25, cell);
 const spindle = cyl(0.15, 0.20, 0.52, M.steel); spindle.position.set(0, 2.78, 0.25); cell.add(spindle);
@@ -491,26 +584,57 @@ const barMesh = cyl(0.011, 0.011, 0.16, M.steel); barMesh.position.y = -0.55; sp
    The first version drew the slots as thin dark strips lying ON the table,
    which read as painted lines. Here each slot is recessed below the land that
    surrounds it, so the worklight casts an actual shadow in the groove. */
-const table = box(1.25, 0.14, 0.95, M.iron, 0, 1.14, 0.25, cell);
+const table = box(1.25, 0.095, 0.95, M.ground, 0, 1.1175, 0.25, cell);
+contactShadow(cell, 1.55, 1.25, 0, 1.083, 0.25);           // the table on the pan
 box(0.03, 0.16, 0.95, M.iron, -0.63, 1.14, 0.25, cell);          // front lip
 box(0.03, 0.16, 0.95, M.iron,  0.63, 1.14, 0.25, cell);
-for (let i = 0; i < 3; i++) {
-  const zz = -0.16 + i * 0.32;
-  box(1.22, 0.05, 0.055, M.slot, 0, 1.185, zz + 0.25, cell);     // the groove floor
-  box(1.22, 0.10, 0.018, M.iron, 0, 1.215, zz + 0.25 - 0.032, cell);
-  box(1.22, 0.10, 0.018, M.iron, 0, 1.215, zz + 0.25 + 0.032, cell);
+/* THE T-SLOTS ARE CUT INTO THE TABLE, WHICH MEANS THE TABLE HAS TO BE FOUR
+   LANDS AND NOT ONE BOX. It was one box with the land strips standing 55 mm
+   PROUD of its top face, so the table rendered as a stepped cake with painted
+   lines on it — visible in the first close look at the cavity after this pass.
+   A T-slot table is the other way round: the lands ARE the top surface at a
+   common height, and the grooves between them are cut DOWN. Three grooves, four
+   lands, the lands flush at 1.21 and the groove floors at 1.165, so the
+   worklight shades a real recess. */
+const TABLE_TOP = 1.21, GROOVE_FLOOR = 1.165;
+/* cell-frame centres: the table's own centre is z = 0.25 and its half-depth 0.475 */
+for (const [lz, lw] of [[-0.09, 0.27], [0.16, 0.13], [0.34, 0.13], [0.59, 0.27]]) {
+  box(1.25, TABLE_TOP - 1.07, lw, M.ground, 0, (TABLE_TOP + 1.07) / 2, lz, cell);
+}
+for (const gz of [0.07, 0.25, 0.43]) {
+  box(1.25, 0.012, 0.05, M.cover, 0, GROOVE_FLOOR - 0.006, gz, cell);
 }
 /* telescopic way covers behind the table — the stack of sliding plates that
-   protects the Y axis. Nothing says "machine tool" in one object faster. */
+   protects the Y axis. Nothing says "machine tool" in one object faster, and
+   they are RUBBER-black: this is the dark mass that gives the light cavity its
+   shape, and at M.iron it measured as one more grey box. */
 for (let i = 0; i < 4; i++) {
-  box(1.28 - i * 0.02, 0.035 - i * 0.002, 0.10, M.iron, 0, 1.19 + i * 0.028, -0.30 - i * 0.10, cell);
+  box(1.28 - i * 0.02, 0.035 - i * 0.002, 0.10, M.cover, 0, 1.19 + i * 0.028, -0.30 - i * 0.10, cell);
 }
-box(0.60, 0.05, 0.36, M.steel, -0.05, 1.235, 0.25, cell);   // parallel
-const viseBase = box(0.70, 0.26, 0.46, M.vise, 0, 1.39, 0.25, cell);
-box(0.19, 0.30, 0.46, M.vise, 0.28, 1.52, 0.25, cell);      // moving jaw
-box(0.14, 0.30, 0.46, M.vise, -0.28, 1.52, 0.25, cell);     // fixed jaw
-const screw = cyl(0.032, 0.032, 0.62, M.brass); screw.rotation.z = Math.PI / 2;
-screw.position.set(-0.05, 1.39, 0.25); cell.add(screw);
+box(0.60, 0.05, 0.36, M.ground, -0.05, 1.235, 0.25, cell);   // parallel
+contactShadow(cell, 1.25, 0.66, -0.05, 1.2125, 0.25, 0.45);  // the parallel on the table
+/* ── NO VISE ON THIS TABLE, AND THE PART IS THE REASON ─────────────────────
+   There was one: a 0.70 × 0.26 × 0.46 casting at (0, 1.39, 0.25) with two jaws
+   and a brass screw. The casting this game is about is a Ø124 × 30 housing at
+   (-0.1, 1.30, 0.35) — which is INSIDE that box. So the part, and the bore that
+   the entire game exists to produce, has never been drawn: it has been buried
+   in a vise body since it was built, and nothing said so, because a mesh inside
+   another mesh is invisible in every test and visible the moment you stand at
+   the machine and look for the hole.
+
+   It is also the wrong workholding. This op is bored on PARALLELS WITH STEP
+   CLAMPS — that is what the traveler tells the player and what `FIXTURE` builds
+   — so the vise was a second, contradictory holding story standing in the same
+   place as the real one. The bench already has a vise on it, where a vise
+   belongs. */
+/* THE FEED SCREW MOVED OUT TO WHERE IT CAN BE SEEN. It was the vise's lead
+   screw, turning with the feed and bolted to a vise that no longer exists. A
+   VMC's X ballscrew comes out of the end of the table to the servo, which is
+   the same animation with a true object under it. */
+const screw = cyl(0.032, 0.032, 0.34, M.brass); screw.rotation.z = Math.PI / 2;
+screw.position.set(0.78, 1.14, 0.25); cell.add(screw);
+box(0.18, 0.18, 0.26, M.dark, 1.06, 1.14, 0.25, cell);      // X servo
+box(0.10, 0.10, 0.10, M.brass, 0.93, 1.14, 0.25, cell);     // coupling
 /* coolant: nozzle aimed at the cut, line down the wall, tray, and the pump */
 const nozzleP = new THREE.Group(); nozzleP.position.set(-0.42, 2.05, 0.52); cell.add(nozzleP);
 const nozzleR = cyl(0.013, 0.013, 0.40, M.brass); nozzleR.rotation.z = 0.75; nozzleP.add(nozzleR);
@@ -554,7 +678,10 @@ box(0.56, 0.30, 0.5, M.dark, -2.28, 0.98, 0.45, cell);
 const myPile = new THREE.Mesh(new THREE.ConeGeometry(0.30, 0.16, 12), M.chip);
 myPile.position.set(-2.28, 1.16, 0.45); cell.add(myPile);
 box(0.34, 0.10, 0.02, M.bright, -0.70, 2.62, 1.36, cell);   // nameplate
-box(0.16, 0.20, 0.02, M.warn,  0.95, 1.12, 1.36, cell);     // warning sticker
+/* ON THE BOTTOM RAIL, not floating in front of it. The sticker was 15 mm clear
+   of the rail and taller than it, so from inside the cavity it read as a yellow
+   plank hanging in the air beside the machine. */
+box(0.16, 0.09, 0.02, M.warn,  0.95, 1.08, 1.35, cell);     // warning sticker
 
 /* MOVED FORWARD AND CLEAR OF THE SIDE WALL. The housing is 0.80 wide at x 1.72
    and the enclosure's side wall is a plane at x = 1.55 spanning z -1.3 to 1.3 —
@@ -586,6 +713,14 @@ const pendScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.24),
   new THREE.MeshStandardMaterial({ map: pendScreenTex, emissiveMap: pendScreenTex,
     roughness: 0.32, metalness: 0.0, emissive: 0xffffff, emissiveIntensity: 0.85 }));
 pendScreen.position.set(0, 0.40, 0.117); pend.add(pendScreen);
+/* THE E-STOP, above the screen, where a hand goes without looking. It is the
+   only saturated red in the building and it is not decoration: it is the one
+   control on this panel that is not a key you press with E, because a game
+   about a machine that can destroy five hours of work in one pass should have
+   the button that stops it visible on the machine. */
+box(0.15, 0.15, 0.016, M.warn, 0.29, 0.575, 0.082, pend);
+const estop = cyl(0.052, 0.052, 0.030, M.red, 20);
+estop.rotation.x = Math.PI / 2; estop.position.set(0.29, 0.575, 0.105); pend.add(estop);
 function canvasFor(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 let pendScreenKey = '';
 function paintPendant() {
@@ -650,6 +785,12 @@ function buildPartMesh(dia_mm, depth_mm) {
   return PART.mesh;
 }
 buildPartMesh(36, 30);
+/* THE PART IS HELD 5 mm OFF THE PARALLELS AND NOTHING SAID SO. The parallels
+   top out at 1.295 and the casting sits at 1.300, so it never touched them and
+   met the table with a hard edge and no darkening — the same defect the whole
+   shop had. This quad is parented to the CELL, not to the fixture, because it
+   has to disappear with the part and the fixture retracts on its own schedule. */
+const PART_SHADOW = contactShadow(cell, 0.165, 0.165, -0.1, 1.2965, 0.35, 0.62);
 
 /* ══════════════════════════════════════════════════════════════════════════
    ROUND 9 — THE FLOOR THE PART MOVES ACROSS
@@ -696,15 +837,26 @@ function partObject(parent, x, y, z, dead = false) {
 const FIXTURE = new THREE.Group();
 FIXTURE.position.set(-0.1, 1.30, 0.35); cell.add(FIXTURE);
 const fixtureParallels = new THREE.Group(); FIXTURE.add(fixtureParallels);
-for (const sx of [-0.075, 0.075]) box(0.05, 0.014, 0.09, M.steel, sx, -0.012, 0, fixtureParallels);
-/* the two step clamps, thrown back off the part when it comes out */
-const clampL = box(0.05, 0.02, 0.05, M.brass, -0.12, 0.012, 0, FIXTURE);
-const clampR = box(0.05, 0.02, 0.05, M.brass,  0.12, 0.012, 0, FIXTURE);
+for (const sx of [-0.075, 0.075]) box(0.05, 0.014, 0.09, M.ground, sx, -0.012, 0, fixtureParallels);
+/* THE TWO STEP CLAMPS, and they now have to carry the whole holding story,
+   because the vise this table never should have had is gone (see below). A
+   step clamp presses DOWN on the top face and pulls the part onto the
+   parallels; the stud is what it pivots on and the nut is what you turn. */
+const clampL = box(0.06, 0.022, 0.085, M.steel, -0.128, 0.042, 0, FIXTURE);
+const clampR = box(0.06, 0.022, 0.085, M.steel,  0.128, 0.042, 0, FIXTURE);
+const clampStuds = new THREE.Group(); FIXTURE.add(clampStuds);
+for (const sx of [-0.128, 0.128]) {
+  const st = cyl(0.009, 0.009, 0.06, M.steel, 10); st.position.set(sx, 0.055, 0.028);
+  const nut = cyl(0.016, 0.016, 0.014, M.brass, 6); nut.position.set(sx, 0.088, 0.028);
+  clampStuds.add(st); clampStuds.add(nut);
+}
 fixtureParallels.visible = false; clampL.visible = clampR.visible = false;
+clampStuds.visible = false;
 
 /* ── (2) THE BLANK CRATE — castings come from here, and you can count it ── */
 const CRATE = new THREE.Group(); CRATE.position.set(3.4, 0, -5.3); scene.add(CRATE);
 box(0.86, 0.5, 0.62, M_CRATE, 0, 0.25, 0, CRATE);
+contactShadow(CRATE, 1.05, 0.85, 0, 0.005, 0, 0.55);
 box(0.92, 0.05, 0.68, M.wood, 0, 0.52, 0, CRATE);
 box(0.08, 0.34, 0.62, M_CRATE, -0.42, 0.68, 0, CRATE);
 box(0.08, 0.34, 0.62, M_CRATE,  0.42, 0.68, 0, CRATE);
@@ -727,6 +879,7 @@ box(0.08, 1.05, 0.08, M.dark, -1.0, 0.53,  0.32, RACK);
 box(0.08, 1.05, 0.08, M.dark,  1.0, 0.53,  0.32, RACK);
 box(2.2, 0.05, 0.8, M.steel, 0, 0.55, 0, RACK);       // the shelf
 box(2.2, 0.05, 0.8, M.steel, 0, 1.02, 0, RACK);       // the shelf above
+contactShadow(RACK, 2.5, 1.05, 0, 0.005, 0, 0.6);
 for (const s of [0.55, 1.02]) box(2.2, 0.10, 0.04, M.warn, 0, s + 0.12, -0.42, RACK);
 /* A painted board: the drop the van is on. Speech and paint only, no meter. */
 box(0.70, 0.44, 0.03, new THREE.MeshStandardMaterial({ color: 0x2b3138, roughness: 0.9 }),
@@ -743,6 +896,7 @@ const rackObjects = RACK_SLOT_X.map((x) => {
 const SCRAPBIN = new THREE.Group(); SCRAPBIN.position.set(-2.6, 0, -9.4); scene.add(SCRAPBIN);
 box(0.8, 0.62, 0.62, M.rust, 0, 0.34, 0, SCRAPBIN);
 box(0.86, 0.06, 0.68, M.dark, 0, 0.67, 0, SCRAPBIN);
+contactShadow(SCRAPBIN, 1.1, 0.9, 0, 0.005, 0, 0.5);
 const scrapObjects = [];
 for (let i = 0; i < 4; i++) {
   /* Dead parts go in on their side, at an angle, the way you throw one in. */
@@ -992,6 +1146,7 @@ function racking(x, z, ry, bays) {
       box(W * 0.92, 0.04, D * 0.86, M.steel, (b - bays / 2 + 0.5) * W, lvl + 0.08, 0, g);
     }
   }
+  contactShadow(g, W * bays + 0.7, D + 0.6, 0, 0.005, 0, 0.45);
   return g;
 }
 racking(11.5, 15.2, Math.PI, 2);
@@ -1012,6 +1167,7 @@ for (const [dx, dz, onSide] of drums) {
   if (onSide) { d.rotation.z = Math.PI / 2; d.position.set(dx, 0.30, dz); }
   else { d.position.set(dx, 0.44, dz); }
   d.castShadow = d.receiveShadow = true; scene.add(d);
+  contactShadow(scene, onSide ? 1.2 : 0.85, 0.85, dx, 0.005, dz, 0.55);
   for (const ry of onSide ? [dx - 0.2, dx + 0.2] : [0]) {
     const rib = cyl(0.315, 0.315, 0.04, M.dark, 20);
     if (onSide) { rib.rotation.z = Math.PI / 2; rib.position.set(ry, 0.30, dz); }
@@ -1064,10 +1220,12 @@ box(0.22, 0.22, 0.03, new THREE.MeshStandardMaterial({ color: 0x2f6f3a, roughnes
 
 /* chip conveyor + bins + pallets */
 const bin = (x, z, mat) => { const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
-  box(0.8, 0.62, 0.62, mat, 0, 0.5, 0, g); box(0.86, 0.06, 0.68, M.dark, 0, 0.83, 0, g); return g; };
+  box(0.8, 0.62, 0.62, mat, 0, 0.5, 0, g); box(0.86, 0.06, 0.68, M.dark, 0, 0.83, 0, g);
+  contactShadow(g, 1.1, 0.9, 0, 0.005, 0, 0.5); return g; };
 bin(-4.6, -6.4, M.rust); bin(-5.6, -6.4, M.rust); bin(4.4, -8.6, new THREE.MeshStandardMaterial({ color: 0x3f5a46, roughness: 0.9 }));
 const pallet = (x, z, ry, stack) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
-  for (let i = 0; i < stack; i++) box(1.2, 0.14, 1.0, M.wood, 0, 0.08 + i * 0.15, 0, g); return g; };
+  for (let i = 0; i < stack; i++) box(1.2, 0.14, 1.0, M.wood, 0, 0.08 + i * 0.15, 0, g);
+  contactShadow(g, 1.5, 1.3, 0, 0.004, 0, 0.6); return g; };
 pallet(-8.2, 6.5, 0.4, 4); pallet(6.8, 7.4, -0.2, 3); pallet(12.2, -5.0, 1.1, 5);
 
 /* workbench with the vise you are going to be told to clean */
@@ -1076,6 +1234,7 @@ box(2.6, 0.08, 0.8, M.steel, 0, 0.92, 0, benchtop);
 for (const sx of [-1.15, 1.15]) for (const sz of [-0.3, 0.3]) {
   const leg = box(0.07, 0.9, 0.07, M.dark, sx, 0.45, sz, benchtop);
 }
+contactShadow(benchtop, 2.9, 1.1, 0, 0.005, 0, 0.5);
 const vise = new THREE.Group(); vise.position.set(0.35, 0.96, 0.02); vise.rotation.y = -0.25; benchtop.add(vise);
 box(0.46, 0.18, 0.3, M.vise, 0, 0.09, 0, vise);
 box(0.14, 0.16, 0.3, M.vise, 0.22, 0.19, 0, vise);
@@ -1093,6 +1252,7 @@ cupRing.position.set(-0.62, 0.962, 0.06); benchtop.add(cupRing);
 const toolroom = new THREE.Group(); toolroom.position.set(11.5, 0, -9); scene.add(toolroom);
 box(2.4, 0.06, 0.9, M.steel, 0, 0.9, 0, toolroom);
 for (const sx of [-1.0, 1.0]) box(0.08, 0.88, 0.08, M.dark, sx, 0.44, 0, toolroom);
+contactShadow(toolroom, 2.7, 1.2, 0, 0.005, 0, 0.5);
 /* a rack of bars, and the parallels lying among them */
 for (let i = 0; i < 7; i++) {
   const b = cyl(0.006 + i * 0.0022, 0.006 + i * 0.0022, 0.42, M.steel, 14);
@@ -1254,11 +1414,67 @@ function buildHeldMesh(dia_mm, depth_mm) {
   const geo = new THREE.ExtrudeGeometry(shape, { depth: dep, bevelEnabled: false, curveSegments: 48 });
   geo.rotateX(-Math.PI / 2); geo.translate(0, dep, 0); geo.center();
   const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-    color: 0x8a929a, roughness: 0.34, metalness: 0.86 }));
+    /* THE THIRD TIME ON THIS ONE MATERIAL, so it is written down properly: at
+       metalness 0.86 with the shop's dark roof overhead this part rendered as a
+       BLACK RING in the hand — the exact trap `toolSteel` documents. Held up in
+       your hand it is the brightest object in the frame, and it is bright
+       because of its albedo, not because it is a mirror. */
+    color: 0x9aa3ab, roughness: 0.42, metalness: 0.42 }));
   m.castShadow = false; m.receiveShadow = false;
   return m;
 }
 /** Take the part off the rack and put it in your hands. */
+/* ══ THE HAND ═════════════════════════════════════════════════════════════
+   A cold viewer, shown the held-part still: "there is no hand. The part is
+   floating in mid-air in front of a rack, and the caption says it is in my
+   hands." That was the whole of it. The brief's part rung asks for the part IN
+   YOUR HAND, and the build shipped a part with nothing holding it.
+
+   This is a glove and not a hand on purpose. A modelled human hand at this
+   poly budget reads as a claw, and a claw is worse than nothing — but a dark
+   matte work glove is a SHAPE, it is what a machinist is actually wearing, and
+   it puts the part against something instead of against the sky.
+
+   The glove does NOT rotate with the part: the player turns the casting in
+   their fingers, which is what "turn your hand to look at it" describes, and
+   `heldSpin`/`heldTilt` drive only the part. */
+function buildGlove() {
+  const g = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({ color: 0x1e2228, roughness: 1.0, metalness: 0.0 });
+  const cuff = new THREE.MeshStandardMaterial({ color: 0x2c323a, roughness: 0.95, metalness: 0.05 });
+  const put = (w, h, d, m, x, y, z, rz = 0, rx = 0) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z); b.rotation.set(rx, 0, rz); b.castShadow = false; g.add(b); return b;
+  };
+  /* the part sits at (0, -0.03, -0.42) tilted 0.35 rad toward you, so its NEAR
+     rim is the low one — the fingers come up from below and over that rim.
+     SIZE IS THE WHOLE JOB HERE: the first version was four 58 mm slabs across
+     the near face, which covered the bore and read as a piano, and a forearm
+     the size of a fence post. Only the tips of four fingers should be over the
+     part's edge, and the wrist should leave the frame at the corner. */
+  put(0.150, 0.028, 0.110, skin, 0.010, -0.098, -0.365);          // palm, under the near half
+  put(0.115, 0.022, 0.050, skin, 0.010, -0.080, -0.452);          // the heel of the hand
+  for (let i = 0; i < 4; i++) {
+    const x = -0.046 + i * 0.031;
+    put(0.023, 0.038, 0.024, skin, x, -0.052, -0.320);            // fingers against the rim
+    put(0.023, 0.013, 0.030, skin, x, -0.032, -0.327);            // tips curling onto the face
+  }
+  put(0.046, 0.022, 0.030, skin, -0.080, -0.052, -0.362, -0.34);  // thumb on the near-left
+  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.048, 0.30, 14), skin);
+  wrist.position.set(0.086, -0.250, -0.268); wrist.rotation.set(0.26, 0, -0.40);
+  wrist.castShadow = false; g.add(wrist);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.054, 0.058, 0.055, 14), cuff);
+  band.position.set(0.134, -0.372, -0.220); band.rotation.set(0.26, 0, -0.40); g.add(band);
+  /* THE PART IS HELD UP, AND A PART HELD UP IS LIT. No new number and no new
+     state — the light is the light a person gets by turning the casting toward
+     the machine lamp instead of standing in their own shadow. It sits BELOW the
+     fingers, not in front of them: at the first position it lit the glove to
+     the same value as the casting and the fingers read as part of the part. */
+  const lamp = new THREE.PointLight(0xfff2dc, 0.45, 1.3, 2.0);
+  lamp.position.set(0.02, -0.30, -0.26); g.add(lamp);
+  return g;
+}
+let GLOVE = null;
 function takeInHand(partId) {
   const p = GAME.part_register.find((x) => x.id === partId);
   if (!p) return false;
@@ -1272,6 +1488,8 @@ function takeInHand(partId) {
   HELD_MESH.rotation.set(heldTilt, heldSpin, 0);
   camera.add(HELD_MESH);
   HELD_MESH.position.set(0, -0.03, -0.42);
+  if (!GLOVE) GLOVE = buildGlove();
+  camera.add(GLOVE);
   say('You', `<b>${partId}</b> — a Ø${GAME.job.nominal_mm} bearing housing, ` +
     `Ø${dia.toFixed(4)} mm through the bore. Turn your hand to look at it; ` +
     `<b>E</b> again to put it back on the rack.`);
@@ -1283,6 +1501,7 @@ function putDown() {
   if (!HELD) return;
   const id = HELD; HELD = null;
   if (HELD_MESH) { camera.remove(HELD_MESH); HELD_MESH.geometry.dispose(); HELD_MESH = null; }
+  if (GLOVE) camera.remove(GLOVE);
   syncFloor();
   say('You', `<b>${id}</b> back on the rack.`);
   logLine(`Put <b>${id}</b> back on the rack.`);
@@ -3335,9 +3554,31 @@ function syncFloor() {
   if (!GAME) return { on_table: null, rack: 0, bin: 0 };
   const on = !!GAME.part.mounted;
   const p = on ? G.currentPart(GAME) : null;
+  /* ══ THE PART WAS DRAWN ON THE TABLE FOREVER ═══════════════════════════
+     `PART.mesh.visible` WAS NEVER SET BY ANYTHING, in this build or the last
+     one — the mesh was built, placed at the fixture, and left visible for the
+     whole game. So the casting stayed on the machine table after it had been
+     racked, after it had been shipped, and while it was in the player's hands:
+     one part in two places, which is the same family of defect as a value read
+     from a field that does not exist, and it is invisible to every test because
+     the mesh is exactly where the part was when it was made.
+
+     One fact, one place. The register says where the part is; this line draws it
+     there and nowhere else. */
+  if (PART.mesh) PART.mesh.visible = on;
   /* (1) the fixture: parallels and clamps appear only when a casting is clamped */
   fixtureParallels.visible = on;
   clampL.visible = clampR.visible = on;
+  clampStuds.visible = on;
+  PART_SHADOW.visible = on;
+  /* THE CLAMPS FOLLOW THE PART'S HEIGHT. The casting is as deep as the job's
+     bore (30 mm on J1, 55 on J2) and the clamps were bolted at one fixed height,
+     so on the deeper job they would have sat at the casting's mid-height with
+     their tops buried inside it. Same one-fact rule as everything else here:
+     the clamps read the job, they do not carry a second copy of its depth. */
+  const lift = (GAME.job.bore_depth_mm / 1000) - 0.030;
+  clampL.position.y = clampR.position.y = 0.042 + lift;
+  clampStuds.position.y = lift;
   /* (2) the crate: count only, never size */
   const { shown } = crateMeta();
   crateParts.forEach((o, i) => { o.visible = i < shown; });
@@ -3806,6 +4047,7 @@ function frame(now) {
     for (const l of LAMPS) l.material.emissiveIntensity = dl.shop_lights ? 2.4 : 0.06;
     /* AND THE PENDANT'S OWN SCREEN, repainted only when something on it changes. */
     paintPendant();
+    paintDRO();
     /* The wall clock and the corner of the screen read the SAME minute. */
     if (CLOCK) {
       const mins = ((clocks.world_min % 720) + 720) % 720;
@@ -4114,6 +4356,11 @@ window.INDUSTRIA = {
       parallel_bars: !!fixtureParallels.visible,
       part_mesh_in_cell: !!(PART.mesh && PART.mesh.parent === cell),
       part_mesh_visible: !!(PART.mesh && PART.mesh.visible),
+      /* Both are reported so a gate can assert they AGREE. `syncFloor` draws the
+         part from `mounted`, so a divergence between these two is a renderer
+         that has stopped reading the register — which is the defect that kept
+         the casting on the table for an entire shipped build. */
+      part_mounted: !!GAME.part.mounted,
       van_visible: !!VAN.visible, van_z: +VAN.position.z.toFixed(2),
     };
   },

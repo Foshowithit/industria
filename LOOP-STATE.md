@@ -188,6 +188,20 @@ axis readout on a machine called "3-AXIS"; no contact shadows under anything; th
 machine reads as a pile of grey boxes when you stand at it; and *"one honest close-up
 of the work itself — the game is about boring a hole and I never see a bored hole"*.
 
+### ONE MORE RULE FOR THE SCREEN — 2026-09-17
+
+**A MACHINE-MOUNTED READOUT MAY NOT RESOLVE FINER THAN THE MACHINE'S OWN SCALE.**
+The position display added to the machine this run reads `X` off `edgeR_cold_mm`,
+which after a pass is the position the edge ACTUALLY reached. At three decimals
+that is a micrometre readout of the achieved bore radius — it would replace the
+gauge, and it would beat it, because the gauge carries a calibration error of its
+own. It shows two decimals. The finish sequence is played in 2–6 µm nudges and
+this display cannot resolve one of them, which is exactly as much as a display
+bolted to a machine is entitled to. **The achieved size is MEASURED in this shop.**
+Corollary, and the reason this is written down rather than left in a comment:
+**the R1 leakwatch watches DOM text, so a number drawn on a canvas is invisible to
+it.** Anything the build draws into a texture is on its own honour.
+
 ### WHAT A TURN SHOULD LOOK LIKE
 
 1. `git pull --ff-only`; run the suites.
@@ -297,6 +311,21 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-17** — THE PRESENTATION WAVE (loop run). Every item the cold viewers
+  named, closed, and two defects found by looking that no test could see:
+  **the casting was buried inside a vise body** (a Ø124 part at the same place as
+  a 0.70 × 0.26 × 0.46 box — the bore the game exists to produce had never been
+  drawn), and **`PART.mesh.visible` was set by nothing**, so the part stayed on
+  the machine table after it had been racked and while it was in your hand.
+  Also: contact shadows across the machine cell and the shop floor; the cavity
+  repainted to a light machine-white over a black chip pan with black way covers;
+  the T-slot table built as four lands with three real grooves (the lands stood
+  55 mm proud of the top face and read as a stepped cake); a brass X ballscrew
+  and servo where the vise's lead screw used to be; an e-stop; a position display
+  on the wall reading X, Z and the spindle's state; and a dark work glove under
+  the part in the held view. Suites green (76/125/69/70+1), bundle 9 modules.
+  Still open: **run a cold viewer again on the new stills** — they are in
+  `industria-visual-pass/after-3/` and have not been seen by anyone but me.
 - **2026-09-17** — A6 finished, then a FIRST-IMPRESSION PASS (loop run). Two cold
   viewers, given only the stills: both inferred the core loop unprompted, both named
   the prediction gate, one verified the H6 band. Both named the same two defects —

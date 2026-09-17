@@ -351,10 +351,16 @@ export function machineInterior(size = 512, seed = 19) {
   const c = paint(size, (x, y, s) => {
     const a = fbm(x / s * 16, y / s * 16, n, 4);
     const v = y / s;
-    let g = 132 + (a - 0.5) * 26;
+    /* ALBEDO 176, NOT 132, AND COOL, NOT WARM. At 132 with a warm bias this
+       surface measured the same VALUE as the cast iron table standing in front
+       of it, which is one of the reasons the cavity read as a pile of grey
+       boxes: the eye had one grey and no edges. A machine tool's cavity is
+       painted light on purpose — it is a light box that happens to cut metal —
+       and the paint is neutral-cool, not the beige this was. */
+    let g = 176 + (a - 0.5) * 26;
     // the bottom third is where the coolant sits and the swarf collects
-    g *= 1 - 0.28 * Math.max(0, v - 0.5) / 0.5;
-    return [g * 0.99, g * 0.975, g * 0.94];
+    g *= 1 - 0.22 * Math.max(0, v - 0.5) / 0.5;
+    return [g * 0.985, g * 0.99, g * 1.0];
   });
   const ctx = c.getContext('2d');
   /* Coolant running down — the reason this texture exists. But a machine has a
@@ -412,6 +418,103 @@ export function castIron(size = 256, seed = 29) {
      under a worklight at half a metre the machine table blew out to white —
      cast iron is a dull grey that eats light, not a mirror. */
   return finish(c, size, { repeat: 1, rough: 0.78, metal: 0.28, colour: 0xffffff });
+}
+
+/** GROUND steel — the table's T-slot lands, the jaws, the parallels.
+ *  The difference between this and castIron is not decoration. A machine
+ *  table is ground flat on a blanchard: it is brighter than the casting it
+ *  sits on, and its sheen is directional, which is how you know at a glance
+ *  which face the part is measured from. Nothing else in the cavity says
+ *  "this surface is the datum", and the whole game is about a datum. */
+export function groundSteel(size = 256, seed = 43) {
+  const rnd = mulberry32(seed);
+  const n = noiseField(64, rnd);
+  const c = paint(size, (x, y, s) => {
+    // fine grinding striations, one axis only — this is a ground face, not brushed
+    const streak = fbm(x / s * 90, y / s * 2.5, n, 3);
+    const g = 182 + (streak - 0.5) * 22;
+    return [g * 0.99, g, g * 1.015];
+  });
+  const ctx = c.getContext('2d');
+  strokes(c, size, rnd, { n: 34, len: size * 0.9, width: 0.6, colour: '#cfd6db', alpha: 0.18 });
+  strokes(c, size, rnd, { n: 22, len: size * 0.9, width: 0.5, colour: '#6f757b', alpha: 0.14 });
+  /* A working table carries a witness grid of clamp marks and the odd gouge
+     where somebody ran a cutter into it. Twelve marks, not a pattern. */
+  for (let i = 0; i < 12; i++) {
+    ctx.globalAlpha = 0.10 + rnd() * 0.22;
+    ctx.fillStyle = rnd() > 0.5 ? '#5c6166' : '#d3d8dc';
+    const w = 3 + rnd() * 16;
+    ctx.fillRect(rnd() * size, rnd() * size, w, 0.8 + rnd() * 1.6);
+  }
+  ctx.globalAlpha = 1;
+  speckle(c, size, rnd, 8, true);
+  /* METALNESS 0.22, NOT 0.62. A ground table IS shiny and the first version of
+     this was metallic, and it rendered BLACK: metalness swaps albedo for
+     reflection, and the only thing above this table is a dark roof, so there
+     was nothing for it to be bright with. That is the same trap `toolSteel`
+     documents one material up, and I walked into it again. A ground surface is
+     read as bright by its ALBEDO at this scale, not by its sheen. */
+  return finish(c, size, { repeat: 1, rough: 0.34, metal: 0.22, colour: 0xffffff });
+}
+
+/** Black rubber — way covers, wiper skirts, the chip pan, cable trunking.
+ *  Almost no light comes off this, which is the entire job it does here:
+ *  it is the dark that the light cavity is measured against. */
+export function rubberCover(size = 256, seed = 47) {
+  const rnd = mulberry32(seed);
+  const n = noiseField(30, rnd);
+  const c = paint(size, (x, y, s) => {
+    const a = fbm(x / s * 30, y / s * 30, n, 3);
+    const g = 34 + (a - 0.5) * 14;
+    return [g * 0.98, g, g * 1.03];
+  });
+  const ctx = c.getContext('2d');
+  /* the accordion creases of a telescopic cover, unevenly spaced */
+  for (let i = 0; i < 9; i++) {
+    const y = (i / 9) * size + (rnd() - 0.5) * 6;
+    ctx.globalAlpha = 0.22 + rnd() * 0.18;
+    ctx.fillStyle = '#0d0f11'; ctx.fillRect(0, y, size, 1.4 + rnd() * 1.4);
+    ctx.fillStyle = '#5a6066'; ctx.fillRect(0, y + 2.4, size, 0.7);
+  }
+  ctx.globalAlpha = 1;
+  speckle(c, size, rnd, 16, false);
+  return finish(c, size, { repeat: 1, rough: 0.92, metal: 0.04, colour: 0xffffff });
+}
+
+/** THE CONTACT SHADE — a soft dark quad for where an object meets a surface.
+ *
+ *  `renderer.shadowMap` is on and the sun casts, but the sun comes through the
+ *  roof at an angle and the work light is a POINT light, which casts nothing.
+ *  So every object in the cavity met its table with a hard edge and no
+ *  darkening under it, and both cold viewers named the result: the shop read as
+ *  objects standing in a room rather than sitting on things.
+ *
+ *  This is the cheapest honest fix: a blurred rectangle of black with an alpha
+ *  ramp, laid flat 2 mm above the surface it darkens. It is not a shadow — it
+ *  does not move, and it does not know where the light is — so it is used ONLY
+ *  for the tight occlusion at a contact, where any light in the room would
+ *  produce darkening anyway. Nothing here is allowed to stand in for a cast
+ *  shadow in open floor.
+ */
+export function contactShade(size = 128) {
+  const c = canvas(size);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    // Chebyshev distance to the edge, so the falloff is a rounded rectangle
+    const u = Math.abs((x + 0.5) / size * 2 - 1), v = Math.abs((y + 0.5) / size * 2 - 1);
+    const d = Math.max(u, v);
+    // solid out to 0.45 of the half-width, then a smooth ramp to nothing
+    const t = Math.min(1, Math.max(0, (d - 0.45) / 0.55));
+    const a = (1 - t * t * (3 - 2 * t)) * 0.92;
+    const i = (y * size + x) * 4;
+    img.data[i] = 0; img.data[i + 1] = 0; img.data[i + 2] = 0;
+    img.data[i + 3] = Math.round(a * 255);
+  }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 /** Bench top: hardwood, scarred, oiled, with a hundred small cuts in it. */
@@ -562,6 +665,9 @@ export function shopMaterials() {
     interior:  machineInterior(512, 19),
     steel:     toolSteel(256, 23),
     iron:      castIron(256, 29),
+    ground:    groundSteel(256, 43),
+    cover:     rubberCover(256, 47),
+    shade:     contactShade(128),
     bench:     benchTop(256, 31),
     wood:      crateWood(256, 37),
     rust:      rustSteel(256, 41),
