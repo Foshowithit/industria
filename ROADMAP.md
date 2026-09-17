@@ -70,7 +70,7 @@ the prediction gate, the part lifecycle (crate → table → rack or bin → van
 Walk → clean the vise → find the parallels → measure → dial → predict → cut →
 discover the dial lies → inspect → ship or scrap.
 
-### L1 — PRESENTATION (in progress)
+### L1 — PRESENTATION (mostly done 2026-09-17)
 The world has to look like a place before anything inside it can feel real.
 
 - **Done 2026-09-17:** `materials.mjs` — every surface drawn in-page. Concrete
@@ -80,14 +80,21 @@ The world has to look like a place before anything inside it can feel real.
   names. Plus `shopEnvironment()` PMREM (metal with no environment reflects
   nothing — that was the real reason the old build looked like a greybox), fog,
   bench-height practicals, portal-frame steel.
-- **Remaining:** shop clutter and props (pallets, a broom, drums, a rag, a
-  clipboard, cable runs, more swarf); a better machine exterior (currently a
-  box with a door); the sound pass (§13 — a spindle under load must not sound
-  like a spindle idling).
+- **Done 2026-09-17 (second pass):** the floor dressed and the machines given a
+  machine-tool silhouette. A third running machine, the compressor, the radio,
+  pallet racking, drums, a wall clock whose hands are meshes driven from
+  `clocks.world_min` (the same minute the HUD reads — a printed clock face would
+  be a second copy of the time), notices on the walls, a fire point, an exit
+  sign. All four VMCs share `vmcDressing()`: feet, chip conveyor, control box,
+  nameplate, warning sticker, belt line.
+- **Remaining:** the sound pass (§13 — a spindle under load must not sound like
+  a spindle idling; the compressor, the radio and the third machine now have
+  objects but nobody has listened to them); more swarf and cable runs; the
+  office window / any glazing.
 - **Rule:** no fps/solver telemetry on the shop surfaces. The HUD is diegetic
   or it is not there.
 
-### L2 — THE SHIFT (next, and it is what makes this a game)
+### L2 — THE SHIFT (done 2026-09-17)
 Right now the player learns exactly one thing and is then finished. `JOBS` in
 `game.mjs` **already contains two fully-specified jobs** — J1 (Ø40 H6, nothing
 the machine does is ever refused) and J2 (Ø80 IT7, a 4 mm roughing cut where
@@ -107,13 +114,20 @@ its physics measured in `tools/envelope-sweep.mjs`; it is not a placeholder.
 **Done when:** a player can bore J1, ship or scrap it, walk to the board, take
 J2, and feel the machine push back for the first time.
 
-### L3 — DIEGETIC CONTROLS
-The machine is currently operated through ~13 key bindings and an on-screen
-legend. §48 forbids this and the build's own gate report counted the crutches
-and called them its largest remaining debt. Replace with a pendant: buttons in
-3D on the machine, read from the same kernel values, pressed with the mouse or
-the crosshair. Delete the key legend. Keys stay as a shortcut for people who
-already know them — never as the only way in.
+### L3 — DIEGETIC CONTROLS (done 2026-09-17)
+Built. Twelve keys on a printed membrane panel on the machine's own pendant
+housing: DIAL −/+, PRED −/+, TOUCH OFF, WARM UP, FEED −/+, ROUGH, CUT, MEASURE,
+UNLOAD. Aim at a key, the crosshair names it, press E. The key legend is gone
+from the panel. The keyboard shortcuts remain for anyone who knows them.
+
+**Why aiming rather than clicking, recorded once:** the page holds pointer lock,
+and while it does a click is consumed by the lock and never reaches a DOM
+overlay. An on-screen control surface cannot work here. This was measured, and
+it is why the earlier attempt at one did not.
+
+**Still open in L3:** the machine's HTML panel is still a HUD screen rather than
+a screen modelled on the machine. That is the next honest step and it is not
+urgent — the controls are diegetic now, which was the §48 debt.
 
 ### L4 — DEPTH (the ladder §73)
 Walk up to a machine and its HMI is what you read; the part in your hand;
