@@ -3444,6 +3444,17 @@ function frame(now) {
           force_N: other3Chatter ? 120 : 260,
           verdict: other3Chatter ? 'CHATTER' : 'CUTS CLEAN' }, GAME),
         { chatter_Hz: 760 });
+      /* THE THIRD MACHINE HAD NO VOICE. `AUD_MACHINES` has carried an entry for
+         it since it was added — `OTHER3: 'vmc4'` — and this loop never drove it,
+         so the machine was drawn, lit, cutting and silent while the other two
+         made their noise. A declared-but-undriven voice is the same defect as a
+         declared-but-unread field, one layer out. */
+      driveMachineVoice('vmc4', OTHER3.g.position,
+        acousticsFrom({ n_rpm: GAME.mach.n_max * 0.44, power_kW: 4.1,
+          bite_effective_um: 620, force_N: 240, verdict: 'CUTS CLEAN' }, GAME),
+        { chatter_Hz: 900 });
+      /* AND THE COMPRESSOR, which runs all day and belongs to nobody. */
+      driveMachineVoice('comp', COMP.position, W.compressorAcoustics(), { gain: 1 });
     }
     /* footsteps — you are a body, and a body makes noise (§50, §51) */
     if (mv.lengthSq()) {

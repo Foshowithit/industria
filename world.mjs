@@ -130,6 +130,43 @@ export function idleAcoustics(machine, { rpmFrac = 0, spindle_on = false } = {})
   };
 }
 
+/**
+ * A RECIPROCATING COMPRESSOR — the one machine in the building that belongs to
+ * nobody and never stops. The arrival text has promised it since it was
+ * written ("three spindles already running, a compressor, and somebody's
+ * radio") and until now it has been a silent object on the west wall.
+ *
+ * Its signature is two things at once and they are what make it recognisable:
+ *
+ *   · A BELT-DRIVEN PUMP, much slower than its motor. A 4-pole motor turns at
+ *     about 1450 rpm, but the pump is geared down by the belts to a few hundred
+ *     — and the CHUG you hear is the pump, not the motor, which is why a
+ *     compressor thumps at single-digit hertz while its motor hums at 24.
+ *   · CONSTANT SPEED. It is either on or it is not; nothing about it varies with
+ *     what the shop is doing, which is exactly why it is a useful thing to hear:
+ *     it is the floor of the shop's sound.
+ */
+export function compressorAcoustics({ running = true, motor_rpm = 1455, pump_rpm = 420, cylinders = 2 } = {}) {
+  if (!running) {
+    return { state: 'STOPPED', spindle_Hz: 0, chug_Hz: 0, chug_gain: 0,
+             hum_gain: 0, air_gain: 0, label: 'compressor stopped' };
+  }
+  return {
+    state: 'COMPRESSOR',
+    motor_rpm, pump_rpm,
+    /* `rpm` IS PART OF THE CONTRACT. Every acoustics object carries it because
+       the voice reads it for the coolant pump, and omitting it here threw NaN
+       into a WebAudio parameter and took the whole mix down — see the guard in
+       `setMachine`. Spelled out because a contract nobody wrote down is a
+       contract that gets broken by the next person. */
+    rpm: motor_rpm,
+    spindle_Hz: motor_rpm / 60,                        // 24.2 Hz — the motor
+    chug_Hz: (pump_rpm / 60) * Math.max(1, cylinders), // 14 Hz — the pump
+    chug_gain: 0.30, hum_gain: 0.26, air_gain: 0.16,
+    label: 'the compressor, running',
+  };
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    THE CHIP — §73's last rung, and the only evidence you can hold
    ══════════════════════════════════════════════════════════════════════════

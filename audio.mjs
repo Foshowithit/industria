@@ -78,6 +78,9 @@ export const delayFor = (distance_m) => Math.max(0, distance_m) / SPEED_OF_SOUND
 export function createAudio({ busy = false, context = null } = {}) {
   let ctx = null;
   let master = null;
+  /* Every acoustics field this function reads must exist; a missing one used to
+     take the graph down. See the guard in `setMachine`. */
+  let badParams = 0, lastBadParam = null;
   const voices = new Map();          // id -> voice
   let started = false;
 
@@ -337,7 +340,24 @@ export function createAudio({ busy = false, context = null } = {}) {
 
     const t = ctx.currentTime;
     const tau = 0.06;                                  // smoothing: no zipper noise
-    const at = (param, value) => param.setTargetAtTime(value, t, tau);
+
+    /* ══ A NON-FINITE VALUE KILLS THE WHOLE AUDIO GRAPH ═════════════════════
+       `setTargetAtTime(NaN)` throws, the throw aborts `setMachine`, and the
+       caller is the frame loop — so one undefined field in one acoustics object
+       takes the entire mix down, silently, mid-frame. That is not hypothetical:
+       adding a compressor whose acoustics object omitted `rpm` did exactly this,
+       and the symptom was a probe that showed "rendering…" forever with no error
+       anywhere, because an uncaught throw in a module aborts the module.
+
+       SO A BAD PARAMETER IS COUNTED AND SKIPPED rather than thrown. Loud would
+       be better than silent, but neither is as good as survivable: this is a
+       realtime graph and losing one parameter beats losing the shop. The count is
+       exposed so a probe can assert it is zero, which turns the failure from
+       invisible into a number. */
+    const at = (param, value) => {
+      if (!Number.isFinite(value)) { badParams++; lastBadParam = { id, value }; return; }
+      param.setTargetAtTime(value, t, tau);
+    };
 
     const gain = (opts.gain ?? 1) * attenuation(opts.distance_m ?? 4, opts);
     at(v.pan.pan, clamp(opts.pan ?? 0, -1, 1));
@@ -346,6 +366,8 @@ export function createAudio({ busy = false, context = null } = {}) {
 
     /* --- spindle tone: present whenever the spindle turns, cutting or not --- */
     const hz = a?.spindle_Hz ?? 0;
+    /* A compressor's motor counts as turning: it has a speed, it has bearings,
+       and a machine that hums at 24 Hz between chugs is the whole point of it. */
     const on = hz > 0;
     at(v.tone1.frequency, clamp(hz, 20, 12000));
     at(v.tone2.frequency, clamp(hz * 2, 40, 16000));
@@ -380,6 +402,25 @@ export function createAudio({ busy = false, context = null } = {}) {
       at(v.chatBP.frequency, clamp(a.squeal_Hz ?? 1900, 400, 8000));
       at(v.chatOsc.frequency, clamp(a.squeal_Hz ?? 1900, 400, 8000));
       at(v.chatG.gain, 0.10 * gain);
+    } else if (state === 'COMPRESSOR') {
+      /* ── THE COMPRESSOR: a pump, a motor, and an intake ────────────────────
+         It reuses the same graph a cut does, because a reciprocating pump IS an
+         impulse train — a chug is the same shape of excitation as a tooth
+         passing, an order of magnitude slower and against a much lower
+         resonant load. That is a real saving and a true one: the reason a
+         compressor thumps and a boring bar rings is the same reason, which is
+         what the load it is driving does with the impulse.
+
+         The motor hum rides on tone1/tone2 and is deliberately present: the
+         machine is not silent between chugs. */
+      at(v.cutOsc.frequency, clamp(a.chug_Hz ?? 14, 4, 60));
+      at(v.cutLP.frequency, clamp(90 + (a.chug_Hz ?? 14) * 8, 120, 900));
+      at(v.cutBP.frequency, clamp(60 + (a.chug_Hz ?? 14) * 3, 60, 900));
+      at(v.cutG.gain, (a.chug_gain ?? 0.30) * gain);
+      at(v.rubG.gain, (a.air_gain ?? 0.16) * gain);
+      at(v.rubHP.frequency, 420);                    // intake and belt, not a squeal
+      at(v.chatG.gain, 0);
+      at(v.whineG.gain, (a.hum_gain ?? 0.26) * 0.35 * gain);
     } else {
       at(v.cutG.gain, 0);
       at(v.rubG.gain, 0);
@@ -398,7 +439,10 @@ export function createAudio({ busy = false, context = null } = {}) {
     }
 
     at(v.coolG.gain, opts.coolant ? 0.16 * gain : 0);
-    at(v.coolPump.frequency, 78 + 26 * clamp(a.rpm / 6000, 0, 1));
+    /* `a.rpm` IS READ UNCONDITIONALLY HERE and an acoustics object that does not
+       carry it yields NaN — which is how the compressor addition broke the mix.
+       Defaulted now, so a caller cannot crash the shop by omitting a field. */
+    at(v.coolPump.frequency, 78 + 26 * clamp((a.rpm ?? 0) / 6000, 0, 1));
     at(v.airG.gain, opts.air ? 0.10 * gain : 0);
 
     /* --- blow-off bursts: topped up by the caller, not a timer here --- */
@@ -560,6 +604,10 @@ export function createAudio({ busy = false, context = null } = {}) {
     start, get ready() { return started; },
     get context() { return ctx; },
     setMachine, machineVoice, setListener,
+    /* How many acoustics values this graph has had to refuse. Zero is the only
+       acceptable reading; a probe asserts it. */
+    get bad_params() { return badParams; },
+    get last_bad_param() { return lastBadParam; },
     spindleStart, cutEnter, chipFall, footstep, clack, controlBeep, airBurst: (id, o) => setMachine(id, null, { ...o, air_burst: true }),
     setMuted(m) { if (master) master.gain.setTargetAtTime(m ? 0 : 0.9, ctx.currentTime, 0.05); },
     /* §13 asks for a damped but PRESENT bed. Also lets the world duck the shop

@@ -10,6 +10,22 @@
   h1{font-size:14px;letter-spacing:.14em;color:var(--dim);font-weight:500;margin:0 0 14px}
 </style>
 <div id="out">rendering…</div>
+<!-- A LISTENER IN A CLASSIC SCRIPT, BEFORE THE MODULE. An uncaught throw inside
+     a module fires `error` on the window, but a listener registered INSIDE that
+     module is registered too late to hear its own module fail — which is why
+     this probe once sat on "rendering…" with nothing reported anywhere. -->
+<script>
+  window.__probeErrors = [];
+  window.addEventListener('error', (e) => {
+    window.__probeErrors.push(String(e.message) + ' @ ' + (e.filename || '?').split('/').pop() + ':' + e.lineno);
+    document.getElementById('out').innerHTML =
+      'THE PROBE THREW\n\n' + window.__probeErrors.join('\n');
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    window.__probeErrors.push('unhandled rejection: ' + String(e.reason && (e.reason.message || e.reason)));
+    document.getElementById('out').innerHTML = 'THE PROBE REJECTED\n\n' + window.__probeErrors.join('\n');
+  });
+</script>
 <script type="module">
 /* ══ THE AUDIO PROBE ═══════════════════════════════════════════════════════
    §13 asks for sound as a SYSTEM — a spindle under load must not sound like a
@@ -34,15 +50,38 @@
    This is not a substitute for ears. It cannot say whether the shop sounds
    GOOD. It can say whether the model does what it claims, which is the half of
    the question a machine can answer. */
+window.__probeAlive = 'imports-reached';
 import { createAudio } from '../audio.mjs';
 import * as W from '../world.mjs';
 import * as K from '../kernel.mjs';
+window.__probeModules = { comp: typeof W.compressorAcoustics, audio: typeof createAudio };
 
 const out = document.getElementById('out');
+/* A PROBE THAT DIES SILENTLY IS WORSE THAN NO PROBE — and this one did: it sat
+   on "rendering…" forever with nothing reported anywhere.
+
+   AND THE FIRST ATTEMPT AT THIS FIX CAUSED THE NEXT ONE. This handler was
+   declared `const fail` while the results loop below counts failures with
+   `let fail = 0` — a duplicate declaration at module scope is a SyntaxError, so
+   the whole module never ran, and the probe's own error reporting never got the
+   chance to report the probe's own error. It is `probeFailed` now.
+
+   The lesson is about the verification rather than the name: the probe's syntax
+   was checked ONCE, early, and then it was edited several times without being
+   checked again — so the check that would have caught a module-level SyntaxError
+   in one second was not run when it mattered. */
+const probeFailed = (e) => {
+  const msg = String(e && (e.stack || e.message) || e);
+  out.innerHTML = '<span class="bad">THE PROBE THREW</span>\n\n' + msg;
+  window.__audioProbe = { ok: false, error: msg, checks: [] };
+};
+addEventListener('error', (e) => probeFailed(e.error || e.message));
+addEventListener('unhandledrejection', (e) => probeFailed(e.reason));
 const rows = [];
 const say = (html) => { rows.push(html); out.innerHTML = rows.join('\n'); };
 
 const SR = 44100, SECONDS = 2.0;
+let badParams = 0;
 
 /** Energy at one frequency, via Goertzel. Enough to fingerprint a scene. */
 function toneEnergy(x, f, sr = SR) {
@@ -60,6 +99,11 @@ async function render(label, build) {
   AUD.start();
   const claimed = build(AUD);
   const buf = await oc.startRendering();
+  /* A MISSING ACOUSTICS FIELD IS NOW COUNTED RATHER THAN FATAL — see the guard
+     in `setMachine`. This is where that count is read: adding a compressor whose
+     acoustics object omitted `rpm` put NaN into a WebAudio parameter and took the
+     whole mix down, and the only symptom was this probe showing nothing. */
+  badParams += AUD.bad_params;
   const all = buf.getChannelData(0);
   /* The last second only: every gain in the graph slews at tau = 60 ms, so the
      first second is the graph arriving, not the scene. */
@@ -71,6 +115,12 @@ async function render(label, build) {
     sp1: toneEnergy(x, f.spindle_Hz),
     sp2: toneEnergy(x, f.spindle_Hz * 2),
     squeal: toneEnergy(x, 1900),
+    /* A FIXED PUMP-RATE BIN, measured in EVERY scene, so the compressor's chug
+       can be compared against machines that have not got one. Comparing a
+       chug line against a motor line is comparing two frequencies through two
+       different filters and says nothing — which is the third time in this file
+       that a measurement error looked like an audio failure. */
+    chug: toneEnergy(x, 14),
     high: toneEnergy(x, 6000),
     state: claimed.state,
   };
@@ -133,6 +183,13 @@ const scenes = [
     return { probe: { tooth_Hz: (N / 60) * 3, spindle_Hz: N / 60 }, state: a.state,
       claim: 'the tooth line at 3x the rev rate' };
   }],
+  ['the compressor', (AUD) => {
+    const c = W.compressorAcoustics();
+    AUD.setMachine('comp', c, { distance_m: 9, gain: 1 });
+    return { probe: { tooth_Hz: c.chug_Hz, spindle_Hz: c.spindle_Hz }, state: c.state,
+      claim: 'a pump chug at ' + c.chug_Hz.toFixed(0) + ' Hz under a motor at ' +
+             c.spindle_Hz.toFixed(0) + ' Hz' };
+  }],
   ['the bar chattering', (AUD) => {
     const a = { ...chatA, rpm: N, spindle_Hz: N / 60, tooth_Hz: N / 60 };
     AUD.setMachine('mine', a, { distance_m: 2, gain: 1 });
@@ -154,16 +211,18 @@ const scenes = [
 ];
 
 const R = {};
-for (const [label, build] of scenes) R[label] = await render(label, build);
+try {
+  for (const [label, build] of scenes) R[label] = await render(label, build);
+} catch (e) { fail(e); throw e; }
 
 /* ── the table ────────────────────────────────────────────────────────────── */
 const F = (v) => v.toExponential(2);
 say('<h1>INDUSTRIA · AUDIO PROBE · offline render, ' + SR + ' Hz, ' + SECONDS + ' s</h1>');
-say('scene                          rms      @tooth     @1x        @2x        @1900      @6k       claim');
+say('scene                          rms      @tooth     @1x        @2x        @1900      @14Hz      claim');
 for (const [label] of scenes) {
   const r = R[label];
   say(label.padEnd(30) + ' ' + F(r.rms) + '  ' + F(r.tooth) + '  ' + F(r.sp1) + '  ' +
-      F(r.sp2) + '  ' + F(r.squeal) + '  ' + F(r.high) + '  ' +
+      F(r.sp2) + '  ' + F(r.squeal) + '  ' + F(r.chug) + '  ' +
       '<span class="dim">' + r.claim + '</span>');
 }
 
@@ -187,6 +246,7 @@ for (const [label] of scenes.slice(1)) {
       '   @tooth x' + (r.tooth / Math.max(ROOM.tooth, 1e-12)).toFixed(2));
 }
 
+const CO = R['the compressor'];
 const checks = [];
 const c = (id, claim, pass, detail) => checks.push({ id, claim, pass: !!pass, detail });
 
@@ -208,6 +268,14 @@ c('A7', 'distance makes it quieter',
   N14.rms < N1.rms * 0.75, `14 m ${F(N14.rms)} vs 1 m ${F(N1.rms)}`);
 c('A0', 'a machine is AUDIBLE over the room bed at all',
   CU.rms > ROOM.rms * 1.5, `cut ${F(CU.rms)} vs room ${F(ROOM.rms)}`);
+/* ── the compressor, and what makes it recognisable rather than just loud ── */
+c('A10', 'the compressor is audible at 9 m',
+  CO.rms > ROOM.rms * 1.5, `${F(CO.rms)} vs room ${F(ROOM.rms)}`);
+c('A11', 'it chugs — it has a pump-rate line no idle spindle has',
+  CO.chug > ID.chug * 3, `at 14 Hz: compressor ${F(CO.chug)} vs idle ${F(ID.chug)}`);
+c('A12', 'and it is a different sound from a cut at the same distance',
+  Math.abs(CO.tooth - CU.tooth) > 1e-6 && Math.abs(CO.rms - CU.rms) > 1e-6,
+  `compressor ${F(CO.rms)} vs cut ${F(CU.rms)}`);
 
 say('');
 let pass = 0, fail = 0;
@@ -241,7 +309,9 @@ say('<span class="warn">NO HUMAN HAS LISTENED TO THIS.</span> ' +
   for (let i = 0; i < x4.length; i++) { const v = Math.abs(x4[i]); if (v > peak) peak = v; }
   const one = R['a clean cut at the same speed'];
   const rms4 = Math.sqrt(x4.reduce((s, v) => s + v * v, 0) / x4.length);
-  c('A8', 'four machines at once do not clip',
+  c('A13', 'no acoustics value in any scene was refused by the graph',
+  badParams === 0, `${badParams} refused`);
+c('A8', 'four machines at once do not clip',
     peak < 0.99, `peak ${peak.toFixed(3)} (1.0 is full scale)`);
   c('A9', 'the mix bus compresses — four machines are not four times one',
     rms4 / one.rms < 3.0, `4 machines = ${(rms4 / one.rms).toFixed(2)}x one machine`);
