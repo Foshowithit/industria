@@ -91,10 +91,10 @@ marked **GATED** needs a decision that is not the loop's to make.
   the size the kernel says, the surface the last pass left.
 - ~~**A5 · THE TOOL RUNG**~~ ✅ folded into B2 — the bar now has an edge with a life
   and a wear fraction the kernel reads.
-- ~~**A6 · DAYLIGHT AND LIFE IN THE BUILDING**~~ ✅ partly: the three machines that
-  are not yours now turn, at their own speeds, with a work light in each window.
-  **Still open:** chips accumulating, the coolant puddle growing, and anything else
-  that moves on its own. **Original note:** `daylight()` drives the lamps
+- ~~**A6 · DAYLIGHT AND LIFE IN THE BUILDING**~~ ✅ 2026-09-17. The three machines
+  that are not yours turn at their own speeds; chips land on the MACHINE TABLE and
+  pile where the cut is; the coolant puddle scales with the machine's own cutting
+  minutes and survives the morning. **Original note:** `daylight()` drives the lamps
   and there is a wall clock, but nothing else in the shop moves on its own. The
   machines cycle (`machineMotion`), chips should accumulate, the coolant puddle
   should grow. Verify what already exists before adding anything: a model that is
@@ -264,7 +264,13 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
-- **2026-09-17** — B1/B2/B3 (the wear package, and the machine became the shop's),
+- **2026-09-17** — A6 finished (loop run). The chips were ALREADY falling, landing and
+  piling up **inside the table** — a fixed landing height 15 cm below the surface the
+  cut happens above, so 176 chips were in the scene and none were visible. Landings
+  now depend on where the chip is, and the puddle records the machine's cutting
+  minutes instead of being a boolean. Found by LOOKING first, as the plan required.
+  **The plan now has no ungated items left.**
+- **2026-09-17** — (earlier) B1/B2/B3 (the wear package, and the machine became the shop's),
   A4 (the part in your hand), B4 (the day book), C4 (the advisor seam) and A6 partly,
   all in one turn. Three defects found by looking, including a game with NO error
   surface — a thrown handler was completely silent. **Next: C3, the system at the
