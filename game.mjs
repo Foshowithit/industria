@@ -265,17 +265,29 @@ export const JOBS = [
      inside the job instead of far outside it. Measured on J2, in the game's own
      verbs (tools/envelope-sweep.mjs, section 7):
 
-        bite 4.0 mm @ 0.12 mm/rev   -> ok, 3.25 kW =  43 % of spindle power
-        bite 4.0 mm @ 0.30 mm/rev   -> REFUSED, SPINDLE POWER LIMIT (107 %)
-        bite 4.0 mm @ 0.50 mm/rev   -> REFUSED, SPINDLE POWER LIMIT (157 %)
-        bite 3.0 mm @ 0.30 mm/rev   -> REFUSED, TORQUE LIMIT
-        bite 2.0 mm @ 0.50 mm/rev   -> ok, 4.75 kW =  63 %
+        bite 1.00 mm @ 0.12 mm/rev   -> ok, 0.82 kW =  14 % power,  61 % torque
+        bite 2.00 mm @ 0.12 mm/rev   -> REFUSED, SPINDLE TORQUE LIMIT (122 %)
+        bite 2.00 mm @ 0.50 mm/rev   -> REFUSED, SPINDLE TORQUE LIMIT (357 %)
+        bite 4.00 mm @ 0.12 mm/rev   -> REFUSED, SPINDLE TORQUE LIMIT (245 %)
+        bite 4.00 mm @ 0.30 mm/rev   -> REFUSED, SPINDLE POWER LIMIT (108 %)
 
-     The lever is FEED, not depth — which is the true statement about this
-     physics and the one the kernel already models: MRR = b * h * vc, and kc
-     falls as h^-0.25, so leaning on the feed is how a machinist buys removal
-     rate, and it is also what runs him out of spindle. A player who has only
-     ever played J1 has never had a move refused for wanting too much power.
+     THE TABLE ABOVE USED TO SAY THAT 4.0 mm AT 0.12 mm/rev CUTS AT 43 % OF
+     SPINDLE POWER, and it was wrong — not the measurement, the physics under
+     it. `boringStep` took the cutting speed from the BAR's diameter instead of
+     the BORE's, so at Ø80 with a Ø20 bar it saw a quarter of the speed the edge
+     was really travelling at, and reported a quarter of the torque. The table
+     is re-measured on the corrected kernel and the old numbers are not left
+     anywhere, because a false measured claim in a comment is the exact thing
+     this build has already shipped once and had to correct.
+
+     AND THE LESSON CHANGES WITH IT. It used to be "the lever is FEED", read
+     off a table where power bound first. On the corrected physics the wall on
+     this job is TORQUE, and torque at a fixed cutting speed is proportional to
+     the chip AREA — bite times feed — and to the bore. So on a big bore the
+     machine caps the PRODUCT, not either lever: the player cannot buy removal
+     rate by leaning on the feed OR by taking a deeper bite, and the honest
+     answer is more passes. Four 1.00 mm passes clear this job. That is what a
+    7.5 kW spindle with a 24 N·m limit genuinely does at Ø80.
 
      THE CHATTER LIMIT IS DELIBERATELY NOT THE JOB. On the boring path
      `stability()` reports ap_crit_relevant = ap_crit_mm / h_mean, i.e. the
@@ -296,7 +308,7 @@ export const JOBS = [
       'A rough casting, pre-cored at Ø72, so there is 4 mm of radius to take ' +
       'out of it — and the bar has to go 55 mm in to do it. Big bore, deep ' +
       'cut, and a 7.5 kW spindle that will tell you when you have asked for ' +
-      'too much. Nobody is going to stop you leaning on the feed.',
+      'too much. Leaning on the feed is how you find out where that is.',
     material: 'steel_4140',
     machine: 'vmc_40taper_7k5',
     nominal_mm: 80,
@@ -1001,6 +1013,12 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
        build has ever made. */
     runout_um: runout_um_for(g.machine.condition),
   };
+  /* THE DIAMETER THE EDGE ACTUALLY TRAVELS AROUND. The kernel has always
+     defaulted this to the bar, which is the wrong circle for a boring
+     operation and made the machine look more capable than it is — see the note
+     in `boringStep`. Passed in the HOT frame because that is where the metal
+     is. */
+  thermalArgs.bore_D_mm = hotBoreDia(g);
   const h_cmd = bite_effective_mm;
   let h_act = h_cmd, as = null;
   for (let i = 0; i < 40; i++) {
@@ -1661,7 +1679,7 @@ export function envelope(g, { bite_mm, feed_mm_rev = 0.12, vc = 120 }) {
   if (!g.tool) return { ok: false, why: 'NO TOOL' };
   const spec = g.toolSpec;
   const tool = makeTool({ D: spec.D, z: spec.z, stickout_L: g.stickout_L });
-  const as = assessBoring({ b: bite_mm, feed: feed_mm_rev, vc },
+  const as = assessBoring({ b: bite_mm, feed: feed_mm_rev, vc, bore_D_mm: hotBoreDia(g) },
     { tool, material: g.mat }, g.mach);
   const f = (x) => (isFinite(x) ? x : 99);
   const power_frac = f(as.step.power_frac);

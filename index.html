@@ -1974,7 +1974,13 @@ function machinePanel() {
   $('pnTitle').textContent = GAME.mach.label;
   const F = (a, b) => `<div class="row"><i>${a}</i><span>${b}</span></div>`;
   $('pnRows').innerHTML =
-    F('spindle', `${m.spindle_on ? (last ? last.n_rpm : 0).toFixed(0) + ' rpm' : 'stopped'}`) +
+    /* RPM AND THE SURFACE SPEED IT PRODUCES. A machinist reads both, and the
+       pair is the honest picture: the same rpm is a different cutting speed on
+       a different bore, which is why the speed is measured on the BORE and not
+       on the bar. See the note in `boringStep`. */
+    F('spindle', m.spindle_on
+      ? (last ? `${last.n_rpm.toFixed(0)} rpm · ${last.vc_m_min.toFixed(0)} m/min` : 'running')
+      : 'stopped') +
     F('load', m.spindle_on && last ? `${(last.power_kW / GAME.mach.power_max_kW * 100).toFixed(0)}% of 7.5 kW` : '—') +
     F('spindle °C', `${m.spindleC.toFixed(1)} (ref ${m.refSpindleC.toFixed(1)})`) +
     F('screw °C', `${m.screwC.toFixed(1)}`) +
@@ -2480,8 +2486,16 @@ function doCut() {
     `<b>${rec.bite_realised_um.toFixed(1)} µm</b> (${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)}). ` +
     `Dial is now at ${(rec.edge_coldR_mm * 1000).toFixed(0)} µm radius. ` +
     `Measure it if you want to know where it actually is.`);
-  if (rec.n === 1) toast(`<b>${info.colour_name} chip.</b> ${(info.t2_mm * 1000).toFixed(0)} µm thick ` +
-    `— the dial said ${rec.bite_cmd_um.toFixed(0)}.`, 4600);
+  /* THE CHIP'S THICKNESS AND THE DIAL ARE DIFFERENT DIMENSIONS, and this line
+     used to invite the reader to compare them: it read "126 µm thick — the dial
+     said 1000", which is a comparison between the feed per revolution and the
+     radial depth of cut. It was accidentally readable before the chip's
+     thickness was corrected (when the "thickness" WAS the bite); now that it is
+     the real number the line would teach a false comparison. The surplus lives
+     on the WIDTH, so that is what is set against the dial. */
+  if (rec.n === 1) toast(`<b>${info.colour_name} chip.</b> ${info.t2_um.toFixed(0)} µm thick. ` +
+    `The dial said ${rec.bite_cmd_um.toFixed(0)} µm and it came off ` +
+    `<b>${info.width_um.toFixed(0)} µm wide</b>.`, 5200);
   /* ── YOUR PREDICTION AGAINST THE MACHINE ──────────────────────────────────
    * The design lead's exact form: "You expected 20.0 µm. Machine removed
    * 19.2 µm. Difference: −0.8 µm." then STOP. The difference is shown and the

@@ -372,6 +372,50 @@ checkTrue('K4-EXT-5', 'the widths increase with size at one grade',
 checkTrue('K4-EXT-6', 'every grade any job spec asks for is computable',
     JOBS.every((j) => Number.isFinite(itWidth_um(j.nominal_mm, j.grade))));
 
+/* ── BORE-*  THE CUTTING SPEED IS MEASURED ON THE BORE ───────────────────
+   `boringStep` took the cutting speed from the BAR's diameter, which is the
+   wrong circle: on a machining centre the bar is held and the EDGE orbits the
+   bore. Consequences, in order of how much they mattered:
+
+     · RPM was wrong — a Ø80 bore at "120 m/min" was run at 1910 rpm, which is
+       the bar's surface speed, where the honest number is 477
+     · TORQUE was wrong by the diameter ratio, because torque is Pc·9550/n and
+       n was four times too high. This is the one that changed the game: it had
+       been reporting a quarter of the real torque on J2.
+     · FORCE is NOT affected. F = 60000·Pc/vc and Pc is proportional to vc, so
+       the speed cancels identically and the deflection budget never moved.
+     · MRR and POWER are unaffected at a GIVEN vc, because both are computed
+       from the vc the caller asked for.
+
+   `bore_D_mm` defaults to the bar, so every caller that does not know its bore
+   keeps the behaviour it had. These assertions pin both halves of that. */
+{
+  const bar = makeTool({ D: 20, z: 1, stickout_L: 45 });
+  const rip = { b: 0.5, feed: 0.12, vc: 120 };
+
+  const barOnly = boringStep(rip, { tool: bar, material: MATERIALS.steel_4140 }, VMC);
+  const withBore = boringStep({ ...rip, bore_D_mm: 80 },
+    { tool: bar, material: MATERIALS.steel_4140 }, VMC);
+
+  check('BORE-1', 'without a bore the default is the bar, unchanged',
+    barOnly.vc_m_min, 120, 1e-9, 'm/min');
+  check('BORE-2', 'with a bore the speed is pi·D_bore·n/1000', withBore.vc_m_min, Math.PI * 80 * withBore.n / 1000, 1e-9, 1e-9, '');
+  check('BORE-3', 'and the caller still gets the speed it asked for',
+    withBore.vc_m_min, 120, 1e-9, 'm/min');
+  check('BORE-4', 'so the spindle runs slower, by the diameter ratio', barOnly.n / withBore.n, 80 / 20, 1e-9, 1e-9, '');
+  /* THE FORCE DOES NOT MOVE. This is the assertion that says the deflection
+     and error budget were never wrong and this correction did not touch them. */
+  check('BORE-5', 'the cutting force is unchanged — speed cancels out of F', withBore.F_mean_N, barOnly.F_mean_N, 1e-9, 1e-9, '');
+  /* TORQUE DOES, inversely with speed. */
+  check('BORE-6', 'torque rises by the diameter ratio', withBore.torque_Nm / barOnly.torque_Nm, 80 / 20, 1e-6, 1e-9, '');
+  check('BORE-7', 'and MRR is a function of the requested vc either way', withBore.MRR, barOnly.MRR, 1e-9, 1e-9, '');
+  /* A caller that passes neither gets the old behaviour rather than a NaN. */
+  const bare = boringStep({ b: 0.5, feed: 0.12, n: 1000 },
+    { tool: bar, material: MATERIALS.steel_4140 }, VMC);
+  check('BORE-8', 'an explicit n with no bore falls back to the bar', bare.vc_m_min,
+    Math.PI * 20 * 1000 / 1000, 1e-9, 1e-9, '');
+}
+
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);
 if (failed.length) {

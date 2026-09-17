@@ -304,8 +304,32 @@ export function boringStep(rip, params, machine) {
   const feed_mm_rev = rip.feed != null ? rip.feed : b;     // mm/rev, chip thickness
   const h = feed_mm_rev;
 
-  const n = rip.n != null ? rip.n : (1000 * rip.vc) / (Math.PI * tool.D);
-  const vc_m_min = (Math.PI * tool.D * n) / 1000;
+  /* ── WHICH DIAMETER TURNS ───────────────────────────────────────────────
+     THE CUTTING SPEED IS MEASURED ON THE BORE, NOT ON THE BAR. This function
+     took it from `tool.D` — the boring bar's own diameter — and that is the
+     wrong circle. On a machining centre the bar is held and the EDGE orbits the
+     bore, so the distance the edge travels per revolution is pi·D_bore, and
+
+         vc = pi · D_bore · n / 1000          not   pi · D_bar · n / 1000
+
+     Measured on this build's own numbers, Ø80 bore with a Ø20 bar: the old
+     expression reports 80 m/min where the edge is really travelling 320 — a
+     factor of four, in the direction that makes the machine look more capable
+     than it is.
+
+     WHAT IT DOES AND DOES NOT CHANGE. The cutting FORCE is unaffected: F is
+     kc·b·h and the speed cancels out of `60000·Pc/vc` identically, so the
+     deflection and error budget are untouched. What moves is TORQUE, which is
+     `Pc·9550/n` and therefore inversely proportional to the speed — and the
+     RPM, which is what the operator actually sees on the panel.
+
+     `bore_D_mm` DEFAULTS TO THE BAR so that every existing caller, including
+     the reference cases in kernel.test.mjs, keeps exactly the behaviour it had.
+     A caller that knows the bore passes it and gets the honest number; a caller
+     that does not is not silently handed a different one. */
+  const D_cut = (rip.bore_D_mm != null && rip.bore_D_mm > 0) ? rip.bore_D_mm : tool.D;
+  const n = rip.n != null ? rip.n : (1000 * rip.vc) / (Math.PI * D_cut);
+  const vc_m_min = (Math.PI * D_cut * n) / 1000;
   const f_mm_min = feed_mm_rev * n;
 
   // Chip thickness IS the feed per revolution. No immersion factor: the bar is
