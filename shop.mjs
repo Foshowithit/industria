@@ -255,6 +255,11 @@ export function recordDelivery(shop, {
     kind, net,
     standing_before: before, standing_after: c.standing,
     delivery_delta, claim_delta: claim.delta,
+    /* NOT YET REPORTED. The part left on the van this afternoon; what the
+       customer measures and what they think of you is a letter that arrives
+       with the next morning, not a number that appears the moment the door
+       shuts. See `unreported` below. */
+    reported: false,
   };
   shop.shipper.push(entry);
 
@@ -270,6 +275,87 @@ export function recordDelivery(shop, {
     (claim.note ? ' ' + claim.note : '');
 
   return entry;
+}
+
+/* ── THE MORNING ───────────────────────────────────────────────────────────
+   A shop does not learn what its customer thought of a part when the part
+   leaves. It learns the next morning, in writing, from somebody who has had
+   the part on a granite plate and a bearing in their hand. Until then the shop
+   has a DISPOSITION — its own outgoing inspection, which is an opinion — and
+   that is what a verdict actually is from the inside.
+
+   So every delivery comes back. `unreported()` is what is waiting for you when
+   you clock on, and it is deliberately computed from the record rather than
+   pushed into a queue: a shop cannot lose a letter it has not read, because
+   whether it has been read is a property of the entry, not of the post.
+
+   AND THE LETTER IS WHERE YOUR CLAIM AND THEIR MEASUREMENT SHARE A LINE. Nowhere
+   else in this build do the number you read off a gauge and the number the
+   customer's CMM produced sit next to each other, and that pair is the whole
+   subject of the game. It arriving a day late is not a delay mechanic — it is
+   what the pair is FOR. You find out whether your word held. */
+
+/** Everything the shop has sent out that nobody has written back about yet,
+ *  grouped by client, oldest first. */
+export function unreported(shop) {
+  const by = new Map();
+  for (const e of shop.shipper) {
+    if (e.reported) continue;
+    if (!by.has(e.client)) by.set(e.client, []);
+    by.get(e.client).push(e);
+  }
+  return [...by.entries()].map(([client, entries]) => ({ client, entries }));
+}
+
+/** Mark a client's mail as read. Returns how many were closed. */
+export function markReported(shop, client, day = null) {
+  let n = 0;
+  for (const e of shop.shipper) {
+    if (e.client === client && !e.reported) { e.reported = true; n++; }
+  }
+  const c = shop.book[client];
+  if (c) c.last_report_day = day === null ? shop.day : day;
+  return n;
+}
+
+/** The customer's letter, in their voice, from the record. Numbers first: a
+ *  supplier does not need adjectives, they need the measurement and the terms. */
+export function letterFor(shop, { client, entries }) {
+  const c = shop.book[client];
+  const lines = [];
+  for (const e of entries) {
+    const band = e.band_um || 16;
+    const measured = e.true_um === null ? null : e.true_um;
+    const claimed = e.claimed_um;
+    let verdict;
+    if (e.kind === 'scrapped') {
+      verdict = `Nothing arrived. Line stopped for ${e.job_id}.`;
+    } else if (e.kind === 'undersize') {
+      verdict = `Under, and finishable. We reworked it in our own time at cost to you.`;
+    } else if (e.kind === 'late') {
+      verdict = `In tolerance, past the window we asked for.`;
+    } else {
+      verdict = `In tolerance, on the day.`;
+    }
+    lines.push({
+      job: e.job_id,
+      what: measured === null ? 'not measured by us'
+        : `we made ${measured >= 0 ? '+' : ''}${measured.toFixed(1)} µm of a ${band.toFixed(0)} µm band`,
+      said: claimed === null ? 'you gave us no figure'
+        : `you gave us ${claimed >= 0 ? '+' : ''}${claimed.toFixed(1)} µm`,
+      verdict,
+      money: e.net,
+      agreed: e.claim_error_um !== null && Math.abs(e.claim_error_um) <= band * 0.2,
+      out_by: e.claim_error_um,
+    });
+  }
+  return {
+    client, entries, lines,
+    standing: c ? c.standing : null,
+    /* Whether this customer's measurements have ever disagreed with the shop's
+       own claims, across everything they have had off it. */
+    worth: c && c.claim_n > 0 ? c.claim_abs_um : null,
+  };
 }
 
 /* ── THE BOARD ─────────────────────────────────────────────────────────────

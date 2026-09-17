@@ -190,7 +190,7 @@ import { createAudio } from './audio.mjs';
 /* The business the machine sits in. Pure, tested, no DOM — see its header for
    what was ported from the economy architecture at ~/industria and what was
    not, and why the constants moved. */
-import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS } from './shop.mjs';
+import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS, unreported, markReported, letterFor } from './shop.mjs';
 /* The shop's surfaces. Drawn in the page, deterministic, no assets — see the
    header of materials.mjs for why they are not files. */
 import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace, consoleScreen } from './materials.mjs';
@@ -1643,8 +1643,55 @@ add(CHIP_TRAY, 'Chip tray — what came off the last pass', 'look in it', () => 
    both conditions on the same screen — the one it surveyed, and the one the
    machine is at — and says nothing about the gap. The player who compares those
    two lines is the player who stops scraping castings on a worn machine. */
+/** The customer's letters, and the only place in this build where the number
+ *  you read off a gauge and the number their CMM produced share a line. */
+/* THE SHOP KEYS ITS BOOK BY ID AND THE LETTERHEAD IS A NAME. `client_id` is an
+   identity and `client` is what goes on paper; the first version printed the id,
+   so a letter arrived from "halvorsen". A display name is not an identity and an
+   identity is not a display name — which is why the job spec carries both. */
+const clientName = (id) => (G.JOBS.find((j) => j.client_id === id) || {}).client || id;
+
+function readPost() {
+  const post = unreported(SHOP);
+  const parts = post.map((p) => {
+    const L = letterFor(SHOP, p);
+    const rows = L.lines.map((l) =>
+      `<b>${l.job}</b> · ${l.what}<br><span style="color:#8b98a6">${l.said}</span><br>` +
+      `${l.verdict} <b>${money(l.money)}</b>` +
+      (l.out_by === null ? '' :
+        `<br><i>${l.agreed ? 'It agrees with what you said.'
+          : `It is ${Math.abs(l.out_by).toFixed(1)} µm from what you said.`}</i>`)).join('<br><br>');
+    const worth = L.worth === null ? '' :
+      ` <span style="color:#8b98a6">· your word with them holds to ${L.worth.toFixed(1)} µm</span>`;
+    return `<b>${String(clientName(L.client)).toUpperCase()}</b> — incoming inspection<br>` +
+      `<span style="color:#8b98a6">standing ${L.standing}</span>${worth}<br><br>${rows}`;
+  });
+  say('SYSTEM — post', parts.join('<br><br>———<br><br>'),
+    [['Read. Put it on the board.', () => {
+      let n = 0;
+      for (const p of post) n += markReported(SHOP, p.client, SHOP.day);
+      logLine(`Read the post — <b>${n}</b> part${n === 1 ? '' : 's'} reported back. ` +
+        post.map((p) => `${clientName(p.client)} standing <b>${SHOP.book[p.client].standing}</b>`).join(' · ') + '.');
+      toast(`Post read. ${post.map((p) => `${clientName(p.client).split(' ')[0]} ${SHOP.book[p.client].standing}`).join(' · ')}`, 6000);
+      paintTerminal([
+        { k: 'post', v: 'read' },
+        { k: 'machine', v: GAME.machine.condition.toFixed(0) },
+        'ask me about the bore when you want.',
+      ], 'READY');
+    }]]);
+  paintTerminal([
+    { k: 'letters', v: String(post.length) },
+    { k: 'parts', v: String(post.reduce((a, p) => a + p.entries.length, 0)) },
+    'on screen.',
+  ], 'POST');
+}
+
 add(TERMINAL, 'Shop system — console', 'read it', () => {
   if (!GAME) return;
+  /* THE POST COMES FIRST. A shop's morning starts with what came back, not
+     with what you were about to do, and burying the letters under a forecast
+     would be the interface deciding the player does not need to know. */
+  if (unreported(SHOP).length) { readPost(); return; }
   const rec = G.systemRecord(GAME);
   const surveyed = GAME.system.surveyed_condition;
   const now = GAME.machine.condition;
@@ -3107,9 +3154,16 @@ function enter() {
    reading you took, whether a part was still live for a second cut. None of it
    belongs to the next job, and leaving any of it set is how a new job would
    silently start with the old job's dial still on it. */
-function startShift(jobId, { announce = true, carry = true } = {}) {
+function startShift(jobId, { announce = true, carry = true, newDay = null } = {}) {
   const spec = G.jobById(jobId || G.DEFAULT_JOB_ID);
   const carried = (carry && GAME) ? (SHOP ? SHOP.cash : GAME.money) : 0;
+  /* `carry` AND `newDay` ARE DIFFERENT QUESTIONS and were one flag. Carrying the
+     money is about the business continuing; a new day is about a night passing,
+     which costs overhead and brings post. The `job()` hook a gate drives needs
+     the first and not the second — a test that switches jobs to inspect J3
+     should not age the shop and have letters waiting. Defaulted to `carry` so
+     the two real callers behave as they did. */
+  const isNewDay = newDay === null ? carry : newDay;
 
   /* THE BUSINESS. Created once, on the first clock-on, from the clients that
      actually appear in JOBS — so a job spec naming a client the shop has never
@@ -3120,7 +3174,7 @@ function startShift(jobId, { announce = true, carry = true } = {}) {
      tomorrow: the first morning is not a continuation of a business, and
      charging rent for it would start the player in the red for no reason. */
   let dayCost = null;
-  if (carry) dayCost = endOfDay(SHOP);
+  if (isNewDay) dayCost = endOfDay(SHOP);
 
   GAME = G.newGame(spec, undefined, carried);
 
@@ -3159,8 +3213,29 @@ function startShift(jobId, { announce = true, carry = true } = {}) {
       `van ${W.hhmm(G.departsMin(spec))}`, 7000);
   }
   if (dayCost) {
-    logLine(`Overhead for the day: <b>${money(dayCost.costs)}</b>. ` +
-      `Cash <b>${money(SHOP.cash)}</b>.`);
+    /* ══ THE MORNING ═══════════════════════════════════════════════════════
+       A new day used to happen instantly: the clock reset, the log cleared, the
+       overhead was charged, and nothing was waiting for you. A shop's morning
+       has one reliable feature and this is it — somebody has written back about
+       what you sent them, and it is on the system before you have taken your
+       coat off. */
+    const post = unreported(SHOP);
+    logLine(`<b>Day ${SHOP.day}.</b> ${W.hhmm(START_SHIFT_MIN)}. ` +
+      `Overhead <b>${money(dayCost.costs)}</b> · cash <b>${money(SHOP.cash)}</b>.` +
+      (post.length
+        ? ` <b>${post.reduce((a, p) => a + p.entries.length, 0)} letter(s) on the system.</b>`
+        : ' Nothing came back overnight.'));
+    if (post.length) {
+      setTimeout(() => {
+        toast(`<b>Post on the system.</b> ${post.map((p) => clientName(p.client)).join(', ')} — ` +
+          `somebody has had your parts on a plate.<br>It is on the console.`, 8000);
+        paintTerminal([
+          { k: 'post', v: String(post.reduce((a, p) => a + p.entries.length, 0)) + ' unread', warn: true },
+          { k: 'from', v: post.map((p) => clientName(p.client).split(' ')[0]).join(', ') },
+          'walk over and read it.',
+        ], 'UNREAD');
+      }, 1800);
+    }
   }
   if (REC) REC.action('start_shift', { job_id: spec.id, carried_money: carried,
     nominal_mm: spec.nominal_mm, start_hole_dia_mm: spec.start_hole_dia_mm,
@@ -3493,7 +3568,8 @@ window.INDUSTRIA = {
        skip everything around it — the clocks, the scene, the part mesh and the
        per-part state — so a gate that switched jobs and a player who switched
        jobs were looking at two different games. */
-    startShift(id, { carry: true });
+    /* MONEY CARRIES, THE DAY DOES NOT: this is a hook, not a morning. */
+    startShift(id, { carry: true, newDay: false });
     return G.jobById(id).id;
   },
   warm: doWarmUp, touch: doTouchOff, vibe: (n) => vibrate(n),

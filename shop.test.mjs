@@ -24,7 +24,7 @@
 
 import {
   newShop, recordDelivery, offersFor, rateMultiplier, moveStanding, claimStandingDelta,
-  endOfDay, describeShop, averageClaimError_um,
+  endOfDay, describeShop, averageClaimError_um, unreported, markReported, letterFor,
   STANDING_OPEN, STANDING_MAX, STANDING_OFFERS, STANDING_BETTER_WORK,
   STANDING_DELTA, OVERHEAD_PER_DAY,
 } from './shop.mjs';
@@ -220,6 +220,54 @@ ok('CLAIM-5', 'the trust term can never outweigh delivering the part',
      JOBS.some((j) => (j.min_standing || 0) > 0));
 }
 
+/* ── POST-*  THE MORNING ─────────────────────────────────────────────────
+   A delivery comes back as a letter, not as a number that appears the moment
+   the part leaves. The letter is where the shop's own claim and the customer's
+   measurement share a line, and it is the only place in this build where they
+   do. These assertions hold the two properties that make it honest: nothing is
+   reported before it is delivered, and reading it cannot change what it says. */
+{
+  const s = shopWith('acme');
+  eq('POST-1', 'a new shop has no post', unreported(s).length, 0);
+
+  recordDelivery(s, { client: 'acme', job_id: 'A1', nominal_mm: 40, band_um: 16,
+    outcome: 'ACCEPTED', claimed_mm: 40.0020, true_mm: 40.0022, net: 1850 });
+  const p1 = unreported(s);
+  eq('POST-2', 'a delivery is waiting to be reported back', p1.length, 1);
+  eq('POST-3', 'and it carries the part', p1[0].entries.length, 1);
+
+  const L = letterFor(s, p1[0]);
+  eq('POST-4', 'the letter names the job', L.lines[0].job, 'A1');
+  ok('POST-5', 'and states what the customer measured', /\+2\.2/.test(L.lines[0].what));
+  ok('POST-6', 'and what the shop told them', /you gave us \+2\.0/.test(L.lines[0].said));
+  ok('POST-7', 'and whether the two agreed', L.lines[0].agreed === true);
+  eq('POST-8', 'and what it was worth', L.lines[0].money, 1850);
+
+  /* A part shipped with no reading says so, and it is not dressed up. */
+  recordDelivery(s, { client: 'acme', job_id: 'A2', nominal_mm: 40, band_um: 16,
+    outcome: 'ACCEPTED', claimed_mm: null, true_mm: 40.0100, net: 1850 });
+  const p2 = unreported(s);
+  const L2 = letterFor(s, p2[0]);
+  ok('POST-9', 'a part with no reading says the shop gave no figure',
+    /no figure/.test(L2.lines[1].said));
+  eq('POST-10', 'and cannot agree with anything', L2.lines[1].agreed, false);
+
+  /* READING IT. */
+  const n = markReported(s, 'acme', 2);
+  eq('POST-11', 'reading closes both', n, 2);
+  eq('POST-12', 'and the post is empty afterwards', unreported(s).length, 0);
+  /* The record is unchanged by having been read — a letter is not a ledger. */
+  const L3 = letterFor(s, { client: 'acme', entries: s.shipper });
+  eq('POST-13', 'reading does not alter what was reported', L3.lines.length, 2);
+  /* A second delivery to a different client is its own letter. */
+  const t = shopWith('acme', 'other');
+  recordDelivery(t, { client: 'acme', job_id: 'B1', nominal_mm: 40, band_um: 16, outcome: 'ACCEPTED' });
+  recordDelivery(t, { client: 'other', job_id: 'C1', nominal_mm: 52, band_um: 74, outcome: 'SCRAP' });
+  eq('POST-14', 'two clients get two letters', unreported(t).length, 2);
+  const sc = letterFor(t, unreported(t).find((p) => p.client === 'other'));
+  ok('POST-15', 'a scrap says nothing arrived', /Nothing arrived/.test(sc.lines[0].verdict));
+}
+
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);
 if (failed.length) {
@@ -234,3 +282,4 @@ if (fail === 0) {
   console.log(describeShop(shopWith('acme')));
 }
 process.exit(fail === 0 ? 0 : 1);
+
