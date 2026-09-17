@@ -188,17 +188,27 @@ is about, which is why it is next. Taken in this order:
   diameter the customer will measure, which is right; what was missing was the
   OD, the thickness and the datum face that make it a housing, and the finger
   blocks intersected the metal.
-- **F2 · THE CALIPERS READ AS CRUDE BLOCKS** (S–M, HALF DONE). *"Oversized crude
-  blocks with an unreadable scale, no jaws / thumbwheel / lock screw identifiable"*
-  — the one tool the game tells you to go and get cannot be read as itself.
-  Shipped 09-17: rebuilt at its named 150 mm (the old beam was drawn 300), and
-  the floating-rest lie fixed with a machine bench under it — both PASS review.
-  Still failing, twice by the sighted reviewer, the IN-HAND presentation: at
-  0.51 m the engraved scale is ~1.3 px/mm so numerals stripe out, and the dark
-  glove merges with the dark beam — *"still a blocky grey mass"*. Stopped on the
-  two-failures rule. Next move is a POSE change, not more detail: bring the tool
-  up to reading distance with the scale face square to the camera, the way a
-  machinist actually reads one.
+- **F2 · THE CALIPERS READ AS CRUDE BLOCKS** (S–M, HALF DONE — the pose change
+  is built and the scale and fork now PASS; the hand still fails). *"Oversized
+  crude blocks with an unreadable scale, no jaws / thumbwheel / lock screw
+  identifiable"* — the one tool the game tells you to go and get cannot be
+  read as itself. Shipped 09-17: rebuilt at its named 150 mm, the bench under
+  it, the engraved scale — all PASS review. The recorded next move (a POSE
+  change, not more detail: bring the tool up to reading distance, the way a
+  machinist actually reads one) is BUILT and sits ON DISK UNCOMMITTED:
+  0.24 m from the eye, the face tipped 28° square-ish to it, the pose derived
+  from that one position, the jaws rebuilt in the scale's own plane, a
+  three-contrast ruling, the slider's zero edge and the 5 mm gap one fact,
+  the tool lying flat on the bench. The sighted reviewer on `after-30/05` read
+  the numerals back ("10 20 30 40 50") and saw the fork with its gap — the
+  scale and silhouette legs of this item are CLOSED. The HAND fails a THIRD
+  round: the forearm's near end is ~0.13 m from the eye and subtends half the
+  frame as a featureless cone, and the grip parts hide behind the plate —
+  *"it occludes the tool instead of holding it"*; the subtitle's thumbwheel
+  and lock screw are not visible in the held view. Stopped on the two-failures
+  rule. Next: make the HAND read at reading distance — fingertips visibly
+  over the beam's top edge, thumb visibly on the wheel, the forearm pulled
+  back and slimmer toward the eye.
 - **F3 · HUD-OVER-3D LEGIBILITY COLLISIONS** (S). Shot 03: the pendant's lit
   display sits behind the job header, and the reviewer named the covered sentence
   rather than the panel covering it. Shot 09: the same display behind the gauge
@@ -385,6 +395,47 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-17** — THE POSE CHANGE BUILT; THE SCALE AND FORK PASS; THE HAND
+  FAILS A THIRD ROUND (`after-29` → `after-30`, loop run; NOT SHIPPED —
+  stopped on the two-failures rule, nothing pushed but this file). F2's
+  second half, the in-hand presentation. What was wrong before: the held pose
+  sat 0.51 m out where the engraved scale stripes into ~1.3 px/mm mush, the
+  beam pointed its 4 mm fork leg straight at the camera so the lower jaw
+  vanished, one grip pad carried the whole fiction of a hand, and the slider
+  sat at scale-mm 45 while the jaws gapped 23 — one fact derived twice,
+  disagreeing (class 3). What is on disk now, UNCOMMITTED on purpose (a
+  failed visual must not ride to `main`): the held pose moved to ~0.24 m
+  reading distance with the scale face tipped 28° toward the eye, the whole
+  orientation derived at runtime from that one position (one derivation per
+  fact); the jaws rebuilt to run in the scale's own plane off the beam's
+  width, ground tips forward, so both legs read in silhouette; the engraved
+  scale redrawn with a three-contrast ruling (10 mm heavy, 5 mm mid, 1 mm
+  hair) at 48 px numerals; slider zero edge, moving-prong face and the 5 mm
+  gap made one fact; the tool laid FLAT on the bench at its plate-bottom
+  height instead of floating; the lock screw moved to the visible face; grip
+  edits (thumbwheel cap out where a thumb sits, pad slimmed). Verified by the
+  sighted muse reviewer on `after-30/05`: it READ the numerals back — "10 20
+  30 40 50" — and saw "two small rectangular jaws … with a clear gap".
+  Those two legs of F2 are CLOSED. The third leg fails again: "a huge
+  flat-shaded white frustum/cone with a black rim … no wrist, palm, fingers
+  or thumb, no grip contact … It occludes the tool instead of holding it";
+  the subtitle's thumbwheel and lock screw are not visible in the held view.
+  Diagnosis for the next run: the forearm cylinder's near end is ~0.13 m
+  from the eye, so at reading distance it subtends half the frame as a
+  featureless cone, and every part that would read as a hand curls over the
+  edges from BEHIND the plate, which the plate and the 28° tilt hide. Next:
+  make the HAND read — fingertips visibly over the beam's top edge in the
+  reader's view, thumb visibly on the wheel below the lower edge, forearm
+  pulled back and slimmer toward the eye. Deviations, recorded: lock screw
+  z 0.018 not the planned 0.013 (clears the scale strip); bench lie at
+  y 0.9045 with a flat quaternion (plate bottom 0.0255 rests on bench top
+  0.93); thumb at (−0.031, 0.040, −0.022) not (−0.031, 0.038, −0.018), which
+  had bitten 6.5 mm into the plate corner — now a ~2 mm graze. Gates: 76 /
+  137 / 69 / 70+1 (the one SCRAP failure is the model), bundle
+  fb2070df2633 · 9 modules. Capture flake, honest: three attempts, 9/10
+  stills, no review-set.json — opencode at 99.2% CPU and ZCode at 73.3%
+  during capture, disk fine at 50 Gi; shot 10 and the manifest are missing,
+  the 9 stills including shot 05 are good.
 - **2026-09-17** — THE CALIPERS, AT THEIR NAMED SIZE, ON A BENCH THAT EXISTS
   (`after-28` → `after-29`, loop run; ALSO this run: repo hygiene — machine
   paths out of the docs, README hero banner, live-verified by sha256). F2, two
