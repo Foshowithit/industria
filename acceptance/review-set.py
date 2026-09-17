@@ -519,13 +519,18 @@ SHOTS = [
          note="the part on the parallels, panels up — the prediction is NOT stated,"
               " so the instruction row is the one on screen"),
     dict(n="05", title="the calipers in your hand", drive=["I.act('Vernier calipers')"],
-         eye=(1.75, 1.62, 3.2), target=(1.75, 1.0, 1.5),
-         note="away from the machine, so no panels — and the frame the log's own"
-              " `Took the calipers` line is about: the calipers are in the lower"
-              " right, 0.53 m from the eye, which is where the right hand holding"
-              " them is, and the bench they came off is bare in the frame behind"
-              " them. The still that carried that line over a bare bench with no"
-              " calipers anywhere was the one a cold viewer read as the shop lying"),
+         eye=(2.75, 1.60, -4.35), target=(2.15, 0.95, -5.95),
+         note="in the lower right, 0.51 m from the eye, where the right hand holding"
+              " them is: gloved fingers curled over the beam from behind, the thumb"
+              " down on the thumbwheel, the wrist leaving the bottom of the frame,"
+              " a lamp travelling with the grip. The beam carries its own engraved"
+              " scale — hairline ruling, numerals every 10 mm off CALIPER_MM — and"
+              " the thumbwheel reads light against the dark slider. Behind them the"
+              " machine's own bench with the traveler still on it and the machine at"
+              " its shoulder — the bench the words always promised. Generations of"
+              " this shot framed a bare spot a metre above open concrete where the"
+              " tools floated on pendant-cell numbers, which is what a cold viewer"
+              " read as the shop lying"),
     dict(n="06", title="the pendant", drive=[], eye=(1.75, 1.62, -3.4), target=(1.75, 1.58, -5.50),
          note="the controls and the machine state in one frame, which is where the"
               " last set's text was reported cut off and interleaved"),

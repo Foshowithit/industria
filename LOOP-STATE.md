@@ -188,9 +188,17 @@ is about, which is why it is next. Taken in this order:
   diameter the customer will measure, which is right; what was missing was the
   OD, the thickness and the datum face that make it a housing, and the finger
   blocks intersected the metal.
-- **F2 · THE CALIPERS READ AS CRUDE BLOCKS** (S–M). *"Oversized crude blocks with
-  an unreadable scale, no jaws / thumbwheel / lock screw identifiable"* — the one
-  tool the game tells you to go and get cannot be read as itself.
+- **F2 · THE CALIPERS READ AS CRUDE BLOCKS** (S–M, HALF DONE). *"Oversized crude
+  blocks with an unreadable scale, no jaws / thumbwheel / lock screw identifiable"*
+  — the one tool the game tells you to go and get cannot be read as itself.
+  Shipped 09-17: rebuilt at its named 150 mm (the old beam was drawn 300), and
+  the floating-rest lie fixed with a machine bench under it — both PASS review.
+  Still failing, twice by the sighted reviewer, the IN-HAND presentation: at
+  0.51 m the engraved scale is ~1.3 px/mm so numerals stripe out, and the dark
+  glove merges with the dark beam — *"still a blocky grey mass"*. Stopped on the
+  two-failures rule. Next move is a POSE change, not more detail: bring the tool
+  up to reading distance with the scale face square to the camera, the way a
+  machinist actually reads one.
 - **F3 · HUD-OVER-3D LEGIBILITY COLLISIONS** (S). Shot 03: the pendant's lit
   display sits behind the job header, and the reviewer named the covered sentence
   rather than the panel covering it. Shot 09: the same display behind the gauge
@@ -376,6 +384,33 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-17** — THE CALIPERS, AT THEIR NAMED SIZE, ON A BENCH THAT EXISTS
+  (`after-28` → `after-29`, loop run; ALSO this run: repo hygiene — machine
+  paths out of the docs, README hero banner, live-verified by sha256). F2, two
+  of its three failures fixed and one stopped on the two-failures rule. What
+  was wrong before: the label said 150 mm and the beam was drawn 300 — one
+  fact derived twice, disagreeing; the calipers and the traveler stood a metre
+  over open concrete on pendant-cell numbers pasted into scene space, the
+  bench the words always promised never built; and the held shot floated a
+  grey mass in air, forty tick boxes reading as a striped blur with no
+  numerals, the wheel and screw dark-on-dark. Shipped: CALIPER_MM is now the
+  only place the size exists (beam is it in metres, label prints it); the
+  bench is a cell child, the tools are bench children, nothing hangs below;
+  the scale is ENGRAVED on a canvas the way the DRO and the drawing already
+  are — hairlines, heavier at 5, numerals every 10 mm all off CALIPER_MM, the
+  strip full-length because a 150 mm scale needs 150 mm of beam; the
+  thumbwheel light on the dark slider, the lock screw ground; and a grip built
+  in the calipers' own frame at pickup — knuckles below the beam, fingertips
+  curled over the far edge tangent to it, thumb on the wheel, wrist out of
+  frame, a lamp travelling with it. Bench, grounding and pendant PASS the
+  sighted reviewer (`after-29` 01/04/06). STILL FAILING, twice in a row, the
+  held tool as itself: at 0.51 m and ~47° oblique the numerals are ~7 px and
+  the ruling stripes out, and the dark glove merges with the dark beam —
+  "still a blocky grey mass with striped-blur scale". Stopped per contract
+  rather than guess a third time. Next: a POSE change — the tool brought up to
+  reading distance, scale face square to the camera — which is how a
+  machinist reads one anyway.
 
 - **2026-09-17** — THE PART IN HAND (`after-24` → `after-26`, loop run). F1, the
   reviewers' worst item, said twice by two kinds of viewer: the payoff object

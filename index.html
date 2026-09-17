@@ -1606,41 +1606,121 @@ box(0.9, 0.6, 0.05, M.dark, 0, 1.38, -0.22, board);
   });
 }
 
-/* the CALIPERS, on the machine's own bench */
-const CALIPERS = new THREE.Group(); CALIPERS.position.set(1.75, 1.0, 1.5); scene.add(CALIPERS);
-box(0.30, 0.014, 0.05, M.steel, 0, 0, 0, CALIPERS);
-box(0.10, 0.02, 0.07, M.dark, 0.15, 0.006, 0, CALIPERS);
-box(0.012, 0.05, 0.075, M.steel, -0.14, 0.03, 0, CALIPERS);
-/* THE SCALE, THE THUMBWHEEL AND THE LOCK SCREW, BECAUSE THE FRAME SAYS SO. The
-   talk line printed on the frame that shows these is "There is a thumbwheel and
-   a lock screw", and the object drawn under it was a plain bar with two blocks
-   on it — the same defect as a rack counted at four slots above a line saying
-   the rack is empty, one object over. The beam's broad faces are its ±Y; the
-   scale is a strip a shade proud of both (0.0150 against the beam's 0.0140) and
-   the ticks a shade prouder again (0.0162), so ONE box shows on both faces and
-   nothing depends on which side of it you happen to be standing. */
-box(0.26, 0.0150, 0.030, M.ground, 0, 0, 0, CALIPERS);
-for (let i = 0; i < 11; i++) box(0.0022, 0.0162, 0.024, M.dark, -0.13 + i * 0.026, 0, 0, CALIPERS);
+/* the CALIPERS, on the machine's own bench. REBUILT AT ITS NAMED SIZE, BECAUSE
+   THE OLD ONE WAS TWO TOOLS AT ONCE: the label said 150 mm and the beam was
+   drawn 300 — the held pose's comment even said "the 300 mm of it" — one fact
+   derived twice, disagreeing. CALIPER_MM is now the only place the size
+   exists; the beam is it in metres and the label prints it. The old object
+   failed as itself besides: eleven fat ticks wide apart on a bright strip
+   read as a ladder of blocks, and blocks is what the review called them. A
+   real scale is hairline ruling — forty ticks at a 2.5 mm step, near the
+   held frame's resolution, so the strip reads as engraving and only
+   sharpens on approach. The rest is the silhouette a vernier is known by:
+   the slider shut near the fixed end so the fork sits slightly open, the
+   thumbwheel under the slider and the lock screw standing on it, ground
+   tips on the measuring faces, the depth rod out along the back. The tool
+   stands on its jaw tips at the bench plane — the beam rides 27 mm up on
+   the prongs, because a caliper cannot lie flat on the fork that measures
+   for it. Nothing hangs below the bench. */
+const CALIPER_MM = 150;
+const CALIPER_M = CALIPER_MM / 1000;
+/* the machine's own bench. The words have promised "the bench by the machine"
+   since the first shift, but no bench was ever built: the calipers and the
+   traveler stood a metre over open concrete on pendant-cell numbers pasted
+   into scene space — the same slip the chip emitter's note below records. The
+   bench is a cell child so its numbers are the cell's; the tools are bench
+   children so they stand on it and nowhere else. */
+const bench = new THREE.Group(); bench.position.set(2.15, 0, 1.05); cell.add(bench);
+box(1.1, 0.06, 0.6, M.steel, 0, 0.9, 0, bench);
+for (const sx of [-0.45, 0.45]) for (const sz of [-0.18, 0.18])
+  box(0.07, 0.87, 0.07, M.dark, sx, 0.435, sz, bench);
+contactShadow(bench, 1.35, 0.8, 0, 0.005, 0, 0.5);
+const CALIPERS = new THREE.Group(); bench.add(CALIPERS);
+CALIPERS.position.set(-0.2, 0.93, 0.06); CALIPERS.rotation.y = 0.16;
+box(CALIPER_M, 0.006, 0.024, M.steel, 0, 0.030, 0, CALIPERS);                    // the beam
+/* THE SCALE IS ENGRAVED, NOT MODELED. Forty separate tick boxes were hairlines
+   only by courtesy — at the held distance they collapsed into a striped blur,
+   and a scale with no numerals is not a scale; the sighted reviewer called
+   exactly that. The engraving is drawn once on a canvas the way the DRO and
+   the drawing already are: 1 mm hairlines, heavier at 5, numerals every 10,
+   the zero at the fixed jaw's measuring face. Every figure on it comes off
+   CALIPER_MM, so the strip cannot disagree with the label that names the
+   tool. The strip now runs the full beam, because a 150 mm scale needs 150 mm
+   of beam; the slider rides over it, as a slider does. */
+const scaleC = canvasFor(1600, 320);
 {
-  const wheel = cyl(0.010, 0.010, 0.022, M.dark, 16);  // knurled thumbwheel, axis across the beam
-  wheel.position.set(0.09, 0, 0.035); CALIPERS.add(wheel);
-  const screw = cyl(0.0045, 0.0045, 0.013, M.dark, 12); // lock screw, standing on the slider
-  screw.rotation.x = Math.PI / 2; screw.position.set(0.155, 0, 0.042); CALIPERS.add(screw);
+  const ctx = scaleC.getContext('2d');
+  const pxmm = 1600 / CALIPER_MM, mid = 160;
+  ctx.fillStyle = '#c3c7cc'; ctx.fillRect(0, 0, 1600, 320);
+  ctx.strokeStyle = '#26292d'; ctx.fillStyle = '#26292d'; ctx.textAlign = 'center';
+  for (let mm = 0; mm <= CALIPER_MM; mm++) {
+    const x = mm * pxmm, major = mm % 10 === 0, five = mm % 5 === 0;
+    ctx.lineWidth = major ? 4 : five ? 2.5 : 1.2;
+    ctx.beginPath(); ctx.moveTo(x, mid);
+    ctx.lineTo(x, mid - (major ? 96 : five ? 64 : 42)); ctx.stroke();
+    if (major) { ctx.font = '600 58px ui-monospace, Menlo, monospace'; ctx.fillText(String(mm), x, mid + 108); }
+  }
 }
-/* THE JAWS, BECAUSE A CALIPER IS TOLD APART BY ITS SILHOUETTE. The scale, the
-   wheel and the screw were all there and the object still read as a bar with a
-   bright ladder on it — the review of the held still read those marks as pale
-   blocks. A vernier caliper is recognised by its prongs: a fork at the fixed
-   end, the same fork on the slider, and the depth rod out the back of it. The
-   lower jaws hang to one depth because they are the faces that close on the
-   work; the beam joins each pair, which is why the fork is not open at the top. */
-box(0.012, 0.055, 0.075, M.steel, -0.140, -0.0275, 0, CALIPERS);  // fixed lower jaw
-box(0.012, 0.055, 0.075, M.steel,  0.112, -0.0275, 0, CALIPERS);  // moving lower jaw
-box(0.012, 0.030, 0.075, M.steel,  0.112,  0.021,  0, CALIPERS);  // moving upper jaw
-box(0.060, 0.005, 0.008, M.steel,  0.230,  0.000,  0, CALIPERS);  // depth rod
+const scaleTex = new THREE.CanvasTexture(scaleC); scaleTex.anisotropy = 4;
+const scaleFace = new THREE.MeshStandardMaterial({ map: scaleTex, roughness: 0.45, metalness: 0.55 });
+const SCALE = new THREE.Mesh(new THREE.BoxGeometry(CALIPER_M, 0.009, 0.030),
+  [M.ground, M.ground, scaleFace, scaleFace, M.ground, M.ground]);
+SCALE.position.set(0, 0.030, 0); CALIPERS.add(SCALE);
+{                                                                                // slider, shut near the fixed end
+  box(0.036, 0.020, 0.032, M.dark, -0.030, 0.030, 0, CALIPERS);
+  const wheel = cyl(0.0065, 0.0065, 0.012, M.steel, 14);                          // thumbwheel, poking under the slider
+  wheel.position.set(-0.020, 0.019, 0); CALIPERS.add(wheel);
+  const screw = cyl(0.0028, 0.0028, 0.005, M.ground, 10);                         // lock screw, standing on the slider
+  screw.position.set(-0.036, 0.0425, 0); CALIPERS.add(screw);
+}
+box(0.004, 0.028, 0.024, M.steel, -0.073, 0.016, 0, CALIPERS);                   // fixed lower jaw
+box(0.004, 0.004, 0.024, M.ground, -0.073, 0.004, 0, CALIPERS);                  //   its ground tip
+box(0.004, 0.028, 0.024, M.steel, -0.046, 0.016, 0, CALIPERS);                   // moving lower jaw
+box(0.004, 0.004, 0.024, M.ground, -0.046, 0.004, 0, CALIPERS);                  //   its ground tip
+box(0.003, 0.010, 0.014, M.steel, -0.072, 0.038, 0, CALIPERS);                   // fixed upper jaw
+box(0.003, 0.010, 0.014, M.steel, -0.046, 0.045, 0, CALIPERS);                   // moving upper jaw
+box(0.095, 0.0025, 0.006, M.steel, 0.033, 0.030, -0.015, CALIPERS);              // depth rod, along the back
 
-/* paperwork: the traveler on the machine, and the drawing on the wall */
-const TRAVELER = new THREE.Group(); TRAVELER.position.set(1.05, 0.99, 1.5); TRAVELER.rotation.y = -0.3; scene.add(TRAVELER);
+/* THE HAND, WHEN THE TOOL IS TAKEN. A tool held by no one floats, and the
+   held still showed exactly that: the reviewer read a grey mass hanging in
+   air and could not tell glove from metal. This grip lives in the calipers'
+   own frame, so it rides the pickup pose for free — knuckles below the beam,
+   three fingertips curled over the far edge (each axis one finger radius off
+   the edge line, the same tangent rule the casting's fingers follow), the
+   thumb out under the thumbwheel where the wheel is actually worked, the
+   wrist dropping out of the bottom of the frame. The lamp travels with it
+   for the same reason the casting's does: a held thing is a lit thing, or it
+   reads as a hole. The bench copy of the tool never gets a hand — this is
+   built when the tool is taken, and the take is one-way. */
+function buildCaliperGrip() {
+  const g = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({ color: 0x242b33, roughness: 1.0, metalness: 0.0 });
+  const cap = (r, len, at, axis) => {
+    const c = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 14), skin);
+    const yv = new THREE.Vector3(axis[0], axis[1], axis[2]).normalize();
+    const ref = Math.abs(yv.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const xv = new THREE.Vector3().crossVectors(ref, yv).normalize();
+    const zv = new THREE.Vector3().crossVectors(xv, yv).normalize();
+    c.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xv, yv, zv));
+    c.position.set(at[0], at[1], at[2]); c.castShadow = false; g.add(c); return c;
+  };
+  const knuck = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.032, 0.055), skin);
+  knuck.position.set(0.012, 0.028, -0.048); knuck.castShadow = false; g.add(knuck);
+  cap(0.008, 0.050, [-0.006, 0.028, 0.020], [1, 0, 0]);
+  cap(0.008, 0.042, [0.008, 0.028, 0.020], [1, 0, 0]);
+  cap(0.008, 0.046, [0.022, 0.028, 0.020], [1, 0, 0]);
+  cap(0.012, 0.026, [-0.020, 0.019, -0.0185], [1, 0, 0]);    // the thumb, on the thumbwheel
+  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.048, 0.26, 14), skin);
+  wrist.position.set(0.05, 0.026, -0.15); wrist.rotation.set(1.35, 0, 0.15);
+  wrist.castShadow = false; g.add(wrist);
+  const lamp = new THREE.PointLight(0xfff2dc, 0.30, 1.3, 2.0);
+  lamp.position.set(0.02, -0.02, -0.18); g.add(lamp);
+  return g;
+}
+
+/* paperwork: the traveler on the bench by the machine, and the drawing on the wall */
+const TRAVELER = new THREE.Group(); bench.add(TRAVELER);
+TRAVELER.position.set(0.36, 0.932, -0.1); TRAVELER.rotation.y = -0.35;
 const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.21, 0.29),
   new THREE.MeshStandardMaterial({ color: 0xdedad1, roughness: 0.92 }));
 paper.rotation.x = -Math.PI / 2; TRAVELER.add(paper);
@@ -2335,7 +2415,7 @@ add(PARALLELS, 'Parallels — matched pair', 'take them', () => {
   say('Earl', "\u201cThose. Now you can block it up off the table and still get the bar in and out.\u201d");
 }, () => !CARRIED.parallels);
 
-add(CALIPERS, 'Vernier calipers — 150 mm', 'pick them up', () => {
+add(CALIPERS, `Vernier calipers — ${CALIPER_MM} mm`, 'pick them up', () => {
   CARRIED.calipers = true;
   /* TAKEN IS A PLACE, NOT A FLAG. These used to be hidden with
      `CALIPERS.visible = false`, which left the bench bare and the calipers
@@ -2359,11 +2439,12 @@ add(CALIPERS, 'Vernier calipers — 150 mm', 'pick them up', () => {
   CALIPERS.position.set(0.24, -0.175, -0.42);
   {
     const jaws = new THREE.Vector3(-0.35, 0.94, 0).normalize();   // out of both jaws
-    const beam = new THREE.Vector3(1, 0, -0.3).normalize();       // the 300 mm of it
+    const beam = new THREE.Vector3(1, 0, -0.3).normalize();       // the beam of it, the named 150 mm
     const x = beam.sub(jaws.clone().multiplyScalar(beam.dot(jaws))).normalize();
     const z = jaws.clone(), y = z.clone().cross(x).normalize();
     CALIPERS.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
   }
+  CALIPERS.add(buildCaliperGrip());
   say('You', 'Heavy for their size. There is a thumbwheel and a lock screw.');
   logLine('<b>Took the calipers.</b> Press <b>M</b> at the machine to measure the bore.');
 }, () => !CARRIED.calipers);
