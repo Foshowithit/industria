@@ -679,19 +679,33 @@ export function shopEnvironment(renderer, { size = 256 } = {}) {
    only place that knows what a verification is. */
 export const KEYPAD = {
   cols: 4,
-  rows: 3,
-  /* Reading order, left to right, top to bottom. `tone` is the key's colour:
-     the two that remove metal are amber, the two that read the machine are
-     cool, and the rest are plain membrane. */
+  rows: 4,
+  /* Reading order, left to right, top to bottom. The layout is a working
+     pendant's: what you SET on top, what you ASK for in the middle, what
+     REMOVES METAL and what you READ on the bottom.
+
+     `tone` is the key's colour: amber for the keys that change a setting or
+     take a cut, cool for the ones that read the machine, plain for the rest. */
   keys: [
     { id: 'dial_down', label: 'DIAL -',   tone: 'warn' },
     { id: 'dial_up',   label: 'DIAL +',   tone: 'warn' },
     { id: 'pred_down', label: 'PRED -',   tone: 'warn' },
     { id: 'pred_up',   label: 'PRED +',   tone: 'warn' },
+
+    { id: 'bite_down', label: 'BITE -',   tone: 'warn' },
+    { id: 'bite_up',   label: 'BITE +',   tone: 'warn' },
+    { id: 'feed_down', label: 'FEED -',   tone: 'warn' },
+    { id: 'feed_up',   label: 'FEED +',   tone: 'warn' },
+
+    /* BOOK and MAINT are the two keys this build did not have and the two a
+       shop cannot do without. BOOK reads the tooling supplier's cutting data —
+       an authority, with its assumption printed on it. MAINT is the only thing
+       that puts the machine's condition back, and it is not free. */
+    { id: 'book',      label: 'BOOK',     tone: 'cool' },
+    { id: 'maint',     label: 'MAINT',    tone: 'cool' },
     { id: 'touch',     label: 'TOUCH OFF', tone: 'plain' },
     { id: 'warm',      label: 'WARM UP',  tone: 'plain' },
-    { id: 'feed_down', label: 'FEED -',   tone: 'plain' },
-    { id: 'feed_up',   label: 'FEED +',   tone: 'plain' },
+
     { id: 'rough',     label: 'ROUGH',    tone: 'warn' },
     { id: 'cut',       label: 'CUT',      tone: 'hot' },
     { id: 'measure',   label: 'MEASURE',  tone: 'cool' },
@@ -699,10 +713,11 @@ export const KEYPAD = {
   ],
 };
 
-/** Draws the membrane panel. `size` is the canvas edge; the panel is drawn at
- *  4:3 and the mesh must be built at the same aspect or the keys stretch. */
+/** Draws the membrane panel. `size` is the canvas edge; the panel is drawn
+ *  SQUARE for a 4 x 4 grid and the mesh must be built at the same aspect or the
+ *  keys stretch. */
 export function keypadPanel(size = 640, seed = 71) {
-  const W = size, H = Math.round(size * 0.75);
+  const W = size, H = size;
   const c = canvas(W);
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
@@ -911,5 +926,77 @@ export function clockFace(size = 256) {
   }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/* ══ THE SYSTEM'S SCREEN ═══════════════════════════════════════════════════
+   A terminal readout, drawn the same way everything else here is drawn. It is
+   a machine-shop console and it looks like one: dark, monospaced, a title bar,
+   a caret that is always waiting, and numbers with their units on them.
+
+   The lines are passed in by the page because what the system SAYS is the
+   page's business — this module draws a screen. `caret` is drawn because a
+   console with nothing waiting on it looks switched off, and this one is
+   always waiting for somebody to ask it something. */
+export function consoleScreen({ title = 'SYSTEM', status = 'READY', lines = [],
+                                accent = '#7fd6a0', size = 512 } = {}) {
+  const W = size, H = Math.round(size * 0.62);
+  const c = canvas(W); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#0d1512'); bg.addColorStop(1, '#070c0a');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  // the title bar and its rule
+  ctx.fillStyle = 'rgba(127,214,160,.10)'; ctx.fillRect(0, 0, W, H * 0.11);
+  ctx.fillStyle = accent; ctx.fillRect(0, H * 0.11, W, Math.max(1, size * 0.003));
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = accent;
+  ctx.font = `600 ${(size * 0.052).toFixed(1)}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+  ctx.fillText(title, W * 0.045, H * 0.058);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(127,214,160,.72)';
+  ctx.fillText(status, W * 0.955, H * 0.058);
+
+  // the body
+  ctx.textAlign = 'left';
+  const fs = size * 0.040;
+  ctx.font = `400 ${fs.toFixed(1)}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+  let y = H * 0.215;
+  for (const l of lines) {
+    if (l && typeof l === 'object') {
+      ctx.fillStyle = 'rgba(200,220,210,.62)';
+      ctx.fillText(l.k, W * 0.055, y);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = l.warn ? '#e8a33d' : '#cfe8dc';
+      ctx.fillText(l.v, W * 0.945, y);
+      ctx.textAlign = 'left';
+    } else {
+      ctx.fillStyle = 'rgba(180,205,192,.80)';
+      ctx.fillText(String(l), W * 0.055, y);
+    }
+    y += H * 0.088;
+  }
+  // the caret, waiting
+  const cy = Math.min(y, H * 0.90);
+  ctx.fillStyle = accent;
+  ctx.fillRect(W * 0.055, cy - fs * 0.42, fs * 0.52, fs * 0.86);
+
+  // scanlines and a little bloom, because a photographed screen has both
+  for (let i = 0; i < H; i += 3) {
+    ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.fillRect(0, i, W, 1);
+  }
+  const gl = ctx.createRadialGradient(W * 0.5, H * 0.5, W * 0.1, W * 0.5, H * 0.5, W * 0.75);
+  gl.addColorStop(0, 'rgba(127,214,160,.05)');
+  gl.addColorStop(1, 'rgba(0,0,0,.30)');
+  ctx.fillStyle = gl; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = size * 0.012;
+  ctx.strokeRect(0, 0, W, H);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
   return tex;
 }

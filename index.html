@@ -151,6 +151,10 @@
   <div id="pnRows"></div>
   <div class="cut" id="pnCut"></div>
   <div data-lmhost="1" id="pnLoad"></div>
+  <!-- WHY THE PART IS WRONG, ATTRIBUTED. The kernel's signed terms, from the
+       last pass that actually cut metal. No score, no verdict — the arithmetic,
+       the way this build's own reference cases show it. -->
+  <div id="pnBudget"></div>
 </div>
 
 <div id="hint">WASD move · mouse look · <b>E</b> use · <b>shift</b> run</div>
@@ -175,7 +179,7 @@ import { createAudio } from './audio.mjs';
 import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS } from './shop.mjs';
 /* The shop's surfaces. Drawn in the page, deterministic, no assets — see the
    header of materials.mjs for why they are not files. */
-import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace } from './materials.mjs';
+import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace, consoleScreen } from './materials.mjs';
 /* Playtest instrumentation. Dark unless the URL asks for it (`?rec=1`), so the
    public build behaves exactly as before — see recorder.mjs and PLAYTEST-KIT.md.
    Every call below is a no-op returning early when `REC` is null. */
@@ -511,8 +515,11 @@ const pend = new THREE.Group(); pend.position.set(1.72, 1.66, 0.92); cell.add(pe
 box(0.80, 1.10, 0.16, M.dark, 0, 0, 0, pend);
 /* the machine's own readout — still the HTML panel, which is the one place on
    this floor that is allowed to be a screen */
-box(0.62, 0.42, 0.03, new THREE.MeshStandardMaterial({ color: 0x1b3a2a, emissive: 0x2f7a4a, emissiveIntensity: 0.7 }), 0, 0.27, 0.10, pend);
-const PEND_W = 0.66, PEND_H = PEND_W * 0.75;
+box(0.62, 0.30, 0.03, new THREE.MeshStandardMaterial({ color: 0x1b3a2a, emissive: 0x2f7a4a, emissiveIntensity: 0.7 }), 0, 0.33, 0.10, pend);
+/* SQUARE, because the grid is 4 x 4. A keypad drawn 4:3 and mapped onto a
+   square plate is a keypad whose hit-map is right and whose picture is wrong —
+   the two derive from KEYPAD and the aspect is the one thing they cannot. */
+const PEND_W = 0.66, PEND_H = 0.66;
 const padTex = keypadPanel(640, 71);
 const pendPad = new THREE.Mesh(new THREE.PlaneGeometry(PEND_W, PEND_H),
   new THREE.MeshStandardMaterial({ map: padTex.texture, roughness: 0.62, metalness: 0.05 }));
@@ -984,6 +991,46 @@ for (let i = 0; i < 7; i++) {
 const PARALLELS = new THREE.Group(); PARALLELS.position.set(0.45, 0.955, 0.18); toolroom.add(PARALLELS);
 for (let i = 0; i < 3; i++) box(0.34, 0.022 - i * 0.004, 0.05, i === 0 ? M.steel : M.dark, 0, i * 0.026, i * 0.02, PARALLELS);
 
+/* ══ THE SYSTEM'S TERMINAL ════════════════════════════════════════════════
+   The seat, with a body. A manufacturing system is not a menu in this game and
+   it is not a helper in the corner of the screen: it is a console on a stand at
+   the end of the cell, and you walk to it and ask it something the way you walk
+   to the machine and cut something.
+
+   It sits between the bench and the machine because that is where the terminal
+   in a real cell sits — on the way past, so that asking is cheap and not asking
+   is a decision rather than a slip. */
+const TERMINAL = new THREE.Group();
+TERMINAL.position.set(-3.5, 0, -5.4);
+TERMINAL.rotation.y = -1.05;
+scene.add(TERMINAL);
+box(0.52, 0.94, 0.42, M.dark, 0, 0.47, 0, TERMINAL);            // the cabinet
+box(0.46, 0.02, 0.20, M.bright, 0, 0.55, 0.30, TERMINAL);       // keyboard shelf
+box(0.44, 0.14, 0.15, M.dark, 0, 0.99, 0, TERMINAL);            // the stand
+const TERM_SCREEN = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.60, 0.372),
+  new THREE.MeshStandardMaterial({ map: consoleScreen({ title: 'SYSTEM', status: 'NO SURVEY', lines: ['walk up and read me'] }),
+    roughness: 0.30, metalness: 0.0, emissive: 0xffffff, emissiveMap: null,
+    emissiveIntensity: 0.0 }));
+TERM_SCREEN.position.set(0, 1.24, 0.02);
+TERM_SCREEN.rotation.x = -0.12;
+TERMINAL.add(TERM_SCREEN);
+box(0.66, 0.44, 0.04, M.dark, 0, 1.24, -0.02, TERMINAL);        // the bezel
+/* the screen lights the desk the way a screen does */
+const termGlow = new THREE.PointLight(0x9fe6bd, 0.45, 2.6, 2.0);
+termGlow.position.set(0, 1.22, 0.30); TERMINAL.add(termGlow);
+box(0.30, 0.04, 0.18, M.bright, 0, 0.565, 0.30, TERMINAL);      // a keyboard
+
+/** Repaint the terminal's own screen. Called when the system is asked
+ *  something, so the console in the world shows the last thing it said — which
+ *  is what a console does and is cheaper than a live screen. */
+function paintTerminal(lines, status) {
+  const tex = consoleScreen({ title: 'SYSTEM', status, lines });
+  TERM_SCREEN.material.map.dispose();
+  TERM_SCREEN.material.map = tex;
+  TERM_SCREEN.material.needsUpdate = true;
+}
+
 /* the TOOL BOARD — where the bars live. §104: you carry one to the spindle. */
 const BOARDS = { bar12: null, bar16: null, bar20: null };
 const board = new THREE.Group(); board.position.set(-2.2, 0, 3.6); board.rotation.y = 0.15; scene.add(board);
@@ -1443,6 +1490,10 @@ function pressKey(id) {
     }
     case 'feed_down': stepRoughFeed(-1); return;
     case 'feed_up':   stepRoughFeed(1);  return;
+    case 'bite_down': stepRoughBite(-1); return;
+    case 'bite_up':   stepRoughBite(1);  return;
+    case 'book':      readBook();  return;
+    case 'maint':     callMaint(); return;
     case 'touch':     doTouchOff(); return;
     case 'warm':      doWarmUp();   return;
     case 'rough':     doRough();    return;
@@ -1458,6 +1509,160 @@ add(pendPad, 'Machine control — pendant', 'press a key', () => {
     clock_min: GAME ? GAME.clock_min : null });
   pressKey(pendHover.id);
 }, () => eye.distanceTo(MACHINE_NEAR) < 4.2);
+
+/* ══ ASKING THE SYSTEM ════════════════════════════════════════════════════
+   Walk to the console, press E, and it tells you what it makes of the bore at
+   the dial you have set. Then the books close on it when metal comes off.
+
+   WHAT IT WILL NOT DO is tell you what to think of its own answer. It reports
+   both conditions on the same screen — the one it surveyed, and the one the
+   machine is at — and says nothing about the gap. The player who compares those
+   two lines is the player who stops scraping castings on a worn machine. */
+add(TERMINAL, 'Shop system — console', 'read it', () => {
+  if (!GAME) return;
+  const rec = G.systemRecord(GAME);
+  const surveyed = GAME.system.surveyed_condition;
+  const now = GAME.machine.condition;
+  const drift = now - surveyed;
+  const lines = [];
+  lines.push(`surveyed at <b>${W.hhmm(GAME.system.surveyed_at_min)}</b> — condition ` +
+    `<b>${surveyed.toFixed(0)}</b>, TIR ${G.runout_um_for(surveyed).toFixed(1)} µm`);
+  lines.push(`machine now — condition <b>${now.toFixed(0)}</b>, ` +
+    `TIR ${G.runout_um_for(now).toFixed(1)} µm` +
+    (Math.abs(drift) < 1 ? '' : ` <b>(${drift < 0 ? '' : '+'}${drift.toFixed(0)} since I looked)</b>`));
+
+  let body = lines.join('<br>');
+  const opts = [];
+
+  if (!GAME.tool) {
+    body += `<br><br>Nothing in the spindle, so there is nothing to forecast. ` +
+      `Put a bar in and ask me again.`;
+  } else {
+    const f = G.forecastPass(GAME, { bite_mm: biteCmd_um / 1000, feed_mm_rev: roughFeed_mm_rev });
+    if (!f) body += `<br><br>I cannot model that.`;
+    else if (f.refused) body += `<br><br>At <b>${biteCmd_um} µm</b> the machine will refuse it ` +
+      `(${String(f.why).replace(/_/g, ' ').toLowerCase()}). If you take that cut you will get a ` +
+      `refusal, not a part.`;
+    else {
+      G.claimPass(GAME, f.coldDia_mm, { dial_um: biteCmd_um });
+      body += `<br><br>At <b>${biteCmd_um} µm</b> on the dial, I make that ` +
+        `<b>Ø${f.coldDia_mm.toFixed(4)} mm</b> cold.`;
+      body += `<br><br><i>I will be told whether I was right when you cut it.</i>`;
+    }
+  }
+
+  /* THE RECORD, kept by the shop and not by the system. Written as a fact about
+     the calls it has made — mean and worst, absolute micrometres — and never as
+     a rating, because the number a supplier's own scoreboard carries is worth
+     nothing to the person who has to decide whether to believe it. */
+  body += `<br><br>` + (rec.n === 0
+    ? `<i>No calls settled yet.</i>`
+    : `<i>Of the last <b>${rec.n}</b> calls I have made: mean <b>${rec.mean_abs_um.toFixed(1)} µm</b> ` +
+      `out, worst <b>${rec.worst_um.toFixed(1)} µm</b>, and ` +
+      (rec.signed_um < -0.05
+        ? `<b>optimistic</b> by ${Math.abs(rec.signed_um).toFixed(1)} µm on average.`
+        : rec.signed_um > 0.05
+          ? `<b>pessimistic</b> by ${rec.signed_um.toFixed(1)} µm on average.`
+          : `balanced.`));
+
+  opts.push(['Survey the machine now', () => {
+    const r = G.SYSTEM.survey(GAME);
+    paintTerminal([
+      { k: 'condition', v: r.condition.toFixed(0) },
+      { k: 'TIR', v: G.runout_um_for(r.condition).toFixed(1) + ' um', warn: G.runout_um_for(r.condition) > 7 },
+      { k: 'claims', v: '0 kept' },
+      'surveyed. ask me again.',
+    ], 'READY');
+    logLine(`System surveyed the machine: condition <b>${r.condition.toFixed(0)}</b>, ` +
+      `TIR <b>${G.runout_um_for(r.condition).toFixed(1)} µm</b>. Its call record is reset with it.`);
+    toast(`Surveyed. Condition ${r.condition.toFixed(0)} · ` +
+      `TIR ${G.runout_um_for(r.condition).toFixed(1)} µm.<br>` +
+      `Its previous calls were made about a different machine.`, 6000);
+  }]);
+
+  say('SYSTEM', body, opts);
+  paintTerminal([
+    { k: 'surveys', v: 'yes' },
+    { k: 'machine', v: now.toFixed(0), warn: Math.abs(drift) > 60 },
+    { k: rec.n ? 'calls' : 'calls', v: rec.n ? rec.n + ' settled' : 'none yet' },
+    rec.n ? { k: 'worst call', v: rec.worst_um.toFixed(1) + ' um' } : 'waiting for a cut',
+  ], rec.n ? 'READY' : 'NO RECORD');
+  if (REC) REC.action('ask_system', { surveyed, actual: now, drift,
+    dial_um: biteCmd_um, calls: rec.n,
+    mean_abs_um: rec.mean_abs_um, signed_um: rec.signed_um });
+}, () => true);
+
+/* ══ THE BOOK, AND THE VISIT ═════════════════════════════════════════════
+   Two verbs that only work because the shop is a business with a supplier and
+   a machine that wears. */
+
+/** Read the tooling supplier's cutting data for the bar in the spindle.
+ *
+ *  THE ASSUMPTION IS PRINTED WITH THE NUMBER, and that is the whole design.
+ *  The recommendation is computed from this game's own kernel for a machine at
+ *  condition 1000 and the bar at its catalogue stickout, so it is a real
+ *  number that really runs — on that machine. Yours is at
+ *  `GAME.machine.condition` and falling. A recommendation without its
+ *  assumptions is an instruction; the moment you can compare the assumption
+ *  against the machine in front of you it becomes advice. */
+function readBook() {
+  if (!GAME.tool) {
+    say('Book', 'The sheet is indexed by bar. There is nothing in the spindle to look up.');
+    return;
+  }
+  const b = G.bookCut(GAME.tool, GAME.materialKey, GAME.machineKey);
+  if (!b) { say('Book', 'Nothing in the catalogue covers that combination.'); return; }
+  const mine = G.runout_um_for(GAME.machine.condition);
+  const theirs = G.runout_um_for(b.assumes.machineCondition);
+  const agree = Math.abs(mine - theirs) < 0.6;
+  const body =
+    `<b>${b.bar}</b> in ${GAME.mat.label}<br>` +
+    `Take <b>${b.bite_mm.toFixed(2)} mm</b> at <b>${b.feed_mm_rev.toFixed(2)} mm/rev</b>.<br><br>` +
+    `<i>Recommended for ${b.assumes.note}: condition ` +
+    `${b.assumes.machineCondition}, bar at ${(GAME.toolSpec.D * 2.5).toFixed(0)} mm out.</i><br>` +
+    `<i>This machine is at condition ${GAME.machine.condition.toFixed(0)} — ` +
+    `TIR ${mine.toFixed(1)} µm against the sheet's ${theirs.toFixed(1)}.</i>` +
+    (agree ? '' : `<br><br><b>The sheet does not know what machine you are standing at.</b>`);
+  const opts = [[`Set the dial to the book's numbers`,
+    () => {
+      biteCmd_um = Math.round(b.bite_mm * 1000);
+      roughFeed_mm_rev = b.feed_mm_rev;
+      roughBite_mm = b.bite_mm;
+      refreshLoadMeter();
+      logLine(`Set to the book: bite <b>${b.bite_mm.toFixed(2)} mm</b> ` +
+        `(${biteCmd_um} µm on the dial) at <b>${b.feed_mm_rev.toFixed(2)} mm/rev</b>.`);
+      /* The next thing the player should do is check it against the meter, so
+         the game says so once and then never again. */
+      if (!earlSaid.bookChecked) {
+        earlSaid.bookChecked = true;
+        setTimeout(() => say('Earl', "\u201cThe book's the book. It's never stood at " +
+          "this machine. Look at the meter before you press anything.\u201d"), 1400);
+      }
+    }]];
+  say('Tooling sheet', body, opts);
+  if (REC) REC.action('read_book', { bar: b.barId, bite_mm: b.bite_mm, feed: b.feed_mm_rev,
+    sheet_condition: b.assumes.machineCondition, machine_condition: GAME.machine.condition });
+}
+
+/** Book the machine in. The only thing that puts condition back, and it cannot
+ *  be done with the spindle turning. It costs money the shop has to have. */
+function callMaint() {
+  const r = G.maintain(GAME, { cost: 340, minutes: 45 });
+  if (!r.ok) {
+    say('You', 'Not while it is turning. Stop the spindle first.');
+    if (REC) REC.refusal('maint', r.why, { clock_min: GAME.clock_min });
+    return;
+  }
+  if (SHOP) SHOP.cash -= r.cost;
+  if (GAME.state_clock_floor > clocks.job_min + opMin) opMin = GAME.state_clock_floor - clocks.job_min;
+  clockFloorMin = Math.max(clockFloorMin, GAME.state_clock_floor);
+  GAME.clock_min = clocks.job_min + opMin;
+  toast(`<b>Maintenance.</b> Condition ${r.before.toFixed(0)} → <b>${r.after.toFixed(0)}</b>. ` +
+    `TIR now ${r.runout_um.toFixed(1)} µm.<br>${r.minutes} minutes and ${money(r.cost)}.`, 7000);
+  logLine(`Service visit. Condition <b>${r.before.toFixed(0)} → ${r.after.toFixed(0)}</b>, ` +
+    `runout <b>${r.runout_um.toFixed(1)} µm</b>. ${money(r.cost)} and ${r.minutes} minutes gone.`);
+  if (REC) REC.action('maint', { before: r.before, after: r.after, cost: r.cost, minutes: r.minutes });
+}
 
 /* ── ROUND 9 VERBS — the floor the part moves across ──────────────────────
    Every one of these reads the PHYSICAL state and says what is there. None of
@@ -1653,8 +1858,13 @@ function machinePanel() {
     F('spindle °C', `${m.spindleC.toFixed(1)} (ref ${m.refSpindleC.toFixed(1)})`) +
     F('screw °C', `${m.screwC.toFixed(1)}`) +
     F('part °C', `${GAME.part.partC.toFixed(1)}`) +
-    F('tool', GAME.tool ? `${GAME.tool.label} · ${stickout} mm out` : '<i>none loaded</i>') +
-    F('passes', `${bore.passes}`);
+    F('tool', GAME.toolSpec ? `${GAME.toolSpec.label} · ${stickout} mm out` : '<i>none loaded</i>') +
+    F('passes', `${bore.passes}`) +
+    /* THE MACHINE'S OWN CONDITION, on the machine. It is the number that makes
+       the tooling book below either right or wrong, so it has to be somewhere a
+       player can see it without opening anything. */
+    F('machine', `${GAME.machine.condition.toFixed(0)} of 1000 · ` +
+      `TIR ${G.runout_um_for(GAME.machine.condition).toFixed(1)} µm`);
   const surplus = last ? (last.bite_realised_um - last.bite_cmd_um) : 0;
   $('pnCut').innerHTML =
     F('dial', `${biteCmd_um} µm radius`) +
@@ -1673,6 +1883,23 @@ function machinePanel() {
      cut rather than after the refusal. */
   const lm = $('pnLoad');
   if (lm) lm.innerHTML = loadMeterHTML();
+  /* ── THE BUDGET ────────────────────────────────────────────────────────
+     Signed micrometres by cause, from the last pass that cut metal. This is
+     the build's own headline claim — "the interesting number is why the part
+     is wrong" — and it belongs on the machine, not in a report. Terms under a
+     twentieth of a micron are dropped because the panel is a readout and not a
+     transcript, and the reader needs the ones that matter. */
+  const pb = $('pnBudget');
+  if (pb) {
+    const lastCut = GAME.history[GAME.history.length - 1];
+    if (lastCut && lastCut.err_terms) {
+      const terms = lastCut.err_terms.filter((t) => Math.abs(t.um) >= 0.05);
+      pb.innerHTML = `<div class="row" style="margin-top:6px"><i>why the bore is wrong</i><span></span></div>` +
+        terms.map((t) => `<div class="row"><i>${String(t.name).replace(/\s*\(.*\)$/, '')}</i>` +
+          `<span>${t.um >= 0 ? '+' : ''}${t.um.toFixed(1)} µm</span></div>`).join('') +
+        `<div class="row"><i><b>total</b></i><span><b>${lastCut.err_terms.reduce((a, t) => a + t.um, 0).toFixed(1)} µm</b></span></div>`;
+    } else { pb.innerHTML = ''; }
+  }
 }
 
 /* ── THE VERBS — every number from the kernel, none from here ───────────── */
@@ -2734,6 +2961,11 @@ function startShift(jobId, { announce = true, carry = true } = {}) {
   roughBite_mm = 0.3; roughFeed_mm_rev = 0.12;
 
   buildPartMesh(spec.start_hole_dia_mm, spec.bore_depth_mm);
+  /* THE SYSTEM READS THE MACHINE WHEN IT CLOCKS ON, and not again until it is
+     asked. A fresh survey on a fresh morning is what makes the drift WITHIN a
+     shift the thing the player has to notice, rather than a number that is
+     always stale. */
+  G.SYSTEM.survey(GAME);
   syncFloor();
   syncBoard();
 
@@ -3065,6 +3297,19 @@ window.INDUSTRIA = {
      this the only way to change where you are looking is to move the mouse
      under pointer lock, which no headless run can do — and the pendant is
      pressed by AIMING at a key, so a gate could not press one at all. */
+  /* THE SYSTEM'S OWN VERBS, on the same surface as everything else a probe
+     drives. A forecast is only worth anything if it can be checked against the
+     cut, and a gate cannot check it without being able to ask. */
+  forecast: (bite_mm, feed_mm_rev) => G.forecastPass(GAME,
+    { bite_mm: bite_mm === undefined ? biteCmd_um / 1000 : bite_mm,
+      feed_mm_rev: feed_mm_rev === undefined ? roughFeed_mm_rev : feed_mm_rev }),
+  claim: (mm, dial_um) => G.claimPass(GAME, mm, { dial_um }),
+  systemRecord: () => G.systemRecord(GAME),
+  survey: () => G.SYSTEM.survey(GAME),
+  machineCondition: () => ({ condition: GAME.machine.condition,
+    surveyed: GAME.system.surveyed_condition,
+    tir_um: G.runout_um_for(GAME.machine.condition),
+    cut_min_total: GAME.machine.cut_min_total }),
   look: (y, p) => {
     if (y !== undefined && y !== null) yaw = y;
     if (p !== undefined && p !== null) pitch = p;

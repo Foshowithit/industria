@@ -44,6 +44,176 @@ export const BLANK_STOCK_DEFAULT = BLANK_STOCK;
    THE JOBS
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* ══ THE SYSTEM — THE SEAT A MANUFACTURING MODEL SITS IN ═════════════════
+   Every rung of this trade has an authority that tells you what it would do:
+   the tooling book at the machine, the estimator at the shop, the route sheet
+   at the process, the material certificate at the supplier, the standard above
+   all of it. This is that authority's seat, occupied by a system that FORECASTS
+   and keeps its own record.
+
+   WHAT IT DOES, and the honesty rules it follows:
+
+     1. IT FORECASTS BY RUNNING THE MACHINE'S OWN PHYSICS. `forecastPass` clones
+        the game state and calls `cutOnce` on the clone. It is not a model of
+        the kernel and it is not a fudge factor — it is the kernel, run on a
+        state that does not get written back. A second derivation of the same
+        arithmetic would be this project's most reliable defect generator, and
+        the whole point of putting a system in this seat is that its claims are
+        CHECKABLE. A claim computed by a different route than the machine uses
+        is a claim that cannot be checked at all.
+
+     2. ITS ERROR HAS EXACTLY ONE CAUSE, AND IT IS VISIBLE. The clone is given
+        the machine's SURVEYED condition, not its current one. A system cannot
+        know the wear it has not looked at. So its forecasts are exact on a
+        machine that matches its survey and drift wrong as the machine wears
+        away from it — and both numbers are on the screen, so a player can
+        reason about the gap instead of guessing at it.
+
+     3. IT NEVER HOLDS THE ANSWER. It states a claim; the part is the truth; the
+        player is the one who finds out. If this system ever knew the outcome
+        and said so, the mechanic would be dead and the game would be about
+        pressing a button that is always right.
+
+   THE REAL THING GOES HERE. A manufacturing model — Shop OS, or anything else
+   that answers "what will this come out at" — occupies exactly this seat. What
+   would have to be true to wire one in: it must return a NUMBER and the
+   ASSUMPTIONS it was computed under, it must not be told the outcome, and its
+   record must be kept by the shop rather than by itself. All three are the same
+   conditions this implementation follows, which is why the seam is here and not
+   somewhere else. */
+export const SYSTEM = {
+  claims_kept: 12,
+  /* A survey is free and instant — it is the machine reading its own scales.
+     What it cannot do is stay current, and that is the entire mechanism. */
+  survey(g) {
+    g.system.surveyed_condition = g.machine.condition;
+    g.system.surveyed_at_min = g.clock_min;
+    g.system.claims.length = 0;
+    return { condition: g.machine.condition, at: g.clock_min };
+  },
+};
+
+/** What the system says the bore will be after one pass at this dial setting.
+ *
+ *  READ-ONLY: the state is cloned and the real game is never touched. Returns
+ *  null rather than a guess when the machine cannot make the cut at all —
+ *  a system that forecasts a refused cut is worse than one that admits it. */
+export function forecastPass(g, { bite_mm, feed_mm_rev, vc = 120 } = {}) {
+  if (!g || !g.tool) return null;
+  const clone = structuredClone(g);
+  clone.machine.condition = g.system.surveyed_condition;
+  const r = cutOnce(clone, { bite_mm, feed_mm_rev, vc, label: 'forecast' });
+  if (!r.ok) return { refused: true, why: r.why };
+  return {
+    refused: false,
+    coldDia_mm: clone.part.holeDia_cold_mm,
+    removed_um: clone.history[clone.history.length - 1].removed_um,
+    surveyed_condition: g.system.surveyed_condition,
+    actual_condition: g.machine.condition,
+  };
+}
+
+/** File a claim. The system says the bore will be this; the shop writes down
+ *  that it said so. Nothing here decides whether it was right — that is what
+ *  the machine is for. */
+export function claimPass(g, predicted_mm, { dial_um = null } = {}) {
+  /* ONE OPEN CLAIM AT A TIME. Asking twice before cutting does not make two
+     claims, it makes the system change its mind — and a record that counted
+     both would let a player improve the system's score by asking it repeatedly
+     and cutting once. The last thing it said before the cut is the thing that
+     gets scored, because that is the thing the player acted on. */
+  const last = g.system.claims[g.system.claims.length - 1];
+  if (last && last.actual_mm === null) {
+    last.predicted_mm = predicted_mm; last.dial_um = dial_um; last.at_min = g.clock_min;
+    last.condition_then = g.machine.condition;
+    return last;
+  }
+  const c = { n: g.passes + 1, dial_um, predicted_mm, at_min: g.clock_min,
+    actual_mm: null, error_um: null, condition_then: g.machine.condition };
+  g.system.claims.push(c);
+  while (g.system.claims.length > SYSTEM.claims_kept) g.system.claims.shift();
+  return c;
+}
+
+/** The shop closes the books on the last claim with what the machine actually
+ *  did. Called from `cutOnce` and nowhere else, so a claim cannot be settled by
+ *  anything except metal coming off. */
+function settleClaims(g) {
+  const c = g.system.claims[g.system.claims.length - 1];
+  if (!c || c.actual_mm !== null) return;
+  c.actual_mm = g.part.holeDia_cold_mm;
+  c.error_um = (c.predicted_mm - c.actual_mm) * 1000;
+}
+
+/** The system's record, as the shop holds it. Not a score: the mean signed and
+ *  absolute error of the calls it has made, and how many it has made. */
+export function systemRecord(g) {
+  const done = g.system.claims.filter((c) => c.error_um !== null);
+  if (!done.length) return { n: 0, mean_abs_um: null, worst_um: null, signed_um: null };
+  const abs = done.map((c) => Math.abs(c.error_um));
+  return {
+    n: done.length,
+    mean_abs_um: abs.reduce((a, b) => a + b, 0) / done.length,
+    worst_um: Math.max(...abs),
+    signed_um: done.reduce((a, c) => a + c.error_um, 0) / done.length,
+  };
+}
+
+/* ── THE BOOK, AS A FUNCTION ──────────────────────────────────────────────
+   The recommendation is SEARCHED FOR, not asserted. The catalogue offers the
+   deepest bite at its feed that a machine in calibration will actually run, and
+   "will actually run" is asked of the same kernel that will refuse the cut —
+   `assessBoring` on a machine at the assumed condition. A catalogue that
+   recommended a refused cut is a catalogue nobody uses twice, and a number
+   typed into a table here would be a number that could drift out of agreement
+   with the machine the moment anything in the kernel moved. */
+export function bookCut(barId, materialKey, machineKey = 'vmc_40taper_7k5') {
+  const spec = TOOLING.find((t) => t.id === barId);
+  const mat = MATERIALS[materialKey];
+  const mach = MACHINES[machineKey];
+  if (!spec || !mat || !mach) return null;
+  const tool = makeTool({ D: spec.D, z: spec.z, stickout_L: spec.D * 2.5 });
+  const feed = BOOK.feed_mm_rev;
+  const assumed = {
+    runout_um: runout_um_for(BOOK.assumes.machineCondition),
+    tool_len_mm: spec.D * 2.5,
+  };
+  let bite = +(spec.D * BOOK.bite_fraction_of_D).toFixed(2);
+  /* Step down until the assumed machine runs it. 0.02 mm is finer than any
+     catalogue prints and this loop is bounded, so it cannot spin. */
+  for (let i = 0; i < 200; i++) {
+    const as = assessBoring({ b: bite, feed, vc: 120 }, { tool, material: mat }, mach, assumed);
+    if (as.verdict === 'CUTS CLEAN') break;
+    bite = +(bite - 0.02).toFixed(2);
+    if (bite <= 0.02) return null;
+  }
+  return { bite_mm: bite, feed_mm_rev: feed, bar: spec.label, barId,
+    feed_per_rev: feed, assumes: { ...BOOK.assumes } };
+}
+
+/** Call maintenance. Restores condition toward the ceiling, costs money and
+ *  clock, and cannot be done while the spindle is turning — you cannot service
+ *  a machine that is cutting, which is the whole reason a shop schedules it. */
+export function maintain(g, { cost = 340, minutes = 45 } = {}) {
+  if (g.machine.spindle_on) {
+    return { ok: false, why: 'SPINDLE_RUNNING',
+      detail: 'The spindle is turning. You do not put a man on a machine that is cutting.' };
+  }
+  const before = g.machine.condition;
+  g.machine.condition = Math.min(WEAR.condition_ceiling, before + 250);
+  g.machine.spindle_on = false;
+  g.machine.spindle_on_min = 0;
+  g.money -= cost;
+  g.charges.push({ t: g.clock_min, kind: 'MAINTENANCE', paid: 0, fee: cost,
+    note: `Maintenance visit — condition ${before.toFixed(0)} → ${g.machine.condition.toFixed(0)}.` });
+  g.clock_min += minutes;
+  g.state_clock_floor = Math.max(g.state_clock_floor, g.clock_min);
+  log(g, 'note', `Maintenance. Condition ${before.toFixed(0)} → ${g.machine.condition.toFixed(0)}. ` +
+    `Runout now ${runout_um_for(g.machine.condition).toFixed(1)} µm TIR.`);
+  return { ok: true, before, after: g.machine.condition, cost, minutes,
+    runout_um: runout_um_for(g.machine.condition) };
+}
+
 export const JOBS = [
   {
     id: 'J1',
@@ -255,6 +425,90 @@ export const jobById = (id) => JOBS.find((j) => j.id === id) || JOBS[0];
    than buried. They have NOT been measured against a real machine. The spec's
    honest-weak-list says so and this is where that promise is kept.
    ------------------------------------------------------------------------ */
+/* ══ MACHINE CONDITION — THE WEAR TERM THE KERNEL HAS ALWAYS HAD ═══════════
+   `errorBudget()` has taken a `runout_um` argument since it was written, with a
+   default of 5 µm of TIR, and NOTHING IN THIS GAME HAS EVER PASSED IT. Every
+   cut this machine has ever made was modelled with a brand-new spindle, on
+   every job, forever. The term was there and it was a constant.
+
+   Ported from the second build's `economy/machines.ts`, where a machine's
+   condition opens at 800 of 1000, preventive maintenance restores 250 up to a
+   ceiling of 950, and failures are hazarded off the condition. The scale is the
+   port; the CONSEQUENCE is new here, because a worn spindle's TIR is the one
+   wear effect this kernel can already compute.
+
+   A NEW MACHINE IS NOT THIS MACHINE. That sentence is the whole point of this
+   block, and it is the reason the cutting-data book below can be honest and
+   wrong at the same time. */
+export const WEAR = {
+  condition_open: 800,     // ported: where a machine that has been worked sits
+  condition_ceiling: 950,  // ported: what preventive maintenance can reach
+  condition_min: 200,
+  /* TIR AT THE OPENING CONDITION IS 5 µm, because that is the kernel's own
+     default and this port must not silently retune the physics it inherited.
+     Every micrometre either side of 800 is described by one slope, and the
+     slope is stated so it can be argued with rather than discovered. */
+  tir_at_800_um: 5,
+  tir_per_condition_um: 0.01,   // 0.01 µm of TIR per point of condition
+  tir_floor_um: 2,
+  tir_ceiling_um: 16,
+  /* Condition falls with the MINUTES THE SPINDLE TURNS, not with passes: a
+     worn machine is worn by use, and this makes warm-up and long roughing cuts
+     cost something other than clock. Tuned so a single shift of hard roughing
+     is visible and a hundred parts are not free. */
+  condition_per_cut_min: 0.9,
+};
+
+/** Spindle and holder total indicated runout, in µm, at a condition. The one
+ *  wear term the kernel can already price, so it is the one this build uses. */
+export function runout_um_for(condition) {
+  const c = Math.max(WEAR.condition_min, Math.min(WEAR.condition_ceiling, condition));
+  const raw = WEAR.tir_at_800_um + (WEAR.condition_open - c) * WEAR.tir_per_condition_um;
+  return Math.max(WEAR.tir_floor_um, Math.min(WEAR.tir_ceiling_um, raw));
+}
+
+/* ══ THE BOOK ══════════════════════════════════════════════════════════════
+   Cutting data from the tooling supplier. This is a real thing on a real shop
+   floor — every insert box, every bar, ships with a recommended starting
+   feed and depth — and it is the closest thing a machine shop has to an
+   authority telling you what to do.
+
+   WHY IT IS RIGHT AND WRONG AT THE SAME TIME, which is the only reason it is
+   in the game:
+
+     · It is computed HERE, from the kernel, with `machineCondition: 1000` and
+       the bar at its catalogue stickout. So it is not a made-up number and it
+       is not a trap: on a NEW machine, at the catalogue setup, the
+       recommendation genuinely runs.
+     · Your machine opens at condition 800 and falls. The book does not know
+       that, because a tooling catalogue has never known the condition of any
+       particular machine. It states the assumption it was written under, and
+       comparing that assumption with the machine in front of you is the entire
+       skill.
+
+   THIS IS THE SEAT AN ADVISOR SITS IN. A manufacturing model — Shop OS, or
+   anything else that answers "what should I cut this at" — occupies exactly
+   this position: it produces a claim, the claim is usually right, it carries
+   assumptions it cannot verify, and the only way to know whether it holds HERE
+   is to cut the part and measure it. The game does not need to pretend to have
+   such a model to teach the thing you must do with one. It needs a
+   recommendation, an assumption, and a gauge.
+
+   A claim you cannot check is an instruction. A claim you can check is
+   advice. Every number below is checkable against the load meter BEFORE the
+   cut, which is what makes this advice rather than an instruction. */
+export const BOOK = {
+  /* The conditions the catalogue was written under. Printed with the
+     recommendation, because a recommendation without its assumptions is the
+     thing this build exists to argue against. */
+  assumes: { machineCondition: 1000, stickout: null, note: 'a machine in calibration' },
+  /** Recommended radial bite and feed for a bar in a material. Recommends what
+   *  RUNS, not what is fastest: it is a starting point, and a catalogue that
+   *  recommended a refused cut would be a catalogue nobody used twice. */
+  feed_mm_rev: 0.18,
+  bite_fraction_of_D: 0.14,     // a Ø20 bar is offered 2.8 mm, a Ø12 1.68 mm
+};
+
 export const THERMAL = {
   ambient_C: 20,
 
@@ -435,6 +689,21 @@ export function newGame(job = JOBS[0], thermal = THERMAL, money = 0) {
       spindle_on: false,
       spindle_on_min: 0,
       warmup_log: [],
+      /* THE MACHINE'S OWN HISTORY. It opens at the condition the ported model
+         gives a working machine, it falls as metal comes off, and it is the
+         reason the book above is right about a different machine than this
+         one. `cut_min_total` is what drives the fall. */
+      condition: WEAR.condition_open,
+      cut_min_total: 0,
+    },
+
+    /* THE SYSTEM'S OWN STATE. `surveyed_condition` is what it believes the
+       machine is; `claims` is what the SHOP wrote down after it spoke. The
+       system does not keep its own score — see `systemRecord`. */
+    system: {
+      surveyed_condition: WEAR.condition_open,
+      surveyed_at_min: job.clock_start_min,
+      claims: [],
     },
 
     tool: null, stickout_L: null, toolSpec: null,
@@ -727,6 +996,10 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
     dt_screw_K: g.machine.screwC - g.machine.refScrewC,
     dt_part_K: g.part.partC - g.thermal.ambient_C,
     part_len_mm: g.job.nominal_mm,
+    /* THE WEAR TERM, PASSED FOR THE FIRST TIME. It sat at 5 µm by default and
+       nothing ever set it, so the machine has never aged in a single cut this
+       build has ever made. */
+    runout_um: runout_um_for(g.machine.condition),
   };
   const h_cmd = bite_effective_mm;
   let h_act = h_cmd, as = null;
@@ -762,6 +1035,14 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
   const travel_mm = g.job.bore_depth_mm;
   const feed_mm_min = as.step.f;
   const cut_min = travel_mm / Math.max(feed_mm_min, 0.001) + 0.4;   // + retract and reset
+
+  /* THE MACHINE WEARS BY TURNING. Not by passes, not by parts — by minutes of
+     spindle time, which is what wears a machine tool and what makes a long
+     roughing cut cost something other than clock. Maintenance is the only thing
+     that puts it back, and it costs money the shop has to have. */
+  g.machine.cut_min_total += cut_min;
+  g.machine.condition = Math.max(WEAR.condition_min,
+    g.machine.condition - cut_min * WEAR.condition_per_cut_min);
 
   // ── heat ────────────────────────────────────────────────────────────────
   // TWO sources, and over a job the idle one dominates:
@@ -820,6 +1101,13 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
        record so the part's wall can be drawn and described from it rather than
        from a remembered number. Zero extra arithmetic — `as` already has it. */
     ra_est_um: as.ra_est_um,
+    /* THE KERNEL'S OWN ATTRIBUTION, carried onto the record. The headline claim
+       of this whole build is a SIGNED ATTRIBUTED micrometre error budget, and
+       until now the terms lived only inside the kernel and were never on the
+       screen: the panel showed temperatures and the ledger showed money. They
+       are already computed and already signed and already named out loud by a
+       machinist, which is the kernel's own admission rule for a term. */
+    err_terms: as.err.terms.map((t) => ({ name: t.name, um: t.um, cause: t.cause })),
     verdict: as.verdict,
     chatter_load: as.chatter_load,
     spindleC: g.machine.spindleC, screwC: g.machine.screwC, partC: g.part.partC,
@@ -827,6 +1115,9 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
     cut_hotR_mm: cut_hotR, hotR_mm: hotR,
   };
   g.history.push(rec);
+  /* THE BOOKS CLOSE HERE AND NOWHERE ELSE. A claim is settled by metal coming
+     off the part, not by a timer and not by the system's own opinion. */
+  settleClaims(g);
 
   log(g, 'cut',
     `${rec.label} ${g.passes}: dialled ${(bite_mm * 1000).toFixed(1)} µm, bar took ` +

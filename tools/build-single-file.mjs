@@ -154,7 +154,7 @@ const APP_IMPORTS = [
    "const { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS } = await import(window.__URLS__.shop);"],
   ["import * as RECmod from './recorder.mjs';",
    "const RECmod = await import(window.__URLS__.recorder);"],
-  ["import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace } from './materials.mjs';",
+  ["import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace, consoleScreen } from './materials.mjs';",
    "const { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace } = await import(window.__URLS__.materials);"],
 ];
 for (const [needle, repl] of APP_IMPORTS) {
