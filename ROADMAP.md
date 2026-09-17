@@ -160,6 +160,38 @@ file's header for exactly what came across, what was re-scaled and why.
   warm-up "carries no penalty"; that was true, and this is the job that stops it
   being true.
 
+### THE SYSTEM — the seat a manufacturing model sits in (2026-09-17)
+
+`forecastPass`, `claimPass`, `systemRecord`, `SYSTEM.survey` in `game.mjs`, and a
+terminal in the world to ask. **Read `VISION.md` §3 first** — this is the mechanic
+that makes the game about supervising a model rather than about the trade.
+
+- **It forecasts by running the machine's own physics.** The state is cloned and
+  `cutOnce` is called on the clone. Exact to 0.0000 µm on a machine matching its
+  survey. Not a model of the kernel — a model would be uncheckable.
+- **Its error has one cause and both numbers are on screen.** The clone gets the
+  SURVEYED condition. Measured drift with the survey at 800: 0.0 µm at 800,
+  −2.0 at 600, −5.0 at 300 — always optimistic, because a worn machine cuts
+  bigger. On J3's 11 µm band that is half the tolerance at full wear.
+- **It never holds the answer.** `settleClaims` runs from `cutOnce` only. A claim
+  is closed by metal or not at all. One open claim at a time, so asking twice
+  changes its mind instead of filing two claims.
+- **The record is the shop's**, written as facts about the calls (mean, worst,
+  signed) and never as a rating.
+- **The machine wears.** `errorBudget()`'s `runout_um` had a default of 5 µm and
+  nothing ever passed it; condition opens at 800 (ported from the second build's
+  `machines.ts`), falls with machine-minutes, and drives TIR. Maintenance is the
+  only thing that reverses it — £340, 45 minutes, refused with the spindle up.
+- **The BOOK** is the same idea at the cutting-data end: the recommendation is
+  searched for from the kernel, printed with its assumption, and checkable
+  against the load meter before the cut.
+
+**Where a real model goes.** Everything above is the seam. To wire in Shop OS or
+anything else, three conditions must hold and they are the same three this
+implementation follows: it returns a NUMBER AND THE ASSUMPTIONS it was computed
+under; it is never told the outcome; and the shop keeps its record, not the
+system. Anything that satisfies those can take the seat.
+
 ### L4 — DEPTH (the ladder §73)
 Walk up to a machine and its HMI is what you read; the part in your hand;
 the feature, its tolerance and its history; the chip you just made and what it
