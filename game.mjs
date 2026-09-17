@@ -448,6 +448,20 @@ export function maintain(g, { cost = 340, minutes = 45 } = {}) {
     runout_um: runout_um_for(g.machine.condition) };
 }
 
+/* ── ONE DERIVATION FOR THE OUTSIDE OF EVERY PART ─────────────────────────
+   The housing's OD was typed three times in the page — `rO = 0.062` in
+   `buildPartMesh`, `rO = 0.062` again in `partObject`, and `62 * HELD_SCALE_TO_VIEW`
+   in `buildHeldMesh` — and a fourth time as this file's own default parameter on
+   `drawingFor`. Four statements of one diameter is the third recurring defect in
+   this build wearing its usual coat: they agreed only because nobody had yet had
+   a reason to change one of them, and the day the shop runs a second housing size
+   the drawing would say Ø124 while the metal in your hand was something else. The
+   drawing already publishes this figure (`dims` D4, `geometry.od_dia_mm`), so it
+   lives here, once, next to the jobs that are cut to it. Substituting it for the
+   three literals is numerically exact: 124 × 0.0016 / 2 = 0.099200, which is the
+   same double as the 0.0992 the page carried. */
+export const HOUSING_OD_MM = 124;
+
 export const JOBS = [
   {
     id: 'J1',
@@ -674,7 +688,7 @@ export const JOBS = [
 
    EVERY FIGURE HERE COMES OFF THE JOB SPEC. Nominal, grade, both band limits,
    the as-cast bore and the depth. Nothing is typed twice. */
-export function drawingFor(job = JOBS[0], { partO_dia_mm = 124, drawn_by = 'E. ROWNTREE', date = null } = {}) {
+export function drawingFor(job = JOBS[0], { partO_dia_mm = HOUSING_OD_MM, drawn_by = 'E. ROWNTREE', date = null } = {}) {
   const plus = job.band_high_mm - job.nominal_mm;
   const minus = job.band_low_mm - job.nominal_mm;
   const mm3 = (v) => (v >= 0 ? '+' : '') + v.toFixed(3);

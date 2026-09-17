@@ -173,13 +173,21 @@ of one continuous session, `after-24`) agree on the same short list. None of it
 is a wrong fact. All of it is a viewer's first sentence about the object the game
 is about, which is why it is next. Taken in this order:
 
-- **F1 · THE PART IN HAND READS AS A FLAT WASHER** (M). The reviewer's worst item
-  across all ten frames, and the second time a viewer has said it: *"large silver
-  disc with center hole, black rectangular finger blocks clipping through it"* —
-  the payoff object of the session, and what §73's `Part` rung is about. The bore
-  is drawn at the diameter the customer will measure, which is right; what is
-  missing is the OD, the thickness and the datum face that make it a housing, and
-  the finger blocks intersect the metal.
+- ~~**F1 · THE PART IN HAND READS AS A FLAT WASHER**~~ ✅ 2026-09-17. The held
+  part was rebuilt from the numbers the drawing already publishes — OD wall,
+  bore, thickness, faces — so it is a housing and not a washer, and the glove
+  with it: fingers as cylinders tangent to the OD (they cannot enter the metal
+  at any pose), tips stopped at the top rim, a wrist inside the hand's own
+  frame instead of floating beside it, glove albedo and held-lamp set by a
+  measured five-variant sweep so no glove surface reads as a void. Sighted
+  reviewer PASS on all ten stills of `after-26`; shot 10: *"reads as a thick
+  metal casting … not a flat washer."* The original note, kept because it is
+  why this took two passes: *"large silver disc with center hole, black
+  rectangular finger blocks clipping through it"* — the payoff object of the
+  session, and what §73's `Part` rung is about. The bore is drawn at the
+  diameter the customer will measure, which is right; what was missing was the
+  OD, the thickness and the datum face that make it a housing, and the finger
+  blocks intersected the metal.
 - **F2 · THE CALIPERS READ AS CRUDE BLOCKS** (S–M). *"Oversized crude blocks with
   an unreadable scale, no jaws / thumbwheel / lock screw identifiable"* — the one
   tool the game tells you to go and get cannot be read as itself.
@@ -368,6 +376,30 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-17** — THE PART IN HAND (`after-24` → `after-26`, loop run). F1, the
+  reviewers' worst item, said twice by two kinds of viewer: the payoff object
+  read as a flat washer held by black rectangular blocks that clipped through
+  it. Three fixes in the held-part scene, plus one derivation moved home, and
+  none of it a new printed fact. The mesh: the housing is built from the
+  numbers the drawing already publishes — OD from the new `HOUSING_OD_MM`
+  export in `game.mjs`, bore and thickness per job — so it has a wall you can
+  see the far side of, and the same constant replaced four typed copies of the
+  OD (two `0.062` literals in the page, the held mesh's `62`, and
+  `drawingFor`'s default parameter): one derivation per fact, numerically
+  exact. The hand: fingers are cylinders TANGENT to the OD — axis one finger
+  radius out, so contact is a line and no pose can put a finger inside the
+  metal — running up the visible wall with rounded tips stopping at the rim,
+  staggered (9/3/0/5 mm, pinky to index) so four tips at one height cannot read
+  as a railing; the wrist and cuff moved into the hand's own frame so they turn
+  with the part (the old wrist hung off the glove root and stayed behind: a
+  grey pipe floating beside the casting). The light: glove albedo and held-lamp
+  intensity chosen by a measured five-variant sweep (0x242b33 / 0.30) — lit
+  finger flanks land near 68, under the casting's 101–164, over the floor's 20
+  — so no glove surface reads as a hole. Suites 76/137/69/70+1 deliberate;
+  single-file build 9 modules; sighted reviewer PASS on all ten stills of
+  `after-26`, shot 10 named: *"reads as a thick metal casting … not a flat
+  washer."* Next: F2, the calipers.
 
 - **2026-09-17** — THE FRAME'S PRINTED FACTS (`after-12` → `after-24`, loop run).
   The class: **a fact printed on a surface that persists after the thing it

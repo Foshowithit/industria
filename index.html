@@ -1045,7 +1045,7 @@ pendCursor.raycast = () => {};
 const PART = { mesh: null, mat: new THREE.MeshStandardMaterial({ color: 0x707880, roughness: 0.5, metalness: 0.78 }) };
 function buildPartMesh(dia_mm, depth_mm) {
   if (PART.mesh) { cell.remove(PART.mesh); PART.mesh.geometry.dispose(); }
-  const rO = 0.062, rI = (dia_mm / 1000) / 2, dep = depth_mm / 1000;
+  const rO = (G.HOUSING_OD_MM / 1000) / 2, rI = (dia_mm / 1000) / 2, dep = depth_mm / 1000;
   /* block → bored hole, as a lathe of segments so the hole has real physical size */
   const shape = new THREE.Shape();
   shape.absarc(0, 0, rO, 0, Math.PI * 2, false);
@@ -1096,7 +1096,7 @@ function partObject(parent, x, y, z, dead = false) {
   /* A Ø124 × 30 housing: a squat ring with a bore through it. The bore is
      rendered, because a hole is what a bearing housing IS — its DIAMETER is
      not, because that is the measurement, and the measurement is yours. */
-  const rO = 0.062, rI = 0.020;
+  const rO = (G.HOUSING_OD_MM / 1000) / 2, rI = 0.020;
   const shape = new THREE.Shape(); shape.absarc(0, 0, rO, 0, Math.PI * 2, false);
   const hole = new THREE.Path(); hole.absarc(0, 0, rI, 0, Math.PI * 2, true); shape.holes.push(hole);
   const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.030, bevelEnabled: false, curveSegments: 24 });
@@ -1741,7 +1741,7 @@ let HELD_MESH = null, heldSpin = 0, heldTilt = 0.35;
 const HELD_SCALE_TO_VIEW = 0.0016;   // mm -> world units at arm's length
 
 function buildHeldMesh(dia_mm, depth_mm) {
-  const rO = 62 * HELD_SCALE_TO_VIEW, rI = (dia_mm / 2) * HELD_SCALE_TO_VIEW;
+  const rO = (G.HOUSING_OD_MM / 2) * HELD_SCALE_TO_VIEW, rI = (dia_mm / 2) * HELD_SCALE_TO_VIEW;
   const dep = depth_mm * HELD_SCALE_TO_VIEW;
   const shape = new THREE.Shape(); shape.absarc(0, 0, rO, 0, Math.PI * 2, false);
   const hole = new THREE.Path(); hole.absarc(0, 0, rI, 0, Math.PI * 2, true); shape.holes.push(hole);
@@ -1769,46 +1769,137 @@ function buildHeldMesh(dia_mm, depth_mm) {
    matte work glove is a SHAPE, it is what a machinist is actually wearing, and
    it puts the part against something instead of against the sky.
 
-   The glove does NOT rotate with the part: the player turns the casting in
-   their fingers, which is what "turn your hand to look at it" describes, and
-   `heldSpin`/`heldTilt` drive only the part. */
-function buildGlove() {
+   THE SECOND COMPLAINT WAS THE FIRST ONE'S FAULT. A sighted reviewer, ten
+   stills of one session: "large silver disc with center hole, black rectangular
+   finger blocks clipping through it" — the payoff object of the session reading
+   as a flat washer. Measured off the still: four near-black boxes 40 px wide
+   covered 234 of the disc's 306 px across the whole thickness band, so the OD
+   wall — the one thing on screen that says housing and not washer — showed only
+   in the gaps between them. The blocks were not clipping; they were in front.
+   But a part with its thickness hidden behind your own fingers reads exactly
+   like a part with no thickness at all.
+
+   So the fingers are cylinders TANGENT to the OD, not slabs laid across it: a
+   capsule of radius rF whose axis sits at rO + rF touches the wall along one
+   line and cannot enter the metal however the hand is turned. Each capsule's
+   straight flank runs up the visible wall and its rounded tip stops at the
+   rim without crossing onto the face. The thumb comes up the near-RIGHT edge,
+   where the disc's own silhouette ends near 880 px and the thumb sits just
+   outside it — it holds the edge and costs no wall at all. Nothing here is a
+   new feature of the part: OD, bore, thickness and one face are all the
+   drawing publishes, and this only stops the hand hiding them.
+
+   The whole glove — fingers, thumb, palm, wrist and cuff — is built in the
+   PART'S OWN FRAME and posed by `poseHeld()` from the same two numbers as the
+   metal, because a hand holding something turns with it. The first wrist hung
+   off the glove root with its own pose, and when the hand tilted it stayed
+   behind: a grey pipe floating beside the casting, and a cuff black in the
+   corner of the frame. From the palm it now drops toward the bottom of the
+   frame, mostly hidden by the part it holds.
+
+   THE SKIN IS NOT BLACK. The old glove was 0x1e2228, the darkest thing in the
+   frame, which is why fingers read as holes rather than as a hand. 0x242b33
+   under the 0.30 lamp lands the lit finger flanks near 68 and the thumb near
+   45: under the casting's 101-164, above the floor's 20, and no glove surface
+   reads as a void. */
+function buildGlove(rO, halfH) {
   const g = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ color: 0x1e2228, roughness: 1.0, metalness: 0.0 });
-  const cuff = new THREE.MeshStandardMaterial({ color: 0x2c323a, roughness: 0.95, metalness: 0.05 });
-  const put = (w, h, d, m, x, y, z, rz = 0, rx = 0) => {
+  const skin = new THREE.MeshStandardMaterial({ color: 0x242b33, roughness: 1.0, metalness: 0.0 });
+  const cuff = new THREE.MeshStandardMaterial({ color: 0x404852, roughness: 0.95, metalness: 0.05 });
+  const put = (w, h, d, m, x, y, z, into) => {
     const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-    b.position.set(x, y, z); b.rotation.set(rx, 0, rz); b.castShadow = false; g.add(b); return b;
+    b.position.set(x, y, z); b.castShadow = false; into.add(b); return b;
   };
-  /* the part sits at (0, -0.03, -0.42) tilted 0.35 rad toward you, so its NEAR
-     rim is the low one — the fingers come up from below and over that rim.
-     SIZE IS THE WHOLE JOB HERE: the first version was four 58 mm slabs across
-     the near face, which covered the bore and read as a piano, and a forearm
-     the size of a fence post. Only the tips of four fingers should be over the
-     part's edge, and the wrist should leave the frame at the corner. */
-  put(0.150, 0.028, 0.110, skin, 0.010, -0.098, -0.365);          // palm, under the near half
-  put(0.115, 0.022, 0.050, skin, 0.010, -0.080, -0.452);          // the heel of the hand
-  for (let i = 0; i < 4; i++) {
-    const x = -0.046 + i * 0.031;
-    put(0.023, 0.038, 0.024, skin, x, -0.052, -0.320);            // fingers against the rim
-    put(0.023, 0.013, 0.030, skin, x, -0.032, -0.327);            // tips curling onto the face
-  }
-  put(0.046, 0.022, 0.030, skin, -0.080, -0.052, -0.362, -0.34);  // thumb on the near-left
-  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.048, 0.30, 14), skin);
-  wrist.position.set(0.086, -0.250, -0.268); wrist.rotation.set(0.26, 0, -0.40);
-  wrist.castShadow = false; g.add(wrist);
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.054, 0.058, 0.055, 14), cuff);
-  band.position.set(0.134, -0.372, -0.220); band.rotation.set(0.26, 0, -0.40); g.add(band);
+  /* A capsule is built along +Y, so it is turned onto the axis it is given by an
+     explicit basis rather than by an Euler guess — a finger that has to sit on a
+     rim is no place to be reasoning about rotation order. */
+  const cap = (r, len, m, at, axis, into) => {
+    const c = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 18), m);
+    const yv = new THREE.Vector3(axis[0], axis[1], axis[2]).normalize();
+    const ref = Math.abs(yv.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const xv = new THREE.Vector3().crossVectors(ref, yv).normalize();
+    const zv = new THREE.Vector3().crossVectors(xv, yv).normalize();
+    c.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xv, yv, zv));
+    c.position.set(at[0], at[1], at[2]);
+    c.castShadow = false; into.add(c); return c;
+  };
+  /* ── THE HAND, in the part's own frame ────────────────────────────────────
+     Local +Y is the part's axis, its OD is rO, its faces are at ±halfH. Every
+     number below comes off those two, so the fingers are cut to the casting
+     they are actually holding and not to a remembered size — the four jobs are
+     not the same part and their thicknesses differ by 3:1. */
+  const hand = new THREE.Group();
+  g.add(hand); g.userData.hand = hand;
+  const rF = 0.0095, rT = 0.013;             // finger and thumb radius
+  const rc = rO + rF, rt = rO + rT;          // axes one radius out: tangent, never inside
+  const yB = -halfH - 0.060;                 // they end inside the palm, where nothing shows
+  put(0.130, 0.024, 0.095, skin, 0.010, -(halfH + 0.045), 0.060, hand);   // palm, cupped under the part
+  put(0.115, 0.022, 0.050, skin, 0.010, -0.058, -0.013, hand);            // the heel of the hand
+  /* A grip, not posts beside it: each capsule's straight flank runs up the
+     wall to near the top rim, so the glove touches the casting along its
+     visible height and the rounded tip curls just over the rim. The tips are
+     staggered — pinky shortest, middle longest — because four tips at one
+     height read as a railing; the stagger is small enough that even the
+     shortest finger's flank still reaches the thinnest job's lower face. */
+  const drops = [0.009, 0.003, 0.0, 0.005];  // pinky, ring, middle, index
+  [-0.0465, -0.0155, 0.0155, 0.0465].forEach((x, i) => {
+    const top = halfH - drops[i];
+    cap(rF, (top - yB) - 2 * rF, skin, [x, (top + yB) / 2, Math.sqrt(rc * rc - x * x)], [0, 1, 0], hand);
+  });
+  /* The thumb comes up the near-right edge and stops at the rim, where the
+     disc's own silhouette has already ended: it holds the edge and costs no
+     wall. No pad over the face — the first pad read as a blemish on the
+     casting, and the hand needs nothing on the metal to read as a hand. */
+  const pt = 1.30, ut = [Math.sin(pt), 0, Math.cos(pt)];
+  cap(rT, (halfH - yB) - 2 * rT, skin, [ut[0] * rt, (halfH + yB) / 2, ut[2] * rt], [0, 1, 0], hand);
+  /* The forearm belongs to the same frame as the hand it serves: the first
+     version hung it off the glove root with its own pose, and when the hand
+     tilted it stayed behind — a grey pipe floating beside the casting. From
+     the palm it drops toward the bottom of the frame, mostly hidden by the
+     part it holds. */
+  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.048, 0.26, 14), skin);
+  wrist.position.set(0.030, -halfH - 0.145, 0.052); wrist.rotation.set(0.14, 0, -0.16);
+  wrist.castShadow = false; hand.add(wrist);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.056, 0.050, 14), cuff);
+  band.position.set(0.016, -halfH - 0.050, 0.060); band.rotation.set(0.14, 0, -0.16); hand.add(band);
   /* THE PART IS HELD UP, AND A PART HELD UP IS LIT. No new number and no new
      state — the light is the light a person gets by turning the casting toward
      the machine lamp instead of standing in their own shadow. It sits BELOW the
      fingers, not in front of them: at the first position it lit the glove to
      the same value as the casting and the fingers read as part of the part. */
-  const lamp = new THREE.PointLight(0xfff2dc, 0.45, 1.3, 2.0);
+  const lamp = new THREE.PointLight(0xfff2dc, 0.30, 1.3, 2.0);
   lamp.position.set(0.02, -0.30, -0.26); g.add(lamp);
   return g;
 }
 let GLOVE = null;
+/* THE PART AND THE HAND SHARE ONE FRAME. heldTilt/heldSpin are one fact about
+   where the casting is, and both the metal and the fingers are posed from them
+   here — if they were written in two places they would drift apart the first
+   time either moved. */
+const HELD_AT = [0, -0.03, -0.42];
+function poseHeld() {
+  if (HELD_MESH) {
+    HELD_MESH.position.set(HELD_AT[0], HELD_AT[1], HELD_AT[2]);
+    HELD_MESH.rotation.set(heldTilt, heldSpin, 0);
+  }
+  const hand = GLOVE && GLOVE.userData.hand;
+  if (hand) {
+    hand.position.set(HELD_AT[0], HELD_AT[1], HELD_AT[2]);
+    hand.rotation.set(heldTilt, heldSpin, 0);
+  }
+}
+/* The glove is rebuilt for every part that comes off the rack: its fingers are
+   cut to THAT part's OD and thickness, and a cached glove would put a 30 mm
+   housing's fingers on an 18 mm one. */
+function dropGlove() {
+  if (!GLOVE) return;
+  camera.remove(GLOVE);
+  GLOVE.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) o.material.dispose();
+  });
+  GLOVE = null;
+}
 function takeInHand(partId) {
   const p = GAME.part_register.find((x) => x.id === partId);
   if (!p) return false;
@@ -1819,11 +1910,12 @@ function takeInHand(partId) {
      — not the dial, not the gauge, and not a plausible-looking number. */
   const dia = GAME.job.nominal_mm + ((p.position_in_band_um ?? 0) / 1000);
   HELD_MESH = buildHeldMesh(dia, GAME.job.bore_depth_mm);
-  HELD_MESH.rotation.set(heldTilt, heldSpin, 0);
   camera.add(HELD_MESH);
-  HELD_MESH.position.set(0, -0.03, -0.42);
-  if (!GLOVE) GLOVE = buildGlove();
+  dropGlove();
+  GLOVE = buildGlove((G.HOUSING_OD_MM / 2) * HELD_SCALE_TO_VIEW,
+    (GAME.job.bore_depth_mm * HELD_SCALE_TO_VIEW) / 2);
   camera.add(GLOVE);
+  poseHeld();
   say('You', `<b>${partId}</b> — a Ø${GAME.job.nominal_mm} bearing housing, ` +
     `Ø${dia.toFixed(4)} mm through the bore. Turn your hand to look at it; ` +
     `<b>E</b> again to put it back on the rack.`);
@@ -1841,7 +1933,7 @@ function putDown() {
   if (!HELD) return;
   const id = HELD; HELD = null;
   if (HELD_MESH) { camera.remove(HELD_MESH); HELD_MESH.geometry.dispose(); HELD_MESH = null; }
-  if (GLOVE) camera.remove(GLOVE);
+  dropGlove();
   syncFloor();
   say('You', `<b>${id}</b> back on the rack.`);
   logLine(`Put <b>${id}</b> back on the rack.`);
@@ -2197,11 +2289,13 @@ addEventListener('mousemove', (e) => {
   if (document.pointerLockElement !== renderer.domElement) return;
   /* YOUR HANDS ARE FULL. While a part is in them the mouse turns the PART, not
      the world — which is both the control scheme and the consequence of holding
-     something. */
+     something. The tilt stops short of flipping the casting over: the fingers
+     ride the rim and past about half a radian the part would have turned past
+     what a grip resting on them can follow. */
   if (HELD && HELD_MESH) {
     heldSpin += e.movementX * 0.006;
-    heldTilt = cl(heldTilt + e.movementY * 0.006, -1.2, 1.2);
-    HELD_MESH.rotation.set(heldTilt, heldSpin, 0);
+    heldTilt = cl(heldTilt + e.movementY * 0.006, 0.12, 0.62);
+    poseHeld();
     return;
   }
   yaw -= e.movementX * 0.0021; pitch = cl(pitch - e.movementY * 0.0021, -1.45, 1.45);
