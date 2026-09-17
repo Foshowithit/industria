@@ -53,14 +53,16 @@ is shipped.
    outside this loop has actually watched it happen yet. The next natural test is
    whether the moment lands on a first-time player, and that is a human session,
    not a build.
-2. **SOUND.** §13 makes sound a system, not a bed: a spindle under load must not
-   sound like a spindle idling, and a rubbing cut must not sound like a cutting
-   one. `audio.mjs` has the model — `cutAcoustics`, `idleAcoustics`,
-   `attenuation`, `delayFor` — and **nobody has ever heard it.** Three machines,
-   a compressor and a radio now exist as objects with no audible presence in the
-   mix. Verify it structurally (levels, spectral centroid, that the acoustics
-   track kernel state) because a screenshot cannot judge sound, and say plainly
-   in the report that no human has listened.
+2. ~~**SOUND.**~~ **DONE 2026-09-17, except two voices.** The probe found the
+   showstopper: every machine voice was wired to a gain of zero and had been
+   silent since it was written. Fixed, and `tools/audio-probe.html` now renders
+   each scene offline against a room-only baseline and asserts ten claims from
+   `world.mjs` — **10/10**, with a cut measuring 759× the room tone at the tooth
+   frequency and the machines audible at all. **WHAT REMAINS:** the compressor
+   and the radio still have no voice (a compressor is one more continuous voice
+   and is cheap; the radio needs music, which is a content decision). **AND NO
+   HUMAN HAS HEARD ANY OF IT** — the probe says so above its own results, and a
+   future run must keep saying so until somebody listens.
 3. **THE PROCESS RUNG (`L4`)** — routes, datums, first-article inspection,
    rework. Read ROADMAP §5 before starting: rungs 1–3 are one game, rung 4 is a
    second game with the same machine at the bottom, and the roadmap says not to
@@ -178,5 +180,11 @@ Newest first. One or two lines: what was built, what was found, what is next.
   the runout term that explains it. One bug of my own found by running the page
   (`claimBefore` pasted into `doRough` by a positional replace on a non-unique
   anchor). Suites 68 / 67 / 62 / 70+1, bundle 9 modules, live bytes verified.
-  **Next: item 2 — sound.** Nothing has ever been heard; verify it structurally
-  and say plainly that no human has listened.
+  **Item 2 (sound) then shipped the same day**: every machine voice had been
+  wired to a gain of zero since it was written and NO machine in this build had
+  ever made a sound. Fixed, and `tools/audio-probe.html` verifies sound
+  structurally — offline render against a room-only baseline, ten claims from
+  world.mjs asserted, 10/10. Two more of my own bugs were in the probe itself
+  (comparing two different frequencies and calling it an audio failure; measuring
+  without a baseline, so the room bed was being measured instead of the
+  machines). **Next: finish item 2's two silent voices, or start item 3.**
