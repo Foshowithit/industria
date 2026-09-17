@@ -564,7 +564,50 @@ const pend = new THREE.Group(); pend.position.set(1.75, 1.58, 1.50); cell.add(pe
 box(0.80, 1.26, 0.16, M.dark, 0, 0, 0, pend);
 /* the machine's own readout — still the HTML panel, which is the one place on
    this floor that is allowed to be a screen */
-box(0.62, 0.26, 0.03, new THREE.MeshStandardMaterial({ color: 0x1b3a2a, emissive: 0x2f7a4a, emissiveIntensity: 0.7 }), 0, 0.40, 0.10, pend);
+/* ══ THE PENDANT'S OWN SCREEN ═════════════════════════════════════════════
+   It was a plain green emissive rectangle — and BOTH first-impression viewers,
+   shown only screenshots, named it as the worst ambiguity in the set: "a solid
+   green rectangle with nothing on it... for the object I am told to interact with
+   most, that is the worst possible ambiguity." They were right, and it is the
+   machine's primary display.
+
+   It shows what an operator glances at: the dial, what they have said they
+   expect, and the machine's state. Repainted only when one of those CHANGES, so
+   nothing is drawn per frame. */
+const pendScreenC = canvasFor(512, 220);
+/* EMISSIVE MAP, NOT A FLAT EMISSIVE COLOUR. `emissive: 0xffffff` ADDS white to
+   the shaded result regardless of what is drawn on the map, so the first version
+   of this screen rendered as a solid white rectangle — worse than the blank green
+   one it replaced, and I only knew because I looked at it. An emissiveMap makes
+   the DARK part of the drawing stay dark and the bright text glow, which is what
+   a lit screen actually does. */
+const pendScreenTex = new THREE.CanvasTexture(pendScreenC);
+const pendScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.24),
+  new THREE.MeshStandardMaterial({ map: pendScreenTex, emissiveMap: pendScreenTex,
+    roughness: 0.32, metalness: 0.0, emissive: 0xffffff, emissiveIntensity: 0.85 }));
+pendScreen.position.set(0, 0.40, 0.117); pend.add(pendScreen);
+function canvasFor(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+let pendScreenKey = '';
+function paintPendant() {
+  const g = GAME; if (!g) return;
+  const key = `${biteCmd_um}|${predicted_um}|${g.machine.spindle_on}|${g.machine.condition.toFixed(0)}|${g.passes}`;
+  if (key === pendScreenKey) return;
+  pendScreenKey = key;
+  const ctx = pendScreenC.getContext('2d');
+  ctx.fillStyle = '#0b1a12'; ctx.fillRect(0, 0, 512, 220);
+  const row = (y, k, v, hi = false) => {
+    ctx.font = '400 22px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#5f8f74';
+    ctx.textAlign = 'left'; ctx.fillText(k, 18, y);
+    ctx.font = '700 30px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = hi ? '#e8a33d' : '#a8e6bd'; ctx.textAlign = 'right'; ctx.fillText(v, 494, y);
+  };
+  row(46, 'DIAL', `${biteCmd_um} um`);
+  row(96, 'EXPECT', predicted_um === null ? '-- not said --' : `${predicted_um} um`, predicted_um === null);
+  row(146, 'PASSES', String(g.passes));
+  row(192, 'SPINDLE', g.machine.spindle_on ? 'RUNNING' : 'STOPPED',
+      g.machine.spindle_on);
+  pendScreen.material.map.needsUpdate = true;
+}
 /* THE PLATE'S ASPECT IS THE GRID'S ASPECT, taken from KEYPAD rather than typed.
    It was 4:3 when the grid was 4 x 4 and a literal square when it became 4 x 4
    again; either would have stretched every key the moment the grid changed, and
@@ -3761,6 +3804,8 @@ function frame(now) {
     const dl = W.daylight(clocks.world_min);
     sun.intensity = 0.25 + 0.55 * (1 - dl.dawn) * (1 - dl.dusk);
     for (const l of LAMPS) l.material.emissiveIntensity = dl.shop_lights ? 2.4 : 0.06;
+    /* AND THE PENDANT'S OWN SCREEN, repainted only when something on it changes. */
+    paintPendant();
     /* The wall clock and the corner of the screen read the SAME minute. */
     if (CLOCK) {
       const mins = ((clocks.world_min % 720) + 720) % 720;
@@ -3895,7 +3940,14 @@ function frame(now) {
     const bank = SHOP ? SHOP.cash : GAME.money;
     $('hMoney').innerHTML = `ON THE DAY <b>${money(todayNet)}</b>` +
       (bank !== todayNet ? ` · BANKED <b>${money(bank)}</b>` : '') +
-      (FPS ? ` <span style="opacity:.45">${FPS.toFixed(0)}fps</span>` : '');
+      /* THE FRAMERATE IS DEV CHROME AND IS NOW BEHIND THE RECORDER FLAG.
+         Two independent first-impression viewers, shown only screenshots and the
+         brief's questions, both picked this out unprompted as the thing that said
+         "development build" — one of them listed it under "looks cheap" alongside
+         an untextured box. It is genuinely useful to a probe and to nobody else,
+         and this build's own rule is no debug chrome on an art surface. Visible
+         with `?rec=1`, absent otherwise. */
+      (REC && FPS ? ` <span style="opacity:.45">${FPS.toFixed(0)}fps</span>` : '');
     /* ── THE FLOOR, as counts of objects. See the note beside #hFloor. ──── */
     {
       const rack = G.rackParts(GAME), bin = G.binParts(GAME), gone = G.goneParts(GAME);

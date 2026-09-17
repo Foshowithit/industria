@@ -103,21 +103,28 @@ marked **GATED** needs a decision that is not the loop's to make.
 ### B. THE MACHINE AS A THING THAT WEARS
 
 - ~~**B1 · CALIBRATION**~~ ✅ / ~~**B2 · TOOL LIFE**~~ ✅ / ~~**B3 · DOWNTIME**~~ ✅
-  2026-09-17, and they forced an architectural correction: **THE MACHINE BELONGS TO
-  THE SHOP, NOT TO THE JOB** — condition, scale and edge life now survive the
-  morning instead of resetting to new at 05:55. Inserts wear by Taylor (0.9 minutes
-  of edge at 320 m/min against 30 at 120), the scale drifts so the machine cuts
-  wrong the same way every time, and a machine stops after a number of cutting
-  minutes set by its condition. **Original note:** Wear is in (B1 landed: condition → TIR). Calibration
-  is a *different* failure: the datum itself drifts, so the machine is
-  repeatable and wrong. That is the one that produces parts that all measure the
-  same and are all outside the band.
-- **B2 · TOOL LIFE** (M). An insert that wears mid-job, so the same dial stops
-  taking the same cut. This is the honest way for a long run to go wrong without
-  the machine being at fault, and it is what makes A5's tool rung matter.
-- **B3 · DOWNTIME** (S). A machine that stops and eats the deadline. Ported
-  hazard shape from the second build's `machines.ts`: failures per 100k hours
-  rising as condition falls.
+  2026-09-17. All three built, and they forced an architectural correction: **THE
+  MACHINE BELONGS TO THE SHOP, NOT TO THE JOB** — condition, scale and edge life
+  now survive the morning instead of resetting to new at 05:55, which is what made
+  maintenance mean anything across a career.
+
+    · **B2, tool life:** inserts wear BY TAYLOR — 0.9 minutes of edge at 320 m/min
+      against 30 at 120 — so speed is bought with tooling. A worn edge deflects
+      more, so the bore comes out SMALL, which is the recoverable direction.
+    · **B1, calibration:** the datum drifts, so the machine is repeatable and
+      wrong. That is the one that produces parts which all measure the same and
+      are all outside the band, and it is the only one of the three the system
+      can model, because a scale error is a fact the machine can be told.
+    · **B3, downtime:** a WEAR-OUT rather than a hazard — it stops after a number
+      of cutting minutes set by its condition when last serviced, which is
+      deterministic and predictable from the panel.
+
+  **A NOTE ON THIS FILE ITSELF:** the three lines above used to end with their
+  original "still to do" text still underneath the ✅, so B2 and B3 READ AS OPEN
+  when they were built. That is the same defect as an unread field, one layer out
+  — and in a file whose whole job is telling the next run what is done, it is the
+  one that would have caused a rebuild. Compressed into the entry that covers them.
+
 - ~~**B4 · THE DAY LEDGER**~~ ✅ 2026-09-17. Readable off the board, offered first.
   Deliberately not a scoreboard: no rate, no percentage, no trend line.
   **Original note:** The shop's own record, readable — what went out,
