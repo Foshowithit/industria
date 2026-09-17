@@ -192,6 +192,60 @@ implementation follows: it returns a NUMBER AND THE ASSUMPTIONS it was computed
 under; it is never told the outcome; and the shop keeps its record, not the
 system. Anything that satisfies those can take the seat.
 
+### THE LADDER DOWN TO THE CHIP — done 2026-09-17
+
+The brief calls Planet → … → Part → Feature → Tool → **Chip** "the visual and
+conceptual signature of the entire platform". Everything above the chip was
+walkable; the chip was ten tetrahedra under the tool and specks on a nine-metre
+floor. Now:
+
+- **A chip tray** on the floor at the front of the cell. Looking into it reads
+  the last pass. A physical object, for the same reason everything else here is.
+- **The Feature rung, which was written and never called.** `describeBore` and
+  `perceptionOf` had been in `world.mjs` since they were written and neither was
+  referenced — the whole §53 layer ("a hole in a block" → 4140 → an H6 bore with
+  so many µm of radius left → a band, lobing and feed-mark pitch) was modelled
+  and invisible. It is on the fixture now.
+- **What the chip read quotes is exact:** width (the bite, where the surplus
+  lives), thickness (feed × thickening ratio), mass (the annulus removed), and
+  whether it broke or strung.
+
+#### Three bugs the chip had, and what read it
+
+All player-visible, none of which threw, found by looking at a chip:
+
+1. **Mass 1000× too light** — the volume was a chip *cross-section* × length;
+   a boring pass removes an *annulus*. 1.4 mm³ by the old formula against
+   1,372 mm³ measured.
+2. **Thickness was the bite, not the feed** — so a 4 mm roughing bite produced a
+   "4.2 millimetre thick chip". A chip has a width (the dial) and a thickness
+   (the feed) and they are different quantities.
+3. **The energy charged the retract** — `cut_min` includes 0.4 min of approach
+   and reset, so the cutting power was multiplied by time that never touched the
+   part, unevenly.
+
+Together these put the chip at 899,719 °C and — because a 1000× light chip
+collapses the temperature to the specific cutting energy, which barely varies —
+**made every chip in the game land in the same colour band.** The colour, built
+as "the lesson carried by the chip itself", carried nothing.
+
+#### AND THE HONEST LIMIT — DO NOT RE-DERIVE THIS
+
+With the bugs fixed the rise is still under 520 K at every feed this machine
+offers, and the two effects that should separate cuts (specific energy falling
+with feed; a thicker chip retaining more) very nearly cancel — under 15 K apart
+across this game's cuts. **The missing variable is cutting speed**, and the game
+does not have it: `doCut` and `doRough` both pass a fixed `vc` of 120 m/min.
+
+So the build does not fake it. `CHIP_HEAT.temperature_is_diagnostic` is `false`,
+a test asserts it, and nothing player-facing quotes a temperature.
+
+**The next honest piece of work here is a spindle-speed override.** Then `vc`
+varies, `removalStep` already accepts it, the chip colour becomes a readout of a
+decision the player made, and `CHIP_HEAT` can be calibrated against something
+real. Until then, do not add a chip-temperature claim — that is the one kind of
+error the brief fails the whole build for.
+
 ### L4 — DEPTH (the ladder §73)
 Walk up to a machine and its HMI is what you read; the part in your hand;
 the feature, its tolerance and its history; the chip you just made and what it
