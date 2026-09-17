@@ -12,7 +12,7 @@
   html,body{margin:0;height:100%;overflow:hidden;background:#0a0d11;color:var(--ink);
     font:14px/1.45 ui-monospace,"SF Mono",Menlo,Consolas,monospace}
   canvas{display:block}
-  #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 45%,rgba(0,0,0,.55) 100%)}
+  #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 62%,rgba(0,0,0,.32) 100%)}
 
   /* ── diegetic HUD: no quest arrows, no floating clutter (§48) ───────────── */
   .hud{position:fixed;pointer-events:none;text-shadow:0 1px 3px #000}
@@ -164,6 +164,9 @@ import * as G from './game.mjs';
 import * as W from './world.mjs';
 import * as P from './people.mjs';
 import { createAudio } from './audio.mjs';
+/* The shop's surfaces. Drawn in the page, deterministic, no assets — see the
+   header of materials.mjs for why they are not files. */
+import { shopMaterials, shopEnvironment, tint } from './materials.mjs';
 /* Playtest instrumentation. Dark unless the URL asks for it (`?rec=1`), so the
    public build behaves exactly as before — see recorder.mjs and PLAYTEST-KIT.md.
    Every call below is a no-op returning early when `REC` is null. */
@@ -223,7 +226,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.02;
+renderer.toneMappingExposure = 1.42;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -231,24 +234,43 @@ const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.04, 2
 const eye = new THREE.Vector3(-7.5, 1.68, 8.4);
 let yaw = -0.30, pitch = -0.06;
 
-/* ── MATERIALS — §49 wants a shop that has been used, not a showroom ────── */
+/* ── MATERIALS — §49 wants a shop that has been used, not a showroom ──────
+   Every surface below is DRAWN (materials.mjs), not coloured. The previous
+   pass had thirty-six flat colours and no map at all, which is why the place
+   read as a greybox no matter how many objects were added to it: a colour
+   value cannot be worn, chipped, stained or wiped. These can.
+
+   The three map types matter separately:
+     map          — what the surface IS (concrete, painted steel, cast iron)
+     roughnessMap — where it is polished and where it is dull. This is the one
+                    that makes coolant read as wet against dry cast iron.
+     normalMap    — grit. Without it a floor is a photograph on a plane.
+   `tint()` gives a second colour of a surface without a second canvas, which
+   is how the same sheet metal is a grey machine and a yellow guard. */
+const MATS = shopMaterials();
 const M = {
-  floor: new THREE.MeshStandardMaterial({ color: 0x5b6066, roughness: 0.92, metalness: 0.06 }),
-  aisle: new THREE.MeshStandardMaterial({ color: 0x9a8b3f, roughness: 0.95, metalness: 0.03 }),
-  wall:  new THREE.MeshStandardMaterial({ color: 0xb3b6b1, roughness: 0.95, metalness: 0.02 }),
-  steel: new THREE.MeshStandardMaterial({ color: 0x929aa2, roughness: 0.48, metalness: 0.7 }),
-  dark:  new THREE.MeshStandardMaterial({ color: 0x3a4046, roughness: 0.72, metalness: 0.3 }),
-  paint: new THREE.MeshStandardMaterial({ color: 0xb9c2ca, roughness: 0.74, metalness: 0.18 }),
-  warn:  new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.8, metalness: 0.1 }),
-  wood:  new THREE.MeshStandardMaterial({ color: 0x9a7549, roughness: 0.95, metalness: 0 }),
-  vise:  new THREE.MeshStandardMaterial({ color: 0x6b7f8a, roughness: 0.6, metalness: 0.58 }),
-  rust:  new THREE.MeshStandardMaterial({ color: 0x8a6244, roughness: 0.95, metalness: 0.2 }),
-  brass: new THREE.MeshStandardMaterial({ color: 0xa88a4a, roughness: 0.45, metalness: 0.85 }),
+  floor: MATS.floor,
+  aisle: MATS.aisle,
+  wall:  MATS.wall,
+  roof:  MATS.roof,
+  steel: MATS.steel,
+  dark:  tint(MATS.paint, 0x454c54),
+  paint: MATS.paint,
+  warn:  tint(MATS.paint, 0xc9a227),
+  wood:  MATS.wood,
+  vise:  MATS.iron,
+  iron:  MATS.iron,       // cast iron: the table, the vise, the way covers
+  rust:  MATS.rust,
+  brass: new THREE.MeshStandardMaterial({ color: 0xa88a4a, roughness: 0.42, metalness: 0.85 }),
   coolant: new THREE.MeshPhysicalMaterial({ color: 0xa8c4a0, roughness: 0.22, metalness: 0.1,
              transparent: true, opacity: 0.55, transmission: 0.3, thickness: 0.4 }),
-  chip:  new THREE.MeshStandardMaterial({ color: 0x8e9aa4, roughness: 0.4, metalness: 0.85 }),
+  chip:  new THREE.MeshStandardMaterial({ color: 0x8e9aa4, roughness: 0.35, metalness: 0.9 }),
   glass: new THREE.MeshPhysicalMaterial({ color: 0xd8e6ef, roughness: 0.04, metalness: 0,
              transparent: true, opacity: 0.13, side: THREE.DoubleSide }),
+  interior: MATS.interior,
+  bench: MATS.bench,
+  bright: tint(MATS.paint, 0xeef1f4),
+  slot: tint(MATS.iron, 0x6d7076),
 };
 
 const box = (w, h, d, mat, x = 0, y = 0, z = 0, parent = scene) => {
@@ -263,7 +285,8 @@ const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), M.floo
 floorMesh.rotation.x = -Math.PI / 2; floorMesh.receiveShadow = true; scene.add(floorMesh);
 
 const roof = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d),
-  new THREE.MeshStandardMaterial({ color: 0x4b5158, roughness: 0.95, side: THREE.DoubleSide }));
+  M.roof.clone());
+roof.material.side = THREE.DoubleSide;
 roof.rotation.x = Math.PI / 2; roof.position.y = ROOM.h; scene.add(roof);
 
 /* walls, with a roll-up door on the -Z end (you came in through it) */
@@ -278,13 +301,35 @@ for (let i = 0; i < 6; i++) box(5.4, 0.06, 0.26, M.steel, 0, 0.5 + i * 0.72, -RO
 const aisle = new THREE.Mesh(new THREE.PlaneGeometry(3.2, ROOM.d - 4), M.aisle);
 aisle.rotation.x = -Math.PI / 2; aisle.position.set(-2.2, 0.008, 1); aisle.receiveShadow = true; scene.add(aisle);
 
-/* ── LIGHTING — driven by world.daylight(); shop fluorescents always on ─── */
-const hemi = new THREE.HemisphereLight(0xcfdce8, 0x494f55, 1.30); scene.add(hemi);
+/* ── LIGHTING — driven by world.daylight(); shop fluorescents always on ───
+   THE ENVIRONMENT COMES FIRST, and it is the reason the previous pass looked
+   like a greybox even where geometry was right. A MeshStandardMaterial with
+   metalness 0.7 and no environment reflects NOTHING, so every steel surface
+   rendered almost black, every roughness value did nothing, and the whole room
+   collapsed to a flat fog of its own paint colour. `shopEnvironment()` draws
+   this room — dark roof, six lamp bars, grey walls, the cold rectangle of the
+   open door — prefilters it, and from here on the materials reflect a shop.
+
+   HAZE. A 40 m shop at half five in the morning is not sharp to the far wall,
+   and without it the room reads as a diagram rather than a place. Density is
+   set so the far wall is roughly a third of the way to the fog colour: enough
+   to give the lamps something to bloom into, not enough to hide the van. */
+scene.environment = shopEnvironment(renderer);
+scene.environmentIntensity = 0.42;
+scene.fog = new THREE.FogExp2(0x151a20, 0.014);
+
+const hemi = new THREE.HemisphereLight(0xd6e2ee, 0x5a6168, 1.12); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffe9c8, 0.55);
 sun.position.set(-14, 12, -8); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.far = 48;
 sun.shadow.camera.left = -22; sun.shadow.camera.right = 22;
-sun.shadow.camera.top = 22; sun.shadow.camera.bottom = -22; scene.add(sun);
+sun.shadow.camera.top = 22; sun.shadow.camera.bottom = -22;
+sun.shadow.bias = -0.0009; sun.shadow.normalBias = 0.022; scene.add(sun);
+/* The door is the only light in this building that is not a tube, and it is
+   the one that tells you what time it is without a clock in the corner. */
+const dawn = new THREE.DirectionalLight(0x9fbcdf, 0.32);
+dawn.position.set(4, 3.4, -26); dawn.target.position.set(0, 1.6, 6);
+scene.add(dawn); scene.add(dawn.target);
 
 const LAMPS = [];
 for (let ix = -1; ix <= 1; ix++) for (let iz = -1; iz <= 1; iz++) {
@@ -295,6 +340,44 @@ for (let ix = -1; ix <= 1; ix++) for (let iz = -1; iz <= 1; iz++) {
     new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xeef4ff, emissiveIntensity: 2.4 }));
   tube.position.y = -0.11; g.add(tube); LAMPS.push(tube);
   const pl = new THREE.PointLight(0xf2f6ff, 2.1, 20, 2); pl.position.set(x, ROOM.h - 1.2, z); scene.add(pl);
+}
+/* Hanging pendants down the aisles. A shop lit only from six metres up is a
+   shop nobody works in: these put pools of light at bench height, which is
+   where the eye is and where the work is. Their bulbs are kept in their own
+   list because the ceiling circuits and the bench circuits are not the same
+   circuit — the frame loop drives each from the clock separately. */
+const PRACTICALS = [];
+for (const [px, pz] of [[-9, 2], [6, 5], [-4, -6], [9, -4]]) {
+  const g = new THREE.Group(); g.position.set(px, 2.85, pz); scene.add(g);
+  box(0.035, 2.8, 0.035, M.dark, 0, 1.4, 0, g);                  // drop rod to the frame
+  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.36, 0.28, 24, 1, true), M.bright);
+  shade.position.y = 0.14; shade.castShadow = true; g.add(shade);
+  const bulb = new THREE.PointLight(0xfff0d6, 1.9, 11, 1.7); bulb.position.y = -0.14; g.add(bulb);
+  PRACTICALS.push(bulb);
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xfff6e2, emissive: 0xffeec6, emissiveIntensity: 4.0 }));
+  glow.position.y = -0.10; g.add(glow);
+}
+
+/* ── THE ROOF STRUCTURE ───────────────────────────────────────────────────
+   A 42 × 34 m bay does not float: it is a portal frame, and the frame is the
+   thing your eye uses to measure the room. Without it the ceiling is a black
+   lid and the space reads as a box rather than a building. Purlins between the
+   beams give the light fittings something to be bolted to. */
+for (let z = -ROOM.d / 2 + 4; z <= ROOM.d / 2 - 4; z += 8.5) {
+  const beam = box(ROOM.w, 0.34, 0.16, M.dark, 0, ROOM.h - 0.55, z);
+  beam.castShadow = false;
+  box(ROOM.w, 0.10, 0.30, M.dark, 0, ROOM.h - 0.40, z);
+}
+for (let x = -ROOM.w / 2 + 3; x <= ROOM.w / 2 - 3; x += 6) {
+  const p = box(0.12, 0.16, ROOM.d, M.dark, x, ROOM.h - 0.30, 0);
+  p.castShadow = false;
+}
+/* Columns, at the wall line where the frame lands. */
+for (const cx of [-ROOM.w / 2 + 0.9, ROOM.w / 2 - 0.9]) {
+  for (const cz of [-ROOM.d / 2 + 3, 0, ROOM.d / 2 - 3]) {
+    box(0.5, ROOM.h, 0.5, M.dark, cx, ROOM.h / 2, cz);
+  }
 }
 
 /* ── THE MACHINE — vmc_40taper_7k5 ─────────────────────────────────────────
@@ -308,14 +391,19 @@ box(3.2, 0.44, 2.6, M.dark, 0, 0.22, 0, cell);
 box(3.2, 3.2, 0.95, M.paint, 0, 2.2, -0.82, cell);          // column casting
 box(3.2, 0.30, 2.6, M.paint, 0, 3.85, 0, cell);             // top cap
 /* the enclosure: floor, roof, two side walls — leaving a C-shaped cavity */
-box(3.2, 0.10, 2.6, new THREE.MeshStandardMaterial({ color: 0x8e8578, roughness: 0.93 }), 0, 1.02, 0, cell);
+box(3.2, 0.10, 2.6, M.interior, 0, 1.02, 0, cell);
 box(3.2, 0.10, 2.6, M.dark, 0, 3.70, 0, cell);
 box(0.10, 2.7, 2.6, M.paint, -1.55, 2.36, 0, cell);
 box(0.10, 2.7, 2.6, M.paint,  1.55, 2.36, 0, cell);
+/* liner panels: the INSIDE faces of the cavity are coolant-stained cast, the
+   outside flanks are painted sheet. One box cannot be both, so the inner skin
+   is its own thin panel and the machine stops looking like a white cabinet. */
+box(0.02, 2.6, 2.58, M.interior, -1.48, 2.36, 0, cell);
+box(0.02, 2.6, 2.58, M.interior,  1.48, 2.36, 0, cell);
 /* interior back wall of the cavity (in front of the column casting) */
-box(3.0, 2.6, 0.06, new THREE.MeshStandardMaterial({ color: 0x9a9184, roughness: 0.9 }), 0, 2.36, -0.32, cell);
+box(3.0, 2.6, 0.06, M.interior, 0, 2.36, -0.32, cell);
 /* THE WORKLIGHT — the single reason the interior reads as a machine at all */
-const workLight = new THREE.PointLight(0xfff3e0, 2.6, 5.2, 1.6);
+const workLight = new THREE.PointLight(0xfff3e0, 1.85, 6.4, 1.5);
 workLight.position.set(0.9, 3.5, 0.7); cell.add(workLight);
 const workLamp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8),
   new THREE.MeshStandardMaterial({ color: 0xfff6e2, emissive: 0xfff2d8, emissiveIntensity: 3.0 }));
@@ -328,10 +416,25 @@ const taper = new THREE.Mesh(new THREE.ConeGeometry(0.115, 0.30, 20), M.steel);
 taper.position.y = -0.16; taper.rotation.x = Math.PI; spindleGroup.add(taper);
 const holder = cyl(0.055, 0.075, 0.22, M.steel); holder.position.y = -0.40; spindleGroup.add(holder);
 const barMesh = cyl(0.011, 0.011, 0.16, M.steel); barMesh.position.y = -0.55; spindleGroup.add(barMesh);
-/* table, and the vise standing on parallels */
-const table = box(1.25, 0.14, 0.95, M.steel, 0, 1.14, 0.25, cell);
+/* table, and the vise standing on parallels.
+   A machine table is a T-slot table and it has to LOOK like one: three real
+   grooves cut into a cast surface, with the lands between them standing proud.
+   The first version drew the slots as thin dark strips lying ON the table,
+   which read as painted lines. Here each slot is recessed below the land that
+   surrounds it, so the worklight casts an actual shadow in the groove. */
+const table = box(1.25, 0.14, 0.95, M.iron, 0, 1.14, 0.25, cell);
+box(0.03, 0.16, 0.95, M.iron, -0.63, 1.14, 0.25, cell);          // front lip
+box(0.03, 0.16, 0.95, M.iron,  0.63, 1.14, 0.25, cell);
+for (let i = 0; i < 3; i++) {
+  const zz = -0.16 + i * 0.32;
+  box(1.22, 0.05, 0.055, M.slot, 0, 1.185, zz + 0.25, cell);     // the groove floor
+  box(1.22, 0.10, 0.018, M.iron, 0, 1.215, zz + 0.25 - 0.032, cell);
+  box(1.22, 0.10, 0.018, M.iron, 0, 1.215, zz + 0.25 + 0.032, cell);
+}
+/* telescopic way covers behind the table — the stack of sliding plates that
+   protects the Y axis. Nothing says "machine tool" in one object faster. */
 for (let i = 0; i < 4; i++) {
-  const slot = box(1.25, 0.02, 0.05, M.dark, 0, 1.215, -0.05 + i * 0.17, cell);
+  box(1.28 - i * 0.02, 0.035 - i * 0.002, 0.10, M.iron, 0, 1.19 + i * 0.028, -0.30 - i * 0.10, cell);
 }
 box(0.60, 0.05, 0.36, M.steel, -0.05, 1.235, 0.25, cell);   // parallel
 const viseBase = box(0.70, 0.26, 0.46, M.vise, 0, 1.39, 0.25, cell);
@@ -2163,6 +2266,7 @@ function frame(now) {
     sun.intensity = 0.25 + 0.55 * (1 - dl.dawn) * (1 - dl.dusk);
     for (const l of LAMPS) l.material.emissiveIntensity = dl.shop_lights ? 2.4 : 0.06;
     for (const pl of scene.children.filter((c) => c.isPointLight)) pl.intensity = dl.shop_lights ? 2.1 : 0.10;
+    for (const b of PRACTICALS) b.intensity = dl.shop_lights ? 1.5 : 0.0;
 
     /* bore geometry re-derived every frame, so the mesh cannot drift off the number */
     if (PART.mesh) {

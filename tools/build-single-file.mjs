@@ -65,6 +65,10 @@ const MODULES = [
   { id: 'three',    file: 'vendor/three/three.module.min.js', deps: [] },
   { id: 'kernel',   file: 'kernel.mjs',   deps: [] },
   { id: 'world',    file: 'world.mjs',    deps: [] },
+  /* MATERIALS DEPENDS ON THREE AND NOTHING ELSE, and it is deliberately last
+     in the physics chain: it draws surfaces and holds no constant. If this
+     module ever needs to know what a bore is, the seam has been broken. */
+  { id: 'materials', file: 'materials.mjs', deps: [['./vendor/three/three.module.min.js', 'three']] },
   /* WORLD IS A DEPENDENCY OF GAME, AND THAT IS THE POINT OF ROUND 9.
      The part lifecycle — the crate, the rack, the bin, the courier — has ONE
      definition and it lives in world.mjs. `game.mjs` reads the shop's
@@ -144,6 +148,8 @@ const APP_IMPORTS = [
    "const { createAudio } = await import(window.__URLS__.audio);"],
   ["import * as RECmod from './recorder.mjs';",
    "const RECmod = await import(window.__URLS__.recorder);"],
+  ["import { shopMaterials, shopEnvironment, tint } from './materials.mjs';",
+   "const { shopMaterials, shopEnvironment, tint } = await import(window.__URLS__.materials);"],
 ];
 for (const [needle, repl] of APP_IMPORTS) {
   const hits = app.split(needle).length - 1;
