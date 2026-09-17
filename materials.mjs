@@ -659,3 +659,168 @@ export function shopEnvironment(renderer, { size = 256 } = {}) {
   pmrem.dispose(); tex.dispose();
   return env;
 }
+
+/* ══ THE PENDANT KEYPAD ════════════════════════════════════════════════════
+   L3. The machine was operated through thirteen key bindings and a legend of
+   `kbd` tags in the corner of the screen. §48 asks for a machine you walk up
+   to and read, and the build's own gate report counted the legend as its
+   largest remaining debt: a player who has to memorise Shift+1-6 to state a
+   prediction is reading a manual, not standing at a machine.
+
+   WHY THIS IS A TEXTURE AND NOT TWELVE MESHES. The keypad is one printed
+   membrane panel — which is what the thing on a real machine tool is — so it
+   is drawn once, and which key you are pointing at is decided by the UV of the
+   ray hit. `keyAtUV()` is the inverse of the drawing below and lives beside it
+   deliberately: a hit-map written from a second copy of the layout is a hit-map
+   that will disagree with the picture the moment anything moves.
+
+   This module draws the panel and knows what the keys are CALLED. It does not
+   know what any of them DO — that mapping belongs to the page, which is the
+   only place that knows what a verification is. */
+export const KEYPAD = {
+  cols: 4,
+  rows: 3,
+  /* Reading order, left to right, top to bottom. `tone` is the key's colour:
+     the two that remove metal are amber, the two that read the machine are
+     cool, and the rest are plain membrane. */
+  keys: [
+    { id: 'dial_down', label: 'DIAL -',   tone: 'warn' },
+    { id: 'dial_up',   label: 'DIAL +',   tone: 'warn' },
+    { id: 'pred_down', label: 'PRED -',   tone: 'warn' },
+    { id: 'pred_up',   label: 'PRED +',   tone: 'warn' },
+    { id: 'touch',     label: 'TOUCH OFF', tone: 'plain' },
+    { id: 'warm',      label: 'WARM UP',  tone: 'plain' },
+    { id: 'feed_down', label: 'FEED -',   tone: 'plain' },
+    { id: 'feed_up',   label: 'FEED +',   tone: 'plain' },
+    { id: 'rough',     label: 'ROUGH',    tone: 'warn' },
+    { id: 'cut',       label: 'CUT',      tone: 'hot' },
+    { id: 'measure',   label: 'MEASURE',  tone: 'cool' },
+    { id: 'inspect',   label: 'UNLOAD',   tone: 'cool' },
+  ],
+};
+
+/** Draws the membrane panel. `size` is the canvas edge; the panel is drawn at
+ *  4:3 and the mesh must be built at the same aspect or the keys stretch. */
+export function keypadPanel(size = 640, seed = 71) {
+  const W = size, H = Math.round(size * 0.75);
+  const c = canvas(W);
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  const rnd = mulberry32(seed);
+
+  /* the membrane itself: a dark, slightly rubbery grey with a moulded edge */
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#343b42');
+  bg.addColorStop(1, '#22282e');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  const bez = ctx.createLinearGradient(0, 0, 0, H);
+  bez.addColorStop(0, 'rgba(255,255,255,.10)');
+  bez.addColorStop(0.08, 'rgba(255,255,255,0)');
+  bez.addColorStop(1, 'rgba(0,0,0,.34)');
+  ctx.fillStyle = bez; ctx.fillRect(0, 0, W, H);
+
+  const pad = W * 0.045;
+  const gap = W * 0.022;
+  const cw = (W - pad * 2 - gap * (KEYPAD.cols - 1)) / KEYPAD.cols;
+  const ch = (H - pad * 2 - gap * (KEYPAD.rows - 1)) / KEYPAD.rows;
+  const TONE = {
+    plain: { face: '#454d55', edge: '#5a636c', ink: '#d7dde2' },
+    warn:  { face: '#7a5a20', edge: '#a97f31', ink: '#ffe6b0' },
+    hot:   { face: '#8a3524', edge: '#c05a3e', ink: '#ffe0d5' },
+    cool:  { face: '#25454f', edge: '#3d6f7d', ink: '#d3eef5' },
+  };
+
+  const roundRect = (x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  };
+
+  KEYPAD.keys.forEach((k, i) => {
+    const col = i % KEYPAD.cols, row = Math.floor(i / KEYPAD.cols);
+    const x = pad + col * (cw + gap), y = pad + row * (ch + gap);
+    const t = TONE[k.tone] || TONE.plain;
+    const inset = cw * 0.035;
+    const kx = x + inset, ky = y + inset, kw = cw - inset * 2, kh = ch - inset * 2;
+    const r = cw * 0.09;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = size * 0.012; ctx.shadowOffsetY = size * 0.004;
+    ctx.fillStyle = t.edge; roundRect(kx, ky, kw, kh, r); ctx.fill();
+    ctx.restore();
+
+    const fg = ctx.createLinearGradient(0, ky, 0, ky + kh);
+    fg.addColorStop(0, t.face); fg.addColorStop(1, 'rgba(0,0,0,.32)');
+    ctx.save();
+    ctx.fillStyle = t.face; roundRect(kx + 1, ky + 1, kw - 2, kh - 2, r); ctx.fill();
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = fg; roundRect(kx, ky, kw, kh, r); ctx.fill();
+    ctx.restore();
+
+    // a moulded highlight along the top lip, so the key reads as raised
+    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = Math.max(1, size * 0.0025);
+    ctx.beginPath();
+    ctx.moveTo(kx + r, ky + 1.5); ctx.lineTo(kx + kw - r, ky + 1.5);
+    ctx.stroke();
+
+    /* the label. Monospace and uppercase, matching the page's own voice —
+       a pendant that used a different typeface from everything else in the
+       build would read as a different product. */
+    ctx.fillStyle = t.ink;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const fs = Math.min(kh * 0.38, kw * 0.20);
+    ctx.font = `600 ${fs.toFixed(1)}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+    ctx.fillText(k.label, kx + kw / 2, ky + kh / 2 + fs * 0.02);
+  });
+
+  // shop grime: a keypad on a machine tool is never clean
+  for (let i = 0; i < 90; i++) {
+    ctx.globalAlpha = 0.05 + rnd() * 0.10;
+    ctx.fillStyle = '#6b6455';
+    ctx.beginPath(); ctx.arc(rnd() * W, rnd() * H, 0.6 + rnd() * 2.2, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return { texture: tex, aspect: W / H };
+}
+
+/** Which key does a ray hit at this UV land on? Derived from the same KEYPAD
+ *  object `keypadPanel` draws from, because a hit-map that is a second copy of
+ *  a picture is a hit-map that will drift off the picture.
+ *
+ *  IT SNAPS TO THE NEAREST KEY rather than testing the drawn rectangles. The
+ *  first version tested the rectangles and returned null in the gaps, which put
+ *  a dead band down the middle of the panel — measured: aiming at the exact
+ *  centre of the pendant (u = 0.5) fell in the 22-thousandths gap between
+ *  columns 1 and 2 and the crosshair reported no key at all. A membrane keypad
+ *  has no reachable nowhere: whatever you are pointing at is a key, and the
+ *  nearest one is the honest answer. Only the outer margin, past the centre of
+ *  the first or last key by more than half a cell, comes back null. */
+export function keyAtUV(u, v) {
+  const pad = 0.045, gap = 0.022;
+  const cw = (1 - pad * 2 - gap * (KEYPAD.cols - 1)) / KEYPAD.cols;
+  const ch = (1 - pad * 2 - gap * (KEYPAD.rows - 1)) / KEYPAD.rows;
+  const col = Math.round((u - pad - cw / 2) / (cw + gap));
+  const row = Math.round(((1 - v) - pad - ch / 2) / (ch + gap));   // UV v is bottom-up
+  if (col < 0 || col >= KEYPAD.cols || row < 0 || row >= KEYPAD.rows) return null;
+  return KEYPAD.keys[row * KEYPAD.cols + col] || null;
+}
+
+/** The same layout as normalised rects, for anything that has to draw ON the
+ *  panel rather than read it — the hover cursor, for instance. Third copy of
+ *  the padding is deliberately avoided: this is the second, and both it and
+ *  `keyAtUV` derive from KEYPAD. */
+export function keyRectUV(i) {
+  const pad = 0.045, gap = 0.022;
+  const cw = (1 - pad * 2 - gap * (KEYPAD.cols - 1)) / KEYPAD.cols;
+  const ch = (1 - pad * 2 - gap * (KEYPAD.rows - 1)) / KEYPAD.rows;
+  const col = i % KEYPAD.cols, row = Math.floor(i / KEYPAD.cols);
+  return { u0: pad + col * (cw + gap), v0: 1 - (pad + row * (ch + gap) + ch), w: cw, h: ch };
+}

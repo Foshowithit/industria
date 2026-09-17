@@ -148,8 +148,8 @@ const APP_IMPORTS = [
    "const { createAudio } = await import(window.__URLS__.audio);"],
   ["import * as RECmod from './recorder.mjs';",
    "const RECmod = await import(window.__URLS__.recorder);"],
-  ["import { shopMaterials, shopEnvironment, tint } from './materials.mjs';",
-   "const { shopMaterials, shopEnvironment, tint } = await import(window.__URLS__.materials);"],
+  ["import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD } from './materials.mjs';",
+   "const { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD } = await import(window.__URLS__.materials);"],
 ];
 for (const [needle, repl] of APP_IMPORTS) {
   const hits = app.split(needle).length - 1;

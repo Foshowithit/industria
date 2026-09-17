@@ -166,7 +166,7 @@ import * as P from './people.mjs';
 import { createAudio } from './audio.mjs';
 /* The shop's surfaces. Drawn in the page, deterministic, no assets — see the
    header of materials.mjs for why they are not files. */
-import { shopMaterials, shopEnvironment, tint } from './materials.mjs';
+import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD } from './materials.mjs';
 /* Playtest instrumentation. Dark unless the URL asks for it (`?rec=1`), so the
    public build behaves exactly as before — see recorder.mjs and PLAYTEST-KIT.md.
    Every call below is a no-op returning early when `REC` is null. */
@@ -463,10 +463,41 @@ const win = new THREE.Mesh(new THREE.PlaneGeometry(2.88, 2.44), M.glass);
 win.position.set(0, 2.34, 1.30); cell.add(win);
 box(0.62, 0.05, 0.05, M.steel, 1.12, 1.34, 1.36, cell);     // door handle
 box(0.16, 0.06, 0.10, M.brass, 0.55, 1.60, 1.36, cell);     // latch
-const pend = new THREE.Group(); pend.position.set(1.78, 1.62, 0.9); cell.add(pend);
-box(0.66, 0.92, 0.14, M.dark, 0, 0, 0, pend);
-box(0.50, 0.42, 0.03, new THREE.MeshStandardMaterial({ color: 0x1b3a2a, emissive: 0x2f7a4a, emissiveIntensity: 0.7 }), 0, 0.18, 0.09, pend);
-box(0.44, 0.06, 0.02, M.warn, 0, -0.22, 0.09, pend);
+/* ══ THE PENDANT — the machine's own controls, on the machine ════════════
+   L3. Everything you can do to this machine is a key on this panel. The panel
+   is how a real operator drives a VMC and it is what §48 asks for: you walk up
+   to the machine, you look at it, and the controls are ON it.
+
+   Pointing at a key and pressing E is the verb. That is not a stylistic
+   choice — the page holds pointer lock, and while it does, a click is consumed
+   by the lock and never reaches a DOM overlay. This is measured, and it is why
+   the build's earlier attempt at an on-screen control surface could not work.
+   Aiming at a thing in the world and pressing the same key you press for
+   everything else in this shop does work, and needs no legend. */
+const pend = new THREE.Group(); pend.position.set(1.72, 1.66, 0.92); cell.add(pend);
+box(0.80, 1.10, 0.16, M.dark, 0, 0, 0, pend);
+/* the machine's own readout — still the HTML panel, which is the one place on
+   this floor that is allowed to be a screen */
+box(0.62, 0.42, 0.03, new THREE.MeshStandardMaterial({ color: 0x1b3a2a, emissive: 0x2f7a4a, emissiveIntensity: 0.7 }), 0, 0.27, 0.10, pend);
+const PEND_W = 0.66, PEND_H = PEND_W * 0.75;
+const padTex = keypadPanel(640, 71);
+const pendPad = new THREE.Mesh(new THREE.PlaneGeometry(PEND_W, PEND_H),
+  new THREE.MeshStandardMaterial({ map: padTex.texture, roughness: 0.62, metalness: 0.05 }));
+pendPad.position.set(0, -0.20, 0.086); pend.add(pendPad);
+/* the hover cursor. One quad that moves, rather than twelve materials that
+   light up — the panel is a single printed sheet and the picture on it does
+   not change when you point at it. */
+const pendCursor = new THREE.Mesh(
+  new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ color: 0xffd489, transparent: true, opacity: 0.34, depthWrite: false }));
+pendCursor.position.set(0, -0.20, 0.090); pendCursor.visible = false; pend.add(pendCursor);
+/* The cursor is a highlight, not a surface. It sits 4 mm in front of the panel
+   so it does not z-fight with it, which is exactly close enough for the
+   raycaster to hit IT instead of the panel — measured: it came back at 1.090
+   with the panel at 1.094, so the crosshair resolved to the cursor, walked up
+   to the machine, and the pendant became unreachable while looking straight at
+   it. A mesh that exists to be looked at must not be a mesh that can be hit. */
+pendCursor.raycast = () => {};
 
 /* ── THE 3D PART — geometry driven by the kernel's bore diameter ────────── */
 const PART = { mesh: null, mat: new THREE.MeshStandardMaterial({ color: 0x707880, roughness: 0.5, metalness: 0.78 }) };
@@ -1116,6 +1147,53 @@ add(JOBBOARD, "Job board — the week's work", 'read it', () => {
     ` Banked <b>${money(GAME.money)}</b>.`);
 }, () => true);
 
+/* ── THE PENDANT'S VERB ──────────────────────────────────────────────────
+   Aim at a key, press E. Every one of these is the same function the keyboard
+   shortcut calls, so a player who drives the machine off the pendant and a
+   player who knows Shift+1-6 are operating the identical machine. The keys are
+   not removed — a machinist who knows them should not be slowed down — they are
+   simply no longer the only way, and no longer printed on the screen. */
+function stepIn(arr, cur, dir) {
+  const i = arr.indexOf(cur);
+  if (i < 0) return arr[0];
+  return arr[Math.max(0, Math.min(arr.length - 1, i + dir))];
+}
+function pressKey(id) {
+  switch (id) {
+    case 'dial_down':
+    case 'dial_up': {
+      const up = id === 'dial_up';
+      const v = stepIn(DIALS, biteCmd_um, up ? 1 : -1);
+      if (v === biteCmd_um) { toast(`Dial is already at its ${up ? 'deepest' : 'finest'}: <b>${v} µm</b>.`, 1800); return; }
+      biteCmd_um = v;
+      if (REC) REC.action('set_dial', { dial_um: v, key: 'pendant', clock_min: GAME ? GAME.clock_min : null });
+      toast(`Dial set to <b>${v} µm</b> on the radius.`, 1800);
+      return;
+    }
+    case 'pred_down':
+    case 'pred_up': {
+      const cur = predicted_um === null ? PREDICTIONS[0] : predicted_um;
+      setPrediction(stepIn(PREDICTIONS, cur, id === 'pred_up' ? 1 : -1));
+      return;
+    }
+    case 'feed_down': stepRoughFeed(-1); return;
+    case 'feed_up':   stepRoughFeed(1);  return;
+    case 'touch':     doTouchOff(); return;
+    case 'warm':      doWarmUp();   return;
+    case 'rough':     doRough();    return;
+    case 'cut':       doCut();      return;
+    case 'measure':   doMeasure();  return;
+    case 'inspect':   doInspect();  return;
+    default: return;
+  }
+}
+add(pendPad, 'Machine control — pendant', 'press a key', () => {
+  if (!pendHover) { say('You', 'A membrane keypad. Point at a key and press E.'); return; }
+  if (REC) REC.action('pendant_key', { key: pendHover.id, label: pendHover.label,
+    clock_min: GAME ? GAME.clock_min : null });
+  pressKey(pendHover.id);
+}, () => eye.distanceTo(MACHINE_NEAR) < 4.2);
+
 /* ── ROUND 9 VERBS — the floor the part moves across ──────────────────────
    Every one of these reads the PHYSICAL state and says what is there. None of
    them reports a diameter, a band position, or a "score": the rack is a rack,
@@ -1319,9 +1397,12 @@ function machinePanel() {
       ? '<i>not stated — <kbd>Shift</kbd>+<kbd>1\u20136</kbd></i>'
       : `${predicted_um} µm`) +
     (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm <i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} vs dial)</i>`) : '') +
-    `<div class="row" style="margin-top:6px"><i>1-6 dial · <kbd>Shift</kbd>+1-6 predict · <kbd>C</kbd> cut · <kbd>M</kbd> measure</i></div>` +
-    `<div class="row"><i><kbd>T</kbd> touch off · <kbd>V</kbd> warm up · <kbd>Enter</kbd> inspect</i></div>` +
-    `<div class="row"><i><kbd>R</kbd> rough · <kbd>[</kbd><kbd>]</kbd> bite · <kbd>-</kbd><kbd>=</kbd> feed</i></div>`;
+    /* THE LEGEND IS GONE. It was three rows of `kbd` tags teaching a control
+       scheme, which is the one thing §48 forbids outright — and the build's own
+       gate report counted it as its largest remaining debt. The controls are on
+       the machine now, and this panel is its readout. */
+    `<div class="row" style="margin-top:6px"><i>Controls are on the pendant — ` +
+      `point at a key and press <kbd>E</kbd>.</i></div>`;
   /* The instrument, refreshed on every panel tick. It reads the CURRENT
      roughing setting, so stepping the feed with `=` moves the bars before the
      cut rather than after the refusal. */
@@ -2179,7 +2260,7 @@ function noteSecondPart(verbatim) {
 }
 
 /* ── THE LOOK-AT PROMPT ─────────────────────────────────────────────────── */
-let lookingAt = null;
+let lookingAt = null, lookUV = null, pendHover = null;
 function doLook() {
   /* Starting a SECOND bar after the first one is done and gone is the single
      fact Round 1 turns on: "Give me another part" without being asked. */
@@ -2197,9 +2278,28 @@ function updateLook() {
     hit = cands.find((c) => c.obj === o) || null;
   }
   lookingAt = hit;
+  /* The pad needs to know WHICH key the crosshair is on, and the ray hit is
+     the only thing that knows. Kept on the module rather than threaded through
+     `act()`, which every other verb in the shop is called without arguments. */
+  lookUV = (hits.length && hits[0].uv) ? hits[0].uv : null;
+  if (hit && hit.obj === pendPad && lookUV) {
+    const k = keyAtUV(lookUV.x, lookUV.y);
+    pendHover = k;
+    if (k) {
+      const i = KEYPAD.keys.indexOf(k);
+      const r = keyRectUV(i);
+      pendCursor.visible = true;
+      pendCursor.scale.set(r.w * PEND_W * 1.02, r.h * PEND_H * 1.02, 1);
+      pendCursor.position.set((r.u0 + r.w / 2 - 0.5) * PEND_W,
+                              -0.20 + (r.v0 + r.h / 2 - 0.5) * PEND_H, 0.090);
+    } else { pendCursor.visible = false; }
+  } else { pendHover = null; pendCursor.visible = false; }
   $('look').style.opacity = hit ? '1' : '0';
   if (hit) {
-    $('lkName').textContent = hit.name;
+    /* A LOOK entry may name itself from live state. The pad's name is the key
+       under the crosshair, which is the only way the player learns what a key
+       does without a legend. */
+    $('lkName').textContent = (hit.obj === pendPad && pendHover) ? pendHover.label : hit.name;
     /* §53: what you can even SEE depends on what you have done */
     const p = W.perceptionOf({ crude: '', material: '', process: '', engineer: '' }, SEEN);
     $('lkAct').innerHTML = `<span class="verb">E</span> ${hit.verb}` +
@@ -2606,6 +2706,15 @@ window.INDUSTRIA = {
      acceptance gate could not set the machine up at all. Same function the
      player's LOOK item calls. */
   tool: (id) => loadBar(id),
+  /* Aim the head, in radians, the same two numbers the mouse writes. Without
+     this the only way to change where you are looking is to move the mouse
+     under pointer lock, which no headless run can do — and the pendant is
+     pressed by AIMING at a key, so a gate could not press one at all. */
+  look: (y, p) => {
+    if (y !== undefined && y !== null) yaw = y;
+    if (p !== undefined && p !== null) pitch = p;
+    return { yaw, pitch };
+  },
   /* ── ROUND 9 — THE FLOOR, FOR THE FOUR-HISTORY TEST ─────────────────────
      `floor` is the whole point of the round's verification: it reports what
      an observer sees WITH THE MACHINE HIDDEN. It calls the game layer's own
