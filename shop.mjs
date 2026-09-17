@@ -277,6 +277,46 @@ export function recordDelivery(shop, {
   return entry;
 }
 
+/* ══ THE SYSTEM AT THE NEXT RUNG ══════════════════════════════════════════
+   VISION.md §3: the system advises at EVERY rung, and the seat at the machine is
+   only the first. This is the shop rung — which job to take — and it is the same
+   kind of object: a claim, its assumptions, and a record the shop keeps.
+
+   AND IT IS WRONG IN A SPECIFIC, TEACHABLE WAY. It maximises what is on the card.
+   That is the stated objective and it is not the real one: a shop lives on what
+   its clients think of it, and the client who is squeezed on the last job is the
+   client who does not call on the next one. So the advice is not a lie — taken
+   one job at a time it always pays best TODAY — and a player who follows it for a
+   season runs out of clients.
+
+   THAT IS THE FAILURE MODE OF OPTIMISING A STATED OBJECTIVE, which is the thing
+   this whole project exists to teach people to notice about models. It is not a
+   trap and it is not random: the assumption is printed with the numbers, so a
+   player who reads two lines down can see that the recommendation knows nothing
+   about what it costs the relationship. */
+export function adviseJob(shop, offers) {
+  const open = offers.filter((o) => o.offered);
+  if (!open.length) return null;
+  /* The stated objective, honestly computed: the rate, and nothing else. */
+  const pick = open.reduce((a, b) => (b.rate > a.rate ? b : a));
+  const c = shop.book[pick.job.client_id];
+  return {
+    job_id: pick.job.id,
+    rate: pick.rate,
+    client: pick.job.client,
+    /* THE ASSUMPTION, PRINTED. Both of these are true and one of them is the
+       whole story: it is the best rate on the board, and what it does to the
+       client's opinion of you is not in the model. */
+    assumptions: {
+      objective: `the best rate on the board — ${pick.rate} today`,
+      not_considered: 'what taking it does to the relationship, this week or next',
+      standing_now: c ? c.standing : null,
+    },
+    why: `£${pick.rate} is the most money on the wall today` +
+      (c ? `, and ${pick.job.client} is at standing ${c.standing}` : ''),
+  };
+}
+
 /* ── THE MORNING ───────────────────────────────────────────────────────────
    A shop does not learn what its customer thought of a part when the part
    leaves. It learns the next morning, in writing, from somebody who has had

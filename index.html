@@ -214,7 +214,7 @@ import { createAudio } from './audio.mjs';
 /* The business the machine sits in. Pure, tested, no DOM — see its header for
    what was ported from the economy architecture at ~/industria and what was
    not, and why the constants moved. */
-import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS, unreported, markReported, letterFor, OVERHEAD_PER_DAY } from './shop.mjs';
+import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS, unreported, markReported, letterFor, OVERHEAD_PER_DAY, adviseJob } from './shop.mjs';
 /* The shop's surfaces. Drawn in the page, deterministic, no assets — see the
    header of materials.mjs for why they are not files. */
 import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace, consoleScreen, drawingSheet } from './materials.mjs';
@@ -1657,6 +1657,17 @@ add(JOBBOARD, "Job board — the week's work", 'read it', () => {
     ? `<i>${last.client}'s last word — ${last.report} ` +
       `Standing ${last.standing_before} → <b>${last.standing_after}</b>.</i><br><br>`
     : '';
+  /* ══ AND THE SYSTEM HAS A VIEW ON THE WORK ITSELF ═════════════════════════
+     VISION.md §3 says the system advises at every rung; the seat at the machine
+     is only the first. This is the shop rung, and it is deliberately the same
+     kind of object: a claim, its assumptions printed, and a record the shop keeps.
+     See `adviseJob` in shop.mjs for why it is wrong and why that is the lesson. */
+  const advice = adviseJob(SHOP, offers);
+  const adviceLine = advice
+    ? `<br><i>The system would take <b>${advice.job_id}</b> — ${advice.why}. ` +
+      `It was asked for the best rate and nothing else; what that does to the ` +
+      `relationship is not in it.</i>`
+    : '';
   const worth = averageClaimError_um(SHOP);
   const books = `<br><br><i>Banked <b>${money(SHOP.cash)}</b> · day ${SHOP.day} · ` +
     `overhead ${money(260)} a morning` +
@@ -1672,7 +1683,7 @@ add(JOBBOARD, "Job board — the week's work", 'read it', () => {
       `band ${((o.job.band_high_mm - o.job.band_low_mm) * 1000).toFixed(0)} µm at ${money(o.rate)}`,
       () => takeJob(o.job.id)]);
   }
-  say('Board', letter + lines.join('<br><br>') + books, opts.length ? opts : undefined);
+  say('Board', letter + lines.join('<br><br>') + adviceLine + books, opts.length ? opts : undefined);
   logLine(`Board: <b>${offers.filter((o) => o.offered).length}</b> of ${offers.length} on offer. ` +
     `Banked <b>${money(SHOP.cash)}</b>.` +
     (opts.length ? '' : ' <b>Nothing here is yours to take.</b>'));

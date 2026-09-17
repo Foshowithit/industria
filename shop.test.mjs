@@ -24,7 +24,7 @@
 
 import {
   newShop, recordDelivery, offersFor, rateMultiplier, moveStanding, claimStandingDelta,
-  endOfDay, describeShop, averageClaimError_um, unreported, markReported, letterFor,
+  endOfDay, describeShop, averageClaimError_um, unreported, markReported, letterFor, adviseJob,
   STANDING_OPEN, STANDING_MAX, STANDING_OFFERS, STANDING_BETTER_WORK,
   STANDING_DELTA, OVERHEAD_PER_DAY,
 } from './shop.mjs';
@@ -268,6 +268,37 @@ ok('CLAIM-5', 'the trust term can never outweigh delivering the part',
   ok('POST-15', 'a scrap says nothing arrived', /Nothing arrived/.test(sc.lines[0].verdict));
 }
 
+/* ── ADV-*  THE SYSTEM AT THE SHOP RUNG ─────────────────────────────────
+   It maximises the stated objective and says so. The thing worth asserting is
+   that it is NOT WRONG about the money — it really is the best rate on the board
+   — and that it prints what it did not consider, because a recommendation whose
+   blind spot is visible is advice and one whose blind spot is hidden is an
+   instruction. */
+{
+  const s = shopWith('halvorsen', 'pemberton');
+  const jobs = [
+    { id: 'A', client_id: 'halvorsen', client: 'Halvorsen', rate: 1000, min_standing: 0 },
+    { id: 'B', client_id: 'pemberton', client: 'Pemberton', rate: 2400, min_standing: 0 },
+  ];
+  const offers = offersFor(s, jobs);
+  const adv = adviseJob(s, offers);
+  eq('ADV-1', 'it recommends the best rate on the board', adv.job_id, 'B');
+  eq('ADV-2', 'and quotes that rate', adv.rate, 2400);
+  ok('ADV-3', 'and states the objective it used',
+    /best rate/i.test(adv.assumptions.objective));
+  ok('ADV-4', 'AND WHAT IT DID NOT CONSIDER — the relationship',
+    /relationship/.test(adv.assumptions.not_considered));
+  eq('ADV-5', 'it is not wrong about the money: B really is the highest', 
+    Math.max(...offers.filter((o) => o.offered).map((o) => o.rate)), 2400);
+  /* It only ever recommends work a client is actually offering. */
+  const none = { ...s, book: { ...s.book, halvorsen: { ...s.book.halvorsen, standing: 100 },
+                               pemberton: { ...s.book.pemberton, standing: 100 } } };
+  eq('ADV-6', 'with nothing on offer it has nothing to say', adviseJob(none, offersFor(none, jobs)), null);
+  /* And it is honest about the standing it can see. */
+  ok('ADV-7', 'it reports the client standing it is looking at',
+    typeof adv.assumptions.standing_now === 'number');
+}
+
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);
 if (failed.length) {
@@ -282,4 +313,5 @@ if (fail === 0) {
   console.log(describeShop(shopWith('acme')));
 }
 process.exit(fail === 0 ? 0 : 1);
+
 
