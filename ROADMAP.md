@@ -268,6 +268,49 @@ costs nothing here.
 
 ---
 
+## 3b. THE THREE DEFECT CLASSES THIS BUILD ACTUALLY PRODUCES
+
+Every bug found in this repository so far belongs to one of three families. They
+are worth naming because all three are invisible to the test suites by
+construction, and the only thing that has ever caught one is LOOKING.
+
+**CLASS 1 — A VALUE READ FROM A FIELD THAT DOES NOT EXIST.**
+Nothing throws. `job.depth_mm` (the field is `bore_depth_mm`) made the Traveler
+say the bore was "undefined" deep and handed `NaN` to a geometry. `M.iron` was
+never defined, so the machine table and way covers silently fell back to
+three.js's default WHITE UNLIT material. `itWidth_um` could not compute IT9, so
+J4's grade came back `undefined` and `newGame` threw three frames later inside a
+template literal. Fix: when you add a lookup, assert it exists.
+
+**CLASS 2 — A MODEL THAT IS CORRECT AND NEVER CALLED.**
+`describeBore` and `perceptionOf` had been in `world.mjs` since they were
+written and NEITHER WAS REFERENCED — the entire §53 layered perception model was
+implemented, tested by construction, and invisible. `shiftClock_min` likewise.
+The chip's colour was computed from a temperature that put every chip in the
+same band, so it carried no information on any cut. Fix: **audit exports against
+the page.** The sweep that found these compares every `export` in the build
+against its use in `index.html`; it is crude and it has a false-positive mode
+(cross-file only — `attenuation` looked dead and is used inside `audio.mjs`),
+but it is the only thing that finds this class at all.
+
+**CLASS 3 — TWO DERIVATIONS OF ONE FACT.**
+The lateness badge read `clocks.world_min` while the money read `isLate()` on
+`clock_min`, and the world clock runs at twice the job clock's rate, so the badge
+said LATE at roughly the halfway point of every job. `envelope()` picked the
+largest limit fraction while the kernel refuses on fixed precedence, so the
+acceptance probe named a wall the machine does not refuse on. The chip read the
+bite where it meant the feed. Fix: **one derivation, and if a second is needed,
+assert they agree** — `WIRE-*` in shop.test.mjs and the forecast tests in
+system.test.mjs are both that shape.
+
+### What this means for how to work here
+
+**No test suite in this repository has ever found a bug in any of these three
+classes.** They were all found by looking at the thing — a screenshot, a chip, a
+clock, an audit of names. The suites are good at physics and at invariants and
+they should stay that way; the answer to this class is not more tests, it is
+running the game and reading what it says.
+
 ## 4. HOW TO WORK HERE
 
 1. **Look at it before you judge it.** The one rule that would have prevented
