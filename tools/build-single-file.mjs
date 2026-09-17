@@ -152,7 +152,7 @@ const APP_IMPORTS = [
    "const P = await import(window.__URLS__.people);"],
   ["import { createAudio } from './audio.mjs';",
    "const { createAudio } = await import(window.__URLS__.audio);"],
-  ["import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS, unreported, markReported, letterFor } from './shop.mjs';",
+  ["import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS, unreported, markReported, letterFor, OVERHEAD_PER_DAY } from './shop.mjs';",
    "const { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS, unreported, markReported, letterFor } = await import(window.__URLS__.shop);"],
   ["import * as RECmod from './recorder.mjs';",
    "const RECmod = await import(window.__URLS__.recorder);"],

@@ -178,6 +178,30 @@
   <div class="fine" id="gAdv"></div>
 </div></div>
 
+<!-- ══ A THROWN HANDLER MUST BE VISIBLE ══════════════════════════════════════
+     The board's verb threw a ReferenceError and the game did nothing at all: no
+     message, no log line, no change on screen. It took a browser probe and three
+     attempts to find, because the page had no way to say that anything had gone
+     wrong. The audio probe learned this same lesson for itself and prints its own
+     death; the GAME had not, and a silent failure in the game is worse because a
+     player cannot tell it from a control that does not work.
+
+     Registered in a classic script BEFORE the module, because a listener declared
+     inside a module is registered too late to hear that module fail. -->
+<script>
+  window.__gameErrors = [];
+  window.addEventListener('error', (e) => {
+    const msg = String(e.message) + ' @ ' + (e.filename || '?').split('/').pop() + ':' + e.lineno;
+    window.__gameErrors.push(msg);
+    const L = document.getElementById('log');
+    if (L) {
+      const d = document.createElement('div');
+      d.innerHTML = '<b style="color:#e05a4e">Something went wrong:</b> ' + msg;
+      L.prepend(d);
+    }
+  });
+</script>
+
 <script type="module">
 import * as THREE from './vendor/three/three.module.min.js';
 import * as G from './game.mjs';
@@ -190,7 +214,7 @@ import { createAudio } from './audio.mjs';
 /* The business the machine sits in. Pure, tested, no DOM — see its header for
    what was ported from the economy architecture at ~/industria and what was
    not, and why the constants moved. */
-import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS, unreported, markReported, letterFor } from './shop.mjs';
+import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS, unreported, markReported, letterFor, OVERHEAD_PER_DAY } from './shop.mjs';
 /* The shop's surfaces. Drawn in the page, deterministic, no assets — see the
    header of materials.mjs for why they are not files. */
 import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace, consoleScreen, drawingSheet } from './materials.mjs';
@@ -839,7 +863,24 @@ function otherMachine(x, z, ry, colorHex, noise) {
   const w2 = new THREE.Mesh(new THREE.PlaneGeometry(1.62, 1.10), M.glass);
   w2.position.set(0, 1.55, 1.06); g.add(w2);
   vmcDressing(g, { w: 2.4, d: 2.2, front: 1.06 });
-  return { g, noise };
+  /* ══ A MACHINE THAT RUNS HAS SOMETHING THAT TURNS ════════════════════════
+     These three were built, lit, cutting and entirely frozen: the noise told you
+     they were running and the picture said they were switched off, and the brief's
+     §1 and §5 are both about a factory that goes on without you. A spindle nose
+     and a work light inside the window is the smallest change that makes a
+     machine visibly alive — the light already existed on the player's machine for
+     exactly this reason, and these never got one.
+
+     THE SPEED IS THE MACHINE'S OWN, from the acoustics it is already being driven
+     with, so what you see and what you hear are the same rpm. `machineMotion` is
+     the player's machine and lives in `cell`; this is the same idea one object
+     over, and it is deliberately not a shared function because the two machines
+     are driven by different things — yours by the kernel, theirs by a script. */
+  const nose = cyl(0.09, 0.12, 0.34, M.steel, 16);
+  nose.position.set(0, 2.30, 0.25); g.add(nose);
+  const inLight = new THREE.PointLight(0xfff3e0, 1.1, 2.6, 1.8);
+  inLight.position.set(0.5, 2.9, 0.5); g.add(inLight);
+  return { g, noise, nose };
 }
 const OTHER1 = otherMachine(-11, -4, 0.5, 0x7d8890, 0.62);
 const OTHER2 = otherMachine(9.5, 2, -0.7, 0x6f7a72, 0.44);
@@ -1621,11 +1662,16 @@ add(JOBBOARD, "Job board — the week's work", 'read it', () => {
     `overhead ${money(260)} a morning` +
     (worth === null ? ' · nothing measured yet' : ` · your word is good to ${worth.toFixed(1)} µm`) + '.</i>';
 
-  const opts = offers
-    .filter((o) => o.offered && o.job.id !== GAME.job.id)
-    .map((o) => [`Take ${o.job.id} — ${o.job.client}, Ø${o.job.nominal_mm} ${o.job.grade}, ` +
-                 `band ${((o.job.band_high_mm - o.job.band_low_mm) * 1000).toFixed(0)} µm at ${money(o.rate)}`,
-                 () => takeJob(o.job.id)]);
+  /* THE DAY BOOK IS OFFERED FIRST, because a shopkeeper reads the numbers before
+     taking on more work — and because it is the only place the shop's own record
+     is legible. */
+  const opts = [['Read the day book', readBooks]];
+  for (const o of offers) {
+    if (!o.offered || o.job.id === GAME.job.id) continue;
+    opts.push([`Take ${o.job.id} — ${o.job.client}, Ø${o.job.nominal_mm} ${o.job.grade}, ` +
+      `band ${((o.job.band_high_mm - o.job.band_low_mm) * 1000).toFixed(0)} µm at ${money(o.rate)}`,
+      () => takeJob(o.job.id)]);
+  }
   say('Board', letter + lines.join('<br><br>') + books, opts.length ? opts : undefined);
   logLine(`Board: <b>${offers.filter((o) => o.offered).length}</b> of ${offers.length} on offer. ` +
     `Banked <b>${money(SHOP.cash)}</b>.` +
@@ -1758,6 +1804,37 @@ add(CHIP_TRAY, 'Chip tray — what came off the last pass', 'look in it', () => 
    both conditions on the same screen — the one it surveyed, and the one the
    machine is at — and says nothing about the gap. The player who compares those
    two lines is the player who stops scraping castings on a worn machine. */
+/** THE SHOP'S OWN BOOKS. `shop.shipper` has held every part that has left the
+ *  door since the economy was wired and only ever showed its last line. A shop
+ *  keeps a day book and a shopkeeper reads it — what went out, what it was worth,
+ *  and what it cost. |
+ *  |
+ *  IT IS NOT A SCOREBOARD AND IT SAYS SO. There is no rate, no percentage and no
+ *  trend line: the disposition of each part, what the customer measured, the
+ *  money, and the day's overhead. A player who wants a rate has to work it out,
+ *  which is what a shopkeeper does with a pencil. */
+function readBooks() {
+  const rows = SHOP.shipper.map((e) => {
+    const measured = e.true_um === null ? '—' : `${e.true_um >= 0 ? '+' : ''}${e.true_um.toFixed(1)} µm`;
+    const said = e.claimed_um === null ? 'no figure given' : `said ${e.claimed_um >= 0 ? '+' : ''}${e.claimed_um.toFixed(1)}`;
+    return `day ${e.day} · <b>${e.job_id}</b> · ${clientName(e.client)} · ${e.kind.replace('_', ' ')}` +
+      `<br><span style="color:#8b98a6">measured ${measured} · ${said} · ${money(e.net)}</span>`;
+  });
+  const total = SHOP.shipper.reduce((a, e) => a + e.net, 0);
+  /* `OVERHEAD_PER_DAY` LIVES IN shop.mjs, NOT game.mjs. Reading it off `G.` gave
+     undefined and the book printed "overhead to date £NaN" — class 1 of the three
+     defect families, found by reading the sheet on screen. It is imported by name
+     now, which is also the only way a rename can break it loudly. */
+  const overhead = OVERHEAD_PER_DAY * (SHOP.day - 1);
+  say('Day book',
+    `<b>Day ${SHOP.day}</b> · banked <b>${money(SHOP.cash)}</b><br>` +
+    `<span style="color:#8b98a6">parts net ${money(total)} · overhead to date ${money(overhead)} · ` +
+    `${SHOP.shipper.length} part${SHOP.shipper.length === 1 ? '' : 's'} out of the door</span>` +
+    `<br><br>` + (rows.length ? rows.join('<br><br>') : '<i>Nothing has left this shop yet.</i>'));
+  logLine(`Day book: <b>${SHOP.shipper.length}</b> parts out, net ${money(total)}, ` +
+    `banked <b>${money(SHOP.cash)}</b>.`);
+}
+
 /** The customer's letters, and the only place in this build where the number
  *  you read off a gauge and the number their CMM produced share a line. */
 /* THE SHOP KEYS ITS BOOK BY ID AND THE LETTERHEAD IS A NAME. `client_id` is an
@@ -3671,6 +3748,11 @@ function frame(now) {
           force_N: other3Chatter ? 120 : 260,
           verdict: other3Chatter ? 'CHATTER' : 'CUTS CLEAN' }, GAME),
         { chatter_Hz: 760 });
+      /* AND THE THREE THAT ARE NOT YOURS TURN, at their own speeds. */
+      for (const [m, rpm] of [[OTHER1, GAME.mach.n_max * 0.55], [OTHER2, GAME.mach.n_max * 0.31],
+                              [OTHER3, GAME.mach.n_max * 0.44]]) {
+        if (m && m.nose) m.nose.rotation.y = (now / 1000) * (rpm / 60) * Math.PI * 2 % (Math.PI * 2);
+      }
       /* THE THIRD MACHINE HAD NO VOICE. `AUD_MACHINES` has carried an entry for
          it since it was added — `OTHER3: 'vmc4'` — and this loop never drove it,
          so the machine was drawn, lit, cutting and silent while the other two

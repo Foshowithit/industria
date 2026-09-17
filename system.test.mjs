@@ -489,6 +489,39 @@ function rigged({ condition = WEAR.condition_open } = {}) {
   })());
 }
 
+/* ── ADAPT-*  THE SEAM A REAL MODEL GOES INTO ────────────────────────────
+   VISION.md §3 says a manufacturing model sits in this seat. The seat's three
+   conditions were a comment; they are an interface now, and these assert that
+   each violation it exists to prevent is actually rejected. */
+{
+  const G = await import('./game.mjs');
+  ok('ADAPT-1', 'an advisor must provide forecast()',
+    (() => { try { G.makeAdvisor({}); return false; } catch (e) { return true; } })());
+  ok('ADAPT-2', 'and a NUMBER WITHOUT ITS ASSUMPTIONS is refused',
+    (() => { try { G.makeAdvisor({ forecast: () => ({ value: 40.001 }) }).forecast({}); return false; }
+      catch (e) { return /instruction, not advice/.test(String(e.message)); } })());
+  ok('ADAPT-3', 'and a non-finite value is refused',
+    (() => { try { G.makeAdvisor({ forecast: () => ({ value: NaN, assumptions: {} }) }).forecast({}); return false; }
+      catch (e) { return true; } })());
+  ok('ADAPT-4', 'a conforming advisor passes through untouched',
+    (() => { const a = G.makeAdvisor({ forecast: () => ({ value: 40.001, assumptions: { x: 1 } }) });
+      return a.forecast({}).value === 40.001; })());
+  /* The built-in system goes through the same door as anything else would, which
+   * is what makes the seam real rather than decorative. */
+  ok('ADAPT-5', 'the built-in system conforms to the contract it publishes',
+    (() => { const a = G.builtInAdvisor(() => 800);
+      const st = newGame(); st.tool = 'bar20'; st.stickout_L = 45;
+      st.toolSpec = G.TOOLING.find((t) => t.id === 'bar20');
+      const r = a.forecast(Object.assign(st, { bite_um: 300 }));
+      return r.refused === true ||
+        (Number.isFinite(r.value) && r.assumptions && 'surveyed_condition' in r.assumptions); })());
+  ok('ADAPT-7', 'and declining is legal while a bare NaN is not',
+    (() => { const a = G.makeAdvisor({ forecast: () => ({ refused: true, why: 'MACHINE_DOWN' }) });
+      return a.forecast({}).refused === true; })());
+  ok('ADAPT-6', 'and it states the assumption it was computed under',
+    G.ADVISOR_CONTRACT.length === 3 && /assumptions/.test(G.ADVISOR_CONTRACT[0]));
+}
+
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);
 if (failed.length) {
@@ -500,6 +533,7 @@ if (failed.length) {
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'}  ${pass} passed, ${fail} failed, ${rows.length} total`);
 if (fail === 0) console.log('the system forecasts the machine it surveyed, and is wrong exactly when that is not the machine');
 process.exit(fail === 0 ? 0 : 1);
+
 
 
 

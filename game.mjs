@@ -319,6 +319,80 @@ export function repairMachine(g, { cost = FAILURE.repair_cost, minutes = FAILURE
   return { ok: true, before, after: g.machine.condition, cost, minutes };
 }
 
+/* ══ THE ADVISOR SEAM, AS AN INTERFACE RATHER THAN A PARAGRAPH ════════════
+   VISION.md §3 says a manufacturing model occupies this seat, and the code above
+   has said so in a comment since the seat was built. A comment is not an
+   interface: nothing checks that a model dropped in here behaves, and the three
+   conditions the seat depends on were prose.
+
+   THEY ARE THREE BECAUSE EACH ONE PREVENTS A DIFFERENT FAILURE:
+
+     1. IT RETURNS A NUMBER AND ITS ASSUMPTIONS. A claim without its assumptions
+        cannot be checked against the thing it is about, and checking it is the
+        entire mechanic. This is what makes the seat ADVICE rather than an
+        instruction.
+     2. IT IS NEVER TOLD THE OUTCOME. The moment a system can see the answer, its
+        record stops measuring anything — it would be scoring a model that was
+        allowed to look. `claimPass` is called by the caller, from a forecast made
+        before the cut, and the settlement happens in `cutOnce`.
+     3. THE SHOP KEEPS THE RECORD, NOT THE SYSTEM. A supplier's own scoreboard is
+        worth nothing to the person deciding whether to believe them.
+
+   `makeAdvisor` enforces all three by construction, and a test asserts that it
+   rejects each violation. What a real model has to supply is one function. */
+export const ADVISOR_CONTRACT = [
+  'returns { value, assumptions } — a number AND what it was computed under',
+  'is never given the outcome of the cut it is forecasting',
+  'is scored by the shop, not by itself',
+];
+
+export function makeAdvisor(impl) {
+  if (!impl || typeof impl.forecast !== 'function') {
+    throw new Error('makeAdvisor: an advisor must provide forecast(state)');
+  }
+  return {
+    name: impl.name || 'unnamed',
+    /** The only thing the seat calls. The assumptions come back WITH the number
+     *  or the whole thing is refused — a bare number is an instruction. */
+    forecast(state) {
+      const r = impl.forecast(state);
+      if (!r || typeof r !== 'object') {
+        throw new Error(`advisor ${this.name}: forecast must return an object`);
+      }
+      /* DECLINING IS A LEGAL ANSWER AND IS NOT THE SAME AS ANSWERING. A model that
+         cannot forecast a cut must not return a number it does not believe, and
+         must not return NaN either — NaN is what a bad model looks like when it
+         fails, whereas this is explicit. Found by writing the built-in through
+         its own seam and having the seam correctly refuse it. */
+      if (r.refused === true) {
+        if (!r.why) throw new Error(`advisor ${this.name}: a refusal must say why`);
+        return r;
+      }
+      if (!Number.isFinite(r.value)) {
+        throw new Error(`advisor ${this.name}: forecast must return { value: <finite number>, assumptions }`);
+      }
+      if (!r.assumptions || typeof r.assumptions !== 'object') {
+        throw new Error(`advisor ${this.name}: a number without its assumptions is an instruction, not advice`);
+      }
+      return r;
+    },
+  };
+}
+
+/** The system this build ships with, expressed through the seam: it is `forecastPass`
+ *  and the assumption it carries is the machine it surveyed. */
+export function builtInAdvisor(getSurveyed) {
+  return makeAdvisor({
+    name: 'system',
+    forecast(state) {
+      const f = forecastPass(state, { bite_mm: (state.bite_um ?? 0) / 1000, feed_mm_rev: 0.12 });
+      if (!f || f.refused) return { refused: true, why: (f && f.why) || 'NO FORECAST' };
+      return { value: f.coldDia_mm,
+        assumptions: { surveyed_condition: getSurveyed(), note: 'the machine as I last looked at it' } };
+    },
+  });
+}
+
 /* ── THE BOOK, AS A FUNCTION ──────────────────────────────────────────────
    The recommendation is SEARCHED FOR, not asserted. The catalogue offers the
    deepest bite at its feed that a machine in calibration will actually run, and
