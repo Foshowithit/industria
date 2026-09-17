@@ -47,6 +47,15 @@ export const BLANK_STOCK_DEFAULT = BLANK_STOCK;
 export const JOBS = [
   {
     id: 'J1',
+    /* The client this work belongs to, as a key `shop.mjs` keeps standing
+       against. Separate from `client`, which is the name that goes on screen —
+       a display name is not an identity and must not be used as one. */
+    client_id: 'halvorsen',
+    /* The bar a client sets before they will put this job on your wall. J1 is
+       a panic job on the morning their line is down: there is no bar, because
+       a shop with a stopped line does not vet the supplier, it rings whoever
+       answers. */
+    min_standing: 0,
     client: 'Halvorsen Pumps',
     title: 'Bearing housing — Ø40 H6 bore',
     brief:
@@ -108,6 +117,8 @@ export const JOBS = [
      which the kernel genuinely reaches, and leaves chatter where it is. */
   {
     id: 'J2',
+    client_id: 'kestrel',
+    min_standing: 0,       // a slipway window does not vet the supplier either
     client: 'Kestrel Marine',
     title: 'Stern tube liner — Ø80 IT7 bore',
     brief:
@@ -131,6 +142,102 @@ export const JOBS = [
     band_high_mm: 80.030,
     rate: 2400,
     late_credit: 0.7,
+  },
+
+  /* ══ J3 — THE TIGHT ONE. WHAT A REPUTATION IS FOR. ══════════════════════
+     WHY THIS EXISTS. Until now nothing in the build had a reason to care about
+     the machine's temperature. The gate report said so in as many words: with
+     the placeholder thermal constants the machine reaches equilibrium long
+     before 08:00, "so warm-up currently costs only clock and carries no
+     penalty". All the thermal modelling in `game.mjs` — the spindle's heat
+     going into the bar, the screw's growth moving the datum, the part itself
+     growing as it is cut — was correct and unreachable.
+
+     AN 11 µm BAND MAKES IT REACHABLE. IT5 at Ø40 is +0.000/+0.011 mm, where H6
+     on J1 allowed sixteen. Against that, the numbers the kernel already
+     computes: the part grows 0.492 µm per kelvin at this diameter, so a ten
+     degree part is five micrometres — very nearly half the entire band, before
+     the bar or the screw have moved at all. There is no way to creep up on
+     this one, because the target is moving while you creep.
+
+     AND IT PRICES THE MISTAKE THE GAME HAS BEEN TEACHING ALL ALONG. Earl is
+     deliberately right that you should measure often and deliberately WRONG
+     that you should measure a hot part — `people.mjs` says so, and the kernel
+     contradicts him so the player can catch him. On J1 that contradiction is
+     a lesson. Here it is a scrapped casting.
+
+     GATED, AND THAT IS THE POINT. Halvorsen puts this on the wall at 640
+     standing. It is the work you are given for having delivered J1 properly,
+     and it is the reason the shop's standing is worth anything at all. */
+  {
+    id: 'J3',
+    client_id: 'halvorsen',
+    min_standing: 640,
+    client: 'Halvorsen Pumps',
+    title: 'Bearing housing — Ø40 IT5 bore, batch of one',
+    brief:
+      'Their production batch, and the first one they have let out of the door. ' +
+      'The same casting as the emergency job, bored to IT5 instead of H6 — five ' +
+      'micrometres either side of what you did last time, and they will be ' +
+      'checking this one on their CMM rather than at the bench. Take your time ' +
+      'and do not chase it.',
+    material: 'steel_4140',
+    machine: 'vmc_40taper_7k5',
+    nominal_mm: 40,
+    grade: 'IT5',
+    start_hole_dia_mm: 36,
+    bore_depth_mm: 40,
+    clock_start_min: 8 * 60,
+    deadline_min: 12 * 60,
+    /* IT5 on Ø40: +0.000 / +0.011 mm. Eleven micrometres, one-sided off
+       nominal, and the part grows 0.492 µm/K — see the note above. */
+    band_low_mm: 40.000,
+    band_high_mm: 40.011,
+    rate: 2900,
+    late_credit: 0.7,
+  },
+
+  /* ══ J4 — THE WORK NOBODY WANTS. THE FLOOR OF THE GAME. ═══════════════════
+     WHY THIS EXISTS, and it is not decoration. Every other job on this board
+     is offered by a client who can withdraw it, which means a player who has
+     burned both of them has a board with nothing on it — and a shop with no
+     work is not a difficult game, it is a stopped one. There has to be work
+     that is always offered, to anybody, at a rate that reflects the fact.
+
+     PEMBERTON HAVE NO STANDARDS AND THAT IS THE DESIGN. They are a fabricator
+     who needs a hole in a plate, on a band four times as wide as anything else
+     on this board, and they pay less for it than anyone. Taking their work is
+     what a shop does when it has to, and the rate being poor is the whole
+     lesson — not a punishment, an arithmetic. It is also the honest answer to
+     "what happens if I scrap everything": you start again from here, and the
+     standing you rebuild is yours to rebuild.
+
+     NINE TIMES WIDER, AND A THIRD OF THE MONEY. IT9 at Ø52 is 74 µm against
+     J1's 16, and the rate is a third. If a player finds themselves doing this
+     work they should be able to feel exactly why without being told. */
+  {
+    id: 'J4',
+    client_id: 'pemberton',
+    min_standing: 0,
+    client: 'Pemberton Fabrication',
+    title: 'Motor mount plate — Ø52 clearance bore',
+    brief:
+      'A fabricator down the road who needs a clearance bore in a batch of ' +
+      'mount plates. Nothing clever: a wide band, a shallow hole, and a price ' +
+      'that says so. They will take as many as you can run and they are not ' +
+      'going to measure them carefully.',
+    material: 'steel_4140',
+    machine: 'vmc_40taper_7k5',
+    nominal_mm: 52,
+    grade: 'IT9',
+    start_hole_dia_mm: 44,
+    bore_depth_mm: 18,
+    clock_start_min: 8 * 60,
+    deadline_min: 15 * 60,
+    band_low_mm: 52.000,
+    band_high_mm: 52.074,
+    rate: 620,
+    late_credit: 0.85,
   },
 ];
 

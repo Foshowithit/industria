@@ -24,6 +24,7 @@ import {
   boringStep,
   itWidth_um, toleranceCheck, KERNEL_VERSION, errorBudget,
 } from './kernel.mjs';
+import { JOBS } from './game.mjs';
 
 let pass = 0, fail = 0;
 const rows = [];
@@ -346,6 +347,30 @@ attributionBlock();
     + `distinct mc across ${Object.keys(MATERIALS).length} materials — aluminium 6061 and steel 4140 `
     + `produce the same modelled chip\n`);
 }
+
+/* ── K4-EXT  the grades above IT8 ─────────────────────────────────────────
+   These were missing, and their absence was silent: `itWidth_um(52, 'IT9')`
+   returned `undefined` and the first caller to reach for it died three frames
+   away in a template literal. A clearance hole is an IT9 hole and the drilling
+   floor is IT11, so these are load-bearing grades rather than nice-to-haves. */
+check('K4-EXT-1', 'IT9 at Ø40 (bracket 50) is 62 µm', itWidth_um(40, 'IT9'), 62, 0.001, 'µm');
+check('K4-EXT-2', 'IT9 at Ø52 (bracket 80) is 74 µm', itWidth_um(52, 'IT9'), 74, 0.001, 'µm');
+checkTrue('K4-EXT-3', 'IT11 is computable at all — PROCESS_FLOOR names it',
+    Number.isFinite(itWidth_um(40, 'IT11')));
+checkTrue('K4-EXT-4', 'the widths increase with grade at one size',
+    itWidth_um(40, 'IT5') < itWidth_um(40, 'IT6') &&
+    itWidth_um(40, 'IT6') < itWidth_um(40, 'IT7') &&
+    itWidth_um(40, 'IT7') < itWidth_um(40, 'IT8') &&
+    itWidth_um(40, 'IT8') < itWidth_um(40, 'IT9') &&
+    itWidth_um(40, 'IT9') < itWidth_um(40, 'IT10') &&
+    itWidth_um(40, 'IT10') < itWidth_um(40, 'IT11'));
+checkTrue('K4-EXT-5', 'the widths increase with size at one grade',
+    itWidth_um(10, 'IT9') < itWidth_um(40, 'IT9') && itWidth_um(40, 'IT9') < itWidth_um(100, 'IT9'));
+/* The grades the game actually hangs jobs on must all resolve. A job spec is a
+   piece of data and a missing grade in it is not a type error in a .mjs file —
+   it is `undefined` three frames later. */
+checkTrue('K4-EXT-6', 'every grade any job spec asks for is computable',
+    JOBS.every((j) => Number.isFinite(itWidth_um(j.nominal_mm, j.grade))));
 
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);

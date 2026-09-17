@@ -64,6 +64,10 @@ const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const MODULES = [
   { id: 'three',    file: 'vendor/three/three.module.min.js', deps: [] },
   { id: 'kernel',   file: 'kernel.mjs',   deps: [] },
+  /* THE BUSINESS DEPENDS ON NOTHING AT ALL — not three.js, not the kernel. It
+     is the one module in the build with no inputs but its arguments, which is
+     what lets `shop.test.mjs` run it headless with no browser and no scene. */
+  { id: 'shop',     file: 'shop.mjs',     deps: [] },
   { id: 'world',    file: 'world.mjs',    deps: [] },
   /* MATERIALS DEPENDS ON THREE AND NOTHING ELSE, and it is deliberately last
      in the physics chain: it draws surfaces and holds no constant. If this
@@ -146,10 +150,12 @@ const APP_IMPORTS = [
    "const P = await import(window.__URLS__.people);"],
   ["import { createAudio } from './audio.mjs';",
    "const { createAudio } = await import(window.__URLS__.audio);"],
+  ["import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS } from './shop.mjs';",
+   "const { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS } = await import(window.__URLS__.shop);"],
   ["import * as RECmod from './recorder.mjs';",
    "const RECmod = await import(window.__URLS__.recorder);"],
-  ["import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD } from './materials.mjs';",
-   "const { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD } = await import(window.__URLS__.materials);"],
+  ["import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace } from './materials.mjs';",
+   "const { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace } = await import(window.__URLS__.materials);"],
 ];
 for (const [needle, repl] of APP_IMPORTS) {
   const hits = app.split(needle).length - 1;

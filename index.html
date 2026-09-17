@@ -115,6 +115,11 @@
 <div class="hud" id="tl">
   <div class="job" id="hJob">—</div>
   <div class="cli" id="hCli"></div>
+  <!-- WHAT THE CLIENT IS DOING, NOT WHAT THEY SCORE. Deliberately not the
+       standing number: §4 forbids progression by perk or timer and a bare
+       integer in the corner of the screen is an XP bar whatever it is called.
+       The behaviour is the same fact and it is the one a player can act on. -->
+  <div class="cli" id="hShop"></div>
   <div class="clock" id="hClock">--:--</div>
   <div class="deadline" id="hDue"></div>
 </div>
@@ -164,10 +169,13 @@ import * as G from './game.mjs';
 import * as W from './world.mjs';
 import * as P from './people.mjs';
 import { createAudio } from './audio.mjs';
+/* The business the machine sits in. Pure, tested, no DOM — see its header for
+   what was ported from the economy architecture at ~/industria and what was
+   not, and why the constants moved. */
+import { newShop, recordDelivery, offersFor, endOfDay, describeShop, averageClaimError_um, STANDING_OFFERS } from './shop.mjs';
 /* The shop's surfaces. Drawn in the page, deterministic, no assets — see the
    header of materials.mjs for why they are not files. */
-import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD,
-         noticePanel, clockFace } from './materials.mjs';
+import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD, noticePanel, clockFace } from './materials.mjs';
 /* Playtest instrumentation. Dark unless the URL asks for it (`?rec=1`), so the
    public build behaves exactly as before — see recorder.mjs and PLAYTEST-KIT.md.
    Every call below is a no-op returning early when `REC` is null. */
@@ -197,6 +205,11 @@ function crateMeta() {
 
 /* ── STATE ──────────────────────────────────────────────────────────────── */
 let GAME = null;                       // the kernel's game state
+/* THE SHOP OUTLIVES THE JOB. `startShift` rebuilds GAME from a fresh spec on
+   purpose — nothing of the old part may leak across — but the business is not
+   the part. Cash, standing and the day's record have to survive exactly the
+   reset that erases everything else, which is why they live out here. */
+let SHOP = null;
 const clocks = { world_min: 0, job_min: 0, job_taken: false };
 let START_SHIFT_MIN = 355;             // 05:55
 const SEEN = { any: false, measured: false, corrected: false };  // §53 layers
@@ -685,26 +698,49 @@ box(2.36, 1.66, 0.10, M.dark, 0, 1.62, 0, JOBBOARD);            // frame
 box(2.18, 1.48, 0.05, M.bright, 0, 1.62, 0.06, JOBBOARD);       // the face
 box(2.18, 0.14, 0.06, M.warn, 0, 2.28, 0.07, JOBBOARD);         // header strip
 const BOARD_CARDS = [];
-G.JOBS.forEach((j, i) => {
-  const c = new THREE.Group();
-  c.position.set(G.JOBS.length === 1 ? 0 : (-0.52 + i * 1.04), 1.50, 0.10);
-  c.rotation.z = (i % 2 ? -1 : 1) * 0.014;
-  JOBBOARD.add(c);
-  box(0.88, 1.08, 0.012, M.paper, 0, 0, 0, c);                  // the sheet
-  const band = box(0.88, 0.17, 0.014, M.warn, 0, 0.455, 0.003, c);
-  for (let k = 0; k < 6; k++) {                                 // ruled lines
-    box(0.68, 0.013, 0.015, M.ink, -0.04, 0.27 - k * 0.108, 0.003, c);
-  }
-  const pin = cyl(0.018, 0.018, 0.022, M.brass, 10);
-  pin.rotation.x = Math.PI / 2; pin.position.set(0, 0.51, 0.012); c.add(pin);
-  BOARD_CARDS.push({ job: j, group: c, band });
-});
+/* LAID OUT FOR ANY NUMBER OF JOBS. The first version placed cards at
+   `-0.52 + i * 1.04`, which was correct for exactly two and ran off the edge of
+   the board at four. A board that only fits the jobs that happened to exist
+   when it was built is a board that will silently lose work, so the grid is
+   computed from the count. */
+function buildBoardCards() {
+  for (const c of BOARD_CARDS.splice(0)) JOBBOARD.remove(c.group);
+  const n = G.JOBS.length;
+  const cols = n <= 3 ? n : Math.ceil(n / 2);
+  const rows = Math.ceil(n / cols);
+  const BW = 2.02, BH = 1.30, gx = 0.06, gy = 0.05;
+  const cw = (BW - gx * (cols - 1)) / cols;
+  const ch = (BH - gy * (rows - 1)) / rows;
+  G.JOBS.forEach((j, i) => {
+    const col = i % cols, row = Math.floor(i / cols);
+    const g = new THREE.Group();
+    g.position.set(-BW / 2 + cw / 2 + col * (cw + gx),
+                   1.62 + BH / 2 - ch / 2 - row * (ch + gy), 0.10);
+    g.rotation.z = ((i % 2) ? -1 : 1) * 0.012;
+    JOBBOARD.add(g);
+    box(cw, ch, 0.012, M.paper, 0, 0, 0, g);
+    const band = box(cw, ch * 0.14, 0.014, M.warn, 0, ch * 0.42, 0.003, g);
+    const lines = Math.max(3, Math.floor(ch * 9));
+    for (let k = 0; k < lines; k++) {
+      box(cw * 0.78, 0.011, 0.015, M.ink, -cw * 0.04, ch * 0.27 - k * (ch * 0.11), 0.003, g);
+    }
+    const pin = cyl(0.016, 0.016, 0.02, M.brass, 10);
+    pin.rotation.x = Math.PI / 2; pin.position.set(0, ch * 0.47, 0.012); g.add(pin);
+    BOARD_CARDS.push({ job: j, group: g, band });
+  });
+}
+buildBoardCards();
 /** The board reads the same state the machine does: the card for the job you
- *  are set up on is flagged, the rest are offers. One derivation, so the board
- *  and the machine cannot disagree about which job is yours. */
+ *  are set up on is flagged, the rest are offers — and a card a client has
+ *  taken off the wall is dark, because that is what happened. */
 function syncBoard() {
   if (!GAME) return;
-  BOARD_CARDS.forEach(({ job, band }) => { band.material = GAME.job.id === job.id ? M.warn : M.ink; });
+  BOARD_CARDS.forEach(({ job, band }) => {
+    const mine = GAME.job.id === job.id;
+    const state = SHOP ? offersFor(SHOP, [job])[0] : { offered: true };
+    band.material = mine ? M.warn : state.offered ? M.ink : M.slot;
+    band.visible = state.offered || mine;
+  });
 }
 
 /* ── THE REST OF THE SHOP — inhabited (§49), and not all of it about you ──
@@ -1334,26 +1370,46 @@ for (const [id, mesh, lbl] of [['bar12', BOARDS.bar12, 'Ø12'], ['bar16', BOARDS
    offers. Every figure on the board is read from the job spec the kernel is
    handed, so a card cannot describe a job as easier than it is. */
 add(JOBBOARD, "Job board — the week's work", 'read it', () => {
-  const lines = G.JOBS.map((j) => {
+  const offers = offersFor(SHOP, G.JOBS);
+  const lines = offers.map((o) => {
+    const j = o.job;
     const mine = j.id === GAME.job.id;
-    /* `toFixed(0)`, not the raw float. The difference of two decimal-mm
-       constants is 15.999999999998238, and a card that says so is a card no
-       shop would ever pin up. The kernel keeps the full precision; the DISPLAY
-       rounds, the same way `newGame` already logs the band. */
     const band = ((j.band_high_mm - j.band_low_mm) * 1000).toFixed(0);
-    return `${mine ? '<b>' : ''}${j.id} · ${j.client}${mine ? '</b> <i>— on your machine</i>' : ''}<br>` +
-      `Ø${j.nominal_mm} ${j.grade}, band ${band} µm · ${j.start_hole_dia_mm} mm as-cast, ` +
-      `${j.bore_depth_mm} deep · £${j.rate} · van ${W.hhmm(G.departsMin(j))}`;
+    const head = `${mine ? '<b>' : ''}${j.id} · ${j.client}${mine ? '</b> <i>— on your machine</i>' : ''}`;
+    const spec = `Ø${j.nominal_mm} ${j.grade}, band ${band} µm · ` +
+      `${j.start_hole_dia_mm} mm as-cast, ${j.bore_depth_mm} deep · van ${W.hhmm(G.departsMin(j))}`;
+    /* A card a client has NOT put up is still printed, and says why. A job that
+       silently vanishes from the wall is a job the player cannot learn from. */
+    if (!o.offered) {
+      return `<span style="color:#8b98a6">${head}<br>${spec}<br>` +
+        `<b style="color:var(--bad)">${o.reason}</b></span>`;
+    }
+    return `${head}<br>${spec} · <b>${money(o.rate)}</b> <i>${o.reason}</i>`;
   });
-  const offers = G.JOBS.filter((j) => j.id !== GAME.job.id);
-  const opts = offers.map((j) => [`Take ${j.id} — ${j.client}, Ø${j.nominal_mm} ${j.grade}`,
-                                  () => takeJob(j.id)]);
-  say('Board', lines.join('<br><br>'), opts.length ? opts : undefined);
-  logLine(`Board: <b>${G.JOBS.length}</b> on the books — ` +
-    (GAME.finished
-      ? 'yours is settled, the next one can be taken.'
-      : 'this one is not settled yet.') +
-    ` Banked <b>${money(GAME.money)}</b>.`);
+
+  /* ── THEIR LAST WORD ─────────────────────────────────────────────────────
+     What the customer measured, set against what you told them it was. This is
+     the only place in the game where the two numbers sit on the same line, and
+     it is the sentence the whole build exists to produce. */
+  const last = SHOP.shipper.length ? SHOP.shipper[SHOP.shipper.length - 1] : null;
+  const letter = last
+    ? `<i>${last.client}'s last word — ${last.report} ` +
+      `Standing ${last.standing_before} → <b>${last.standing_after}</b>.</i><br><br>`
+    : '';
+  const worth = averageClaimError_um(SHOP);
+  const books = `<br><br><i>Banked <b>${money(SHOP.cash)}</b> · day ${SHOP.day} · ` +
+    `overhead ${money(260)} a morning` +
+    (worth === null ? ' · nothing measured yet' : ` · your word is good to ${worth.toFixed(1)} µm`) + '.</i>';
+
+  const opts = offers
+    .filter((o) => o.offered && o.job.id !== GAME.job.id)
+    .map((o) => [`Take ${o.job.id} — ${o.job.client}, Ø${o.job.nominal_mm} ${o.job.grade}, ` +
+                 `band ${((o.job.band_high_mm - o.job.band_low_mm) * 1000).toFixed(0)} µm at ${money(o.rate)}`,
+                 () => takeJob(o.job.id)]);
+  say('Board', letter + lines.join('<br><br>') + books, opts.length ? opts : undefined);
+  logLine(`Board: <b>${offers.filter((o) => o.offered).length}</b> of ${offers.length} on offer. ` +
+    `Banked <b>${money(SHOP.cash)}</b>.` +
+    (opts.length ? '' : ' <b>Nothing here is yours to take.</b>'));
 }, () => true);
 
 /* ── THE PENDANT'S VERB ──────────────────────────────────────────────────
@@ -2159,6 +2215,54 @@ function doInspect() {
     phase = 'RACKED';
   }
   SEEN.corrected = true;
+  /* ══ THE SHOP GETS TOLD, AND THE LOOP CLOSES ═════════════════════════════
+     Everything above this line is the part leaving the machine. This is the
+     part leaving the SHOP — which is a different event, on a different clock,
+     and it is the one that changes what work is on the wall tomorrow.
+
+     THE TWO NUMBERS FINALLY GO ON THE SAME LINE. `lastRead.mm` is what you told
+     the customer the bore was. `r.dia` is what their gauge found. `recordDelivery`
+     is handed both, and the difference between them is worth standing as well as
+     the delivery itself — a shop whose word is good gets trusted with tighter
+     work. That is the whole thesis of this build, priced.
+
+     A delivery with NO reading is not an error and is not free: it is a penalty,
+     because "I didn't measure it" is the one thing a customer cannot forgive
+     and the one thing the game can name. */
+  if (SHOP && GAME.job.client_id) {
+    const entry = recordDelivery(SHOP, {
+      client: GAME.job.client_id,
+      job_id: GAME.job.id,
+      nominal_mm: GAME.job.nominal_mm,
+      band_um: (GAME.job.band_high_mm - GAME.job.band_low_mm) * 1000,
+      outcome: r.outcome,
+      late: !!r.late,
+      claimed_mm: lastRead ? lastRead.mm : null,
+      true_mm: r.dia,
+      net: r.net,
+    });
+    SHOP.cash += r.net;
+    const c = SHOP.book[GAME.job.client_id];
+    const d = entry.delivery_delta + entry.claim_delta;
+    logLine(`<b>${GAME.job.client}</b> — standing ${entry.standing_before} → ` +
+      `<b>${entry.standing_after}</b> (${d >= 0 ? '+' : ''}${d}). ${entry.report}`);
+    if (REC) REC.hint({ kind: 'shop', who: GAME.job.client, is_question: false,
+      text: `${entry.kind} ${d >= 0 ? '+' : ''}${d} -> ${entry.standing_after}. ${entry.report}` });
+    /* Earl has an opinion only when it was expensive. A line for every delivery
+       would be noise, and the build's own rule is that he reacts to objects and
+       to consequences rather than to a score. */
+    if (entry.kind === 'scrapped') {
+      setTimeout(() => say('Earl', "\u201cThat's Halvorsen's line down. They'll remember " +
+        "it longer than you will.\u201d"), 3200);
+    } else if (entry.kind === 'undersize') {
+      setTimeout(() => say('Earl', "\u201cThey'll finish it themselves and they'll " +
+        "charge us for it. Second time and they stop calling.\u201d"), 3200);
+    } else if (entry.claim_delta >= 8) {
+      setTimeout(() => say('Earl', "\u201cTold them a number and the number was right. " +
+        "That's the whole job, that is.\u201d"), 3200);
+    }
+  }
+
   /* ── THE WAY TO THE NEXT JOB ─────────────────────────────────────────────
      The board is by the roll-up door and a player who has just shipped has no
      reason to know that. One line, once, in the panel they are already reading
@@ -2601,7 +2705,18 @@ function enter() {
    silently start with the old job's dial still on it. */
 function startShift(jobId, { announce = true, carry = true } = {}) {
   const spec = G.jobById(jobId || G.DEFAULT_JOB_ID);
-  const carried = (carry && GAME) ? GAME.money : 0;
+  const carried = (carry && GAME) ? (SHOP ? SHOP.cash : GAME.money) : 0;
+
+  /* THE BUSINESS. Created once, on the first clock-on, from the clients that
+     actually appear in JOBS — so a job spec naming a client the shop has never
+     heard of is impossible rather than merely unlikely. */
+  if (!SHOP) SHOP = newShop({ cash: 0, clients: [...new Set(G.JOBS.map((j) => j.client_id))] });
+  /* A NEW MORNING COSTS THE SHOP ITS OVERHEAD. `carry` distinguishes clocking
+     on for the first time in a build that has no save from turning up for
+     tomorrow: the first morning is not a continuation of a business, and
+     charging rent for it would start the player in the red for no reason. */
+  let dayCost = null;
+  if (carry) dayCost = endOfDay(SHOP);
 
   GAME = G.newGame(spec, undefined, carried);
 
@@ -2634,8 +2749,13 @@ function startShift(jobId, { announce = true, carry = true } = {}) {
       `band ${spec.band_low_mm.toFixed(3)}–${spec.band_high_mm.toFixed(3)} mm · ` +
       `van ${W.hhmm(G.departsMin(spec))}`, 7000);
   }
+  if (dayCost) {
+    logLine(`Overhead for the day: <b>${money(dayCost.costs)}</b>. ` +
+      `Cash <b>${money(SHOP.cash)}</b>.`);
+  }
   if (REC) REC.action('start_shift', { job_id: spec.id, carried_money: carried,
-    nominal_mm: spec.nominal_mm, start_hole_dia_mm: spec.start_hole_dia_mm });
+    nominal_mm: spec.nominal_mm, start_hole_dia_mm: spec.start_hole_dia_mm,
+    shop_cash: SHOP.cash, shop_day: SHOP.day });
   return GAME;
 }
 
@@ -2643,6 +2763,15 @@ function startShift(jobId, { announce = true, carry = true } = {}) {
  *  the machine — not as a progression gate, but because it is not tomorrow
  *  until this one is on the rack or in the bin, and Earl would say so. */
 function takeJob(id) {
+  /* A JOB NO CLIENT IS OFFERING CANNOT BE TAKEN, and the refusal has to be the
+     client's rather than a silent no-op: this is the moment the economy is
+     legible, and a button that does nothing teaches nothing. */
+  const offer = offersFor(SHOP, [G.jobById(id)])[0];
+  if (!offer.offered) {
+    say('Earl', `\u201cThat's not on for us. ${offer.reason}\u201d`);
+    if (REC) REC.refusal('take_job', 'NOT_OFFERED', { job_id: id, reason: offer.reason });
+    return false;
+  }
   if (!GAME.finished) {
     say('Earl', "\u201cFinish what's in the machine first. It isn't tomorrow until " +
       "that one's either on the rack or in the bin.\u201d");
@@ -2783,6 +2912,13 @@ function frame(now) {
     /* HUD */
     $('hJob').textContent = GAME.job.title;
     $('hCli').textContent = `${GAME.job.client} · ${GAME.mat.label}`;
+    /* The client's disposition, in words. See the note beside #hShop: the
+       standing number is deliberately not on screen. */
+    if (SHOP && GAME.job.client_id) {
+      const o = offersFor(SHOP, [GAME.job])[0];
+      $('hShop').textContent = o.offered ? (o.reason || '') : o.reason;
+      $('hShop').style.color = o.offered ? '' : 'var(--bad)';
+    }
     $('hClock').textContent = G.hhmm(clocks.world_min);
     const late = clocks.world_min > GAME.job.deadline_min;
     $('hDue').textContent = `due ${G.hhmm(GAME.job.deadline_min)}` + (late ? ' — LATE' : '');
@@ -2802,8 +2938,12 @@ function frame(now) {
        day". Both are shown now, because a total that only goes up is not the
        same fact as what the last part was worth. */
     const todayNet = GAME.finished ? GAME.finished.net : 0;
+    /* BANKED IS THE SHOP'S BALANCE, not the job's running total. They agree
+       until the first morning's overhead is charged, and after that the bank is
+       the only one of the two that knows what the rent cost. */
+    const bank = SHOP ? SHOP.cash : GAME.money;
     $('hMoney').innerHTML = `ON THE DAY <b>${money(todayNet)}</b>` +
-      (GAME.money !== todayNet ? ` · BANKED <b>${money(GAME.money)}</b>` : '') +
+      (bank !== todayNet ? ` · BANKED <b>${money(bank)}</b>` : '') +
       (FPS ? ` <span style="opacity:.45">${FPS.toFixed(0)}fps</span>` : '');
     /* ── THE FLOOR, as counts of objects. See the note beside #hFloor. ──── */
     {

@@ -533,15 +533,24 @@ export function assessBoring(rip, params, machine, opts = {}) {
   };
 }
 
+/* ISO 286 widths in µm, by size bracket. THE TABLE STOPPED AT IT8 AND THAT WAS
+   A HOLE IN IT, not a decision: `PROCESS_FLOOR` three screens down has named
+   'IT11' as the drilling floor since it was written, and this function could
+   not return an IT11 width at all. The workaround was `IT8 * 2.4`, which is not
+   IT11 on any bracket — at Ø50 it gives 94 µm against the standard's 160.
+   IT9, IT10 and IT11 are added here with their published values, because a
+   clearance hole in a mount plate is an IT9 hole and there was no way to say
+   so. IT12 and finer are still absent and still a workaround; adding them is
+   the same one-line job whenever something needs them. */
 const IT_TABLE = {
-  3:   { IT5: 4,   IT6: 6,   IT7: 10,  IT8: 14 },
-  6:   { IT5: 5,   IT6: 8,   IT7: 12,  IT8: 18 },
-  10:  { IT5: 6,   IT6: 9,   IT7: 15,  IT8: 22 },
-  18:  { IT5: 8,   IT6: 11,  IT7: 18,  IT8: 27 },
-  30:  { IT5: 9,   IT6: 13,  IT7: 21,  IT8: 33 },
-  50:  { IT5: 11,  IT6: 16,  IT7: 25,  IT8: 39 },
-  80:  { IT5: 13,  IT6: 19,  IT7: 30,  IT8: 46 },
-  120: { IT5: 15,  IT6: 22,  IT7: 35,  IT8: 54 },
+  3:   { IT5: 4,   IT6: 6,   IT7: 10,  IT8: 14,  IT9: 25,  IT10: 40,  IT11: 60 },
+  6:   { IT5: 5,   IT6: 8,   IT7: 12,  IT8: 18,  IT9: 30,  IT10: 48,  IT11: 75 },
+  10:  { IT5: 6,   IT6: 9,   IT7: 15,  IT8: 22,  IT9: 36,  IT10: 58,  IT11: 90 },
+  18:  { IT5: 8,   IT6: 11,  IT7: 18,  IT8: 27,  IT9: 43,  IT10: 70,  IT11: 110 },
+  30:  { IT5: 9,   IT6: 13,  IT7: 21,  IT8: 33,  IT9: 52,  IT10: 84,  IT11: 130 },
+  50:  { IT5: 11,  IT6: 16,  IT7: 25,  IT8: 39,  IT9: 62,  IT10: 100, IT11: 160 },
+  80:  { IT5: 13,  IT6: 19,  IT7: 30,  IT8: 46,  IT9: 74,  IT10: 120, IT11: 190 },
+  120: { IT5: 15,  IT6: 22,  IT7: 35,  IT8: 54,  IT9: 87,  IT10: 140, IT11: 220 },
 };
 
 export function itWidth_um(nominal_mm, grade) {
