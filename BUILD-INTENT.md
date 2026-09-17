@@ -180,12 +180,12 @@ Plus mechanical gates:
 
 | path | what it is | disposition |
 |---|---|---|
-| `/home/chow/industria/kernel.mjs` | physics authority — `boringStep`, `assessBoring`, `MACHINES`, `MATERIALS` | **keep, extend only with tests** |
-| `/home/chow/industria/game.mjs` | job/thermal/measure/ship state machine | **keep, it becomes the Machine rung** |
-| `/home/chow/industria/index.html` | the Shop Floor readout page | **becomes the machine's HMI, not the front page** |
-| `/home/chow/industria/models/*.stl` | base_plate, cap, housing | **reuse for the Part rung** |
-| `/home/chow/industria/vendor/three/` | three.js + STLLoader, vendored | **reuse for the world** |
-| `/home/chow/industria/kernel.test.mjs` | 48 assertions, all passing | **keep green** |
+| `kernel.mjs` | physics authority — `boringStep`, `assessBoring`, `MACHINES`, `MATERIALS` | **keep, extend only with tests** |
+| `game.mjs` | job/thermal/measure/ship state machine | **keep, it becomes the Machine rung** |
+| `index.html` | the Shop Floor readout page | **becomes the machine's HMI, not the front page** |
+| `models/*.stl` | base_plate, cap, housing | **reuse for the Part rung** |
+| `vendor/three/` | three.js + STLLoader, vendored | **reuse for the world** |
+| `kernel.test.mjs` | 48 assertions, all passing | **keep green** |
 | `/tmp/BRIEF.md` | the user's full 111-section brief | **the vision source of truth** |
 | `/tmp/walk.mjs` | the over-dial walk measurement | keep, cite in-game |
-| `~/dsh-hub/fleet/done/INDUSTRIA-KERNEL-SPEC-20260911.md` | kernel spec, §3 still carries uncorrected C1/C2/C3 | amend, and add C5 |
+| upstream kernel spec (fleet task record) | kernel spec, §3 still carries uncorrected C1/C2/C3 | amend, and add C5 |

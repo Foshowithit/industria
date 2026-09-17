@@ -31,7 +31,7 @@ Everything below is arranged to protect that observation.
 You need one terminal and a browser. Nothing else.
 
 ```bash
-cd /home/chow/industria
+cd industria
 ./playtest.sh run nov1          # nov1 = the label for this session
 ```
 
