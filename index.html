@@ -165,12 +165,26 @@
   <div class="sub" id="gSub"></div>
   <div class="go" id="gGo"></div>
   <div class="fine" id="gFine">Click to enter · Esc releases the mouse.</div>
+  <!-- ══ THE ADVISORY NOTICE ═══════════════════════════════════════════════
+       The README has claimed since it was written that "the page shows those
+       badges" — `machine_execution = false` and `production_authorization =
+       false` — and the page showed neither. The build's own stated position is
+       that a simulation which looks authoritative and is subtly wrong is worse
+       than no simulation at all, and the badges are where that position is
+       supposed to be visible rather than merely asserted in a README.
+
+       Read from the kernel rather than typed here, so the notice cannot drift
+       from the flags it is describing. -->
+  <div class="fine" id="gAdv"></div>
 </div></div>
 
 <script type="module">
 import * as THREE from './vendor/three/three.module.min.js';
 import * as G from './game.mjs';
 import * as W from './world.mjs';
+/* The kernel, for its ADVISORY FLAGS. The page must be able to say what this
+   model is not, and the honest source for that is the model itself. */
+import * as K from './kernel.mjs';
 import * as P from './people.mjs';
 import { createAudio } from './audio.mjs';
 /* The business the machine sits in. Pure, tested, no DOM — see its header for
@@ -2965,6 +2979,16 @@ function updateLook() {
    menu. It is filled BEFORE the player clicks, because a player who clicks an
    unreadable screen has been told nothing. */
 function paintGate() {
+  /* The advisory notice, read off the kernel's own flags. See the note in the
+     markup: this is a disclosure the README promised and the page did not make. */
+  {
+    const adv = $('gAdv');
+    if (adv) {
+      adv.innerHTML = `Advisory only — <b>not for machine execution</b>` +
+        (K.MACHINE_EXECUTION === false ? '' : ` <b style="color:#e05a4e">(MACHINE_EXECUTION=${K.MACHINE_EXECUTION})</b>`) +
+        `, not a production authorisation. Kernel ${K.KERNEL_VERSION}.`;
+    }
+  }
   $('gBig').innerHTML = 'Half past five in the morning.<br>The lights are already on.';
   $('gSub').innerHTML = 'You are outside the roll-up door of Halvorsen Pumps\u2019 machine shop. ' +
     'Through it: three spindles already running, a compressor, and somebody\u2019s radio.<br><br>' +
@@ -3264,8 +3288,34 @@ function frame(now) {
       $('hShop').textContent = o.offered ? (o.reason || '') : o.reason;
       $('hShop').style.color = o.offered ? '' : 'var(--bad)';
     }
-    $('hClock').textContent = G.hhmm(clocks.world_min);
-    const late = clocks.world_min > GAME.job.deadline_min;
+    /* ══ ONE CLOCK, AND IT IS THE ONE THE DEADLINE WAS SET AGAINST ═════════
+       This line read `clocks.world_min`, and the WORLD clock advances at
+       AMBIENT_SCALE = 6 sim-minutes per real minute while the JOB clock — the
+       one `ship()` actually measures lateness with, through `isLate()` —
+       advances at JOB_SCALE = 3. THE WORLD RUNS AT TWICE THE JOB'S RATE.
+
+       So the header showed a clock running double speed next to a deadline set
+       on the job's clock, and the LATE badge lit when the WORLD passed the
+       deadline: on a job with 275 minutes of budget, at roughly the halfway
+       point of REAL time. The player was told they were late while the money
+       said they were not, and they were told it on every job.
+
+       Three separate derivations of one fact were in this build: `isLate()` in
+       game.mjs (correct, used by the money), the badge above (wrong clock), and
+       Earl's impatience threshold (job clock minus 20, a different question and
+       a legitimate one).
+
+       `shiftClock_min()` in world.mjs answers the world-versus-job half of this
+       and was never called — but IT IS NOT THE RIGHT SOURCE EITHER, and that is
+       worth knowing before somebody "simplifies" this line to use it. It
+       returns `clocks.job_min` raw, while the job's clock is `job_min + opMin`:
+       every cut and every measurement the kernel reports is added as operation
+       time by the frame loop, so the raw job clock UNDERSTATES the shift by the
+       minutes you have spent working. The one field the deadline is measured
+       against is `GAME.clock_min`, because that is what `isLate()` reads and
+       therefore what the money reads. Display that, and there is one clock. */
+    $('hClock').textContent = G.hhmm(GAME.clock_min);
+    const late = G.isLate(GAME);
     $('hDue').textContent = `due ${G.hhmm(GAME.job.deadline_min)}` + (late ? ' — LATE' : '');
     $('hDue').className = 'deadline' + (late ? ' late' : '');
     /* ── R1: TRUTH IS NOT OBSERVATION ──────────────────────────────────────

@@ -146,6 +146,8 @@ const APP_IMPORTS = [
    "const G = await import(window.__URLS__.game);"],
   ["import * as W from './world.mjs';",
    "const W = await import(window.__URLS__.world);"],
+  ["import * as K from './kernel.mjs';",
+   "const K = await import(window.__URLS__.kernel);"],
   ["import * as P from './people.mjs';",
    "const P = await import(window.__URLS__.people);"],
   ["import { createAudio } from './audio.mjs';",

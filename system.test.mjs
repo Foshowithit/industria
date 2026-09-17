@@ -220,6 +220,56 @@ function rigged({ condition = WEAR.condition_open } = {}) {
   near('CHIP-8', 'retract and reset time do not heat the chip', slow.temp_C, c.temp_C, 1e-9);
 }
 
+/* ── CLOCK-*  ONE CLOCK ──────────────────────────────────────────────────
+   `isLate()` reads `g.clock_min`, so the money is measured against
+   `clock_min` and nothing else. The header used to display `clocks.world_min`
+   — which advances at AMBIENT_SCALE 6 against the job's JOB_SCALE 3, i.e. at
+   TWICE the rate — next to a deadline set on the job's clock, so the LATE
+   badge lit at roughly the halfway point of real time on every job. These
+   assertions hold the two facts that close it. */
+{
+  const W = await import('./world.mjs');
+  const { isLate } = await import('./game.mjs');
+  eq('CLOCK-1', 'isLate measures clock_min', isLate({ clock_min: 631, deadline_min: 630 }), true);
+  eq('CLOCK-2', 'and not before it', isLate({ clock_min: 630, deadline_min: 630 }), false);
+  /* The world clock outruns the job clock by exactly the ratio of the scales. */
+  const c = { world_min: 0, job_min: 0, job_taken: true };
+  /* A 1.0 s delta is treated as a RESUME by the tab-switch guard (frames over
+     MAX_FRAME_S = 0.25 s advance nothing), which is why this is 0.1 s. The
+     guard is asserted separately below rather than worked around silently. */
+  W.advanceClocks(c, 0.1);
+  ok('CLOCK-3', 'the world clock runs faster than the job clock',
+    c.world_min > c.job_min);
+  near('CLOCK-4', 'by the ratio of the two scales',
+    c.world_min / Math.max(c.job_min, 1e-9), W.AMBIENT_SCALE / W.JOB_SCALE, 0.01);
+  /* And the reason `shiftClock_min` is NOT the header's source: it omits the
+     operation-time offset, so it understates the shift. Asserted so nobody
+     "simplifies" the page back onto it. */
+  /* The guard itself, stated: a backgrounded tab does not fast-forward you. */
+  {
+    const g = { world_min: 500, job_min: 500, job_taken: true };
+    W.advanceClocks(g, 4.0);
+    eq('CLOCK-7', 'a frame longer than the resume threshold advances nothing', g.world_min, 500);
+    eq('CLOCK-8', 'and flags itself as a resume', g.resumed, true);
+  }
+  eq('CLOCK-5', 'shiftClock_min returns the raw job clock',
+    W.shiftClock_min({ job_taken: true, job_min: 100, world_min: 900 }), 100);
+  ok('CLOCK-6', 'which is NOT the clock the deadline is measured against once work has been done',
+    W.shiftClock_min({ job_taken: true, job_min: 100, world_min: 900 }) !== 100 + 25);
+}
+
+/* ── ADV-*  WHAT THIS MODEL IS NOT ───────────────────────────────────────
+   The README has claimed since it was written that the page shows these. It
+   did not. A disclosure asserted in a document and absent from the artefact is
+   the same failure the flags exist to prevent. */
+{
+  const K = await import('./kernel.mjs');
+  eq('ADV-1', 'the kernel refuses machine execution', K.MACHINE_EXECUTION, false);
+  eq('ADV-2', 'the kernel refuses production authorization', K.PRODUCTION_AUTHORIZATION, false);
+  ok('ADV-3', 'and both are exported so a page cannot invent them',
+    typeof K.MACHINE_EXECUTION === 'boolean' && typeof K.PRODUCTION_AUTHORIZATION === 'boolean');
+}
+
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);
 if (failed.length) {
@@ -231,4 +281,5 @@ if (failed.length) {
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'}  ${pass} passed, ${fail} failed, ${rows.length} total`);
 if (fail === 0) console.log('the system forecasts the machine it surveyed, and is wrong exactly when that is not the machine');
 process.exit(fail === 0 ? 0 : 1);
+
 
