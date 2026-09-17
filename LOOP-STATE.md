@@ -44,15 +44,15 @@ starting anything new, or if it cannot be fixed, leave the tree clean and say so
 Take the FIRST item that is not done. Do not start the second before the first
 is shipped.
 
-1. **THE SYSTEM MADE VISIBLY WRONG TO A STRANGER.** The last unbuilt item of
-   VISION §6. Everything is in place — it forecasts by running the machine's own
-   physics, it prints the assumptions it was written under, it keeps a record the
-   shop holds, and the daily letter puts the player's claim next to the
-   customer's measurement. What it does NOT have is a moment where somebody who
-   has never read the code watches it be wrong and catches it. Today its error is
-   real, measurable, and *quiet* — you have to think about survey drift to find
-   it. Find the moment. Do not fake the wrongness: it must come from the
-   assumption it cannot check.
+1. ~~**THE SYSTEM MADE VISIBLY WRONG TO A STRANGER.**~~ **DONE 2026-09-17.** The
+   claim is on the machine panel beside the player's own expectation, and it is
+   settled in the log the moment the metal moves: *"The system said Ø36.9074. It
+   is Ø36.9114 — 4.0 µm out, which is 36% of the band."* Measured against the
+   tight job, exact when surveyed (0.0 µm) and 36% of the band once the machine
+   has worn away from the survey. **What remains for a future run:** nobody
+   outside this loop has actually watched it happen yet. The next natural test is
+   whether the moment lands on a first-time player, and that is a human session,
+   not a build.
 2. **SOUND.** §13 makes sound a system, not a bed: a spindle under load must not
    sound like a spindle idling, and a rubbing cut must not sound like a cutting
    one. `audio.mjs` has the model — `cutAcoustics`, `idleAcoustics`,
@@ -172,8 +172,11 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
-- **2026-09-17** — Loop armed. Before this: the visual pass, the shift and the
-  economy port, the Shop OS seat, the chip tray and the Feature rung, three
-  chip-model bugs, the bore-diameter kernel correction, the spindle override,
-  and the morning that arrives. Suites 68 / 67 / 62 / 70+1. **Next: item 1 —
-  the system made visibly wrong to a stranger.**
+- **2026-09-17** — Loop armed. **Item 1 SHIPPED the same day**: the system's
+  claim is on the machine panel and settled in the log, measured at 36% of the
+  band on a worn machine, and visible on one screen with the worn machine and
+  the runout term that explains it. One bug of my own found by running the page
+  (`claimBefore` pasted into `doRough` by a positional replace on a non-unique
+  anchor). Suites 68 / 67 / 62 / 70+1, bundle 9 modules, live bytes verified.
+  **Next: item 2 — sound.** Nothing has ever been heard; verify it structurally
+  and say plainly that no human has listened.
