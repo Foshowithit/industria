@@ -162,6 +162,32 @@ Designed in `VISION.md` §1. Not from this loop.
 
 ---
 
+### THE FIRST-IMPRESSION PASS, AND WHAT IT IS WORTH — 2026-09-17
+
+The blocker is that no human has played this, and the closest honest substitute is a
+COLD VIEWER: an agent given only the stills, in order, with no code and no docs,
+asked the brief's beginner questions and told to be unkind. Two of them were run
+independently. The set is at `industria-visual-pass/viewer-set/` and the prompt is in
+the commit that produced the fixes.
+
+**IT IS NOT A HUMAN AND MUST NEVER BE REPORTED AS ONE.** It cannot speak to sound,
+feel, or whether anything moves. What it CAN say is whether the screen communicates,
+which is exactly the thing code-reading cannot answer — and it said yes, unprompted,
+in both cases: both viewers inferred the whole core loop from seven pictures, and
+both named the prediction gate as the most interesting thing on screen.
+
+**THE DEFECTS IT FOUND ARE THE ARGUMENT FOR RUNNING IT AGAIN.** It caught the
+framerate counter in the HUD — my own rule, violated for days, invisible to me — and
+the pendant's blank screen, which is the object the player is told to use most. Both
+are fixed. **Run a cold viewer again after any wave that changes what is on screen**,
+and re-capture the set first: a VIEWER SHOWN A MISLABELLED SET REPORTS THE LABEL, not
+the product, which happened here when shot four was the wrong file.
+
+**STILL OPEN FROM THAT PASS, recorded rather than lost:** no hand holds the part; no
+axis readout on a machine called "3-AXIS"; no contact shadows under anything; the
+machine reads as a pile of grey boxes when you stand at it; and *"one honest close-up
+of the work itself — the game is about boring a hole and I never see a bored hole"*.
+
 ### WHAT A TURN SHOULD LOOK LIKE
 
 1. `git pull --ff-only`; run the suites.
@@ -271,7 +297,15 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
-- **2026-09-17** — A6 finished (loop run). The chips were ALREADY falling, landing and
+- **2026-09-17** — A6 finished, then a FIRST-IMPRESSION PASS (loop run). Two cold
+  viewers, given only the stills: both inferred the core loop unprompted, both named
+  the prediction gate, one verified the H6 band. Both named the same two defects —
+  **the framerate counter in the HUD** and **the pendant's blank screen** — and both
+  are fixed (the second fix was wrong first: a flat emissive renders white). A
+  mislabelled shot in my own viewer set was reported as the product, which is the
+  same defect as a check that cannot fail. **Next: the five things that pass listed
+  as still-open, starting with the hand and the axis readout.**
+- **2026-09-17** — (earlier) A6 finished (loop run). The chips were ALREADY falling, landing and
   piling up **inside the table** — a fixed landing height 15 cm below the surface the
   cut happens above, so 176 chips were in the scene and none were visible. Landings
   now depend on where the chip is, and the puddle records the machine's cutting
