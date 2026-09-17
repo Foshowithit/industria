@@ -1270,25 +1270,56 @@ export function envelope(g, { bite_mm, feed_mm_rev = 0.12, vc = 120 }) {
   const torque_frac = f(as.step.torque_frac);
   const rpm_frac = f(as.step.rpm_frac);
   const chatter_frac = f(as.chatter_load);
-  /* The worst of the four IS the verdict, and naming which one is worst is the
-     whole value: "you are at 107 % of spindle power" is actionable, "refused"
-     is not. Same order as the kernel's own assessBoring, so this can never
-     disagree with the refusal it is previewing. */
+  /* ── WHICH WALL, AND WHY THIS IS NO LONGER A GUESS ──────────────────────
+     Naming which limit you are about to hit is the whole value of a load
+     meter: "107 % of spindle power" is actionable, "refused" is not.
+
+     This function used to take the LARGEST of the four fractions and call that
+     the binding limit, and its comment claimed that was the same order the
+     kernel uses. It is not. `assessBoring()` refuses on a FIXED PRECEDENCE —
+     speed, then power, then torque, then chatter — and picks the first one that
+     is exceeded, which is a different question from which fraction is biggest.
+     Measured on J2 at 4.00 mm bite and 0.30 mm/rev: torque is the largest
+     fraction (1.35) and the machine refuses the move for SPINDLE POWER (1.08).
+
+     WHO THIS WAS WRONG FOR, precisely: `binding` is not read by the in-game
+     load meter — that meter draws the four fractions from the last REAL cut at
+     the current setting and never invents a reading. `binding` is read by
+     `acceptance/r2_pushback.py`, which prints "REFUSED: <binding>". So the
+     defect was that the acceptance apparatus would have named a wall the
+     machine does not refuse on, while the machine named the right one — a
+     probe that agrees with itself and not with the machine, which is the
+     failure this project has already shipped once (see GATE-B addendum).
+
+     So the verdict is no longer recomputed here. `as` is the kernel's own
+     assessment and `as.verdict` is the kernel's own answer; this reads it. The
+     fractions are still returned, because they are what makes a meter a meter —
+     but `binding` is the limit that will actually stop you. */
   const limits = [
-    { key: 'CHATTER', label: 'chatter', frac: chatter_frac },
-    { key: 'TORQUE LIMIT', label: 'spindle torque', frac: torque_frac },
-    { key: 'SPINDLE POWER LIMIT', label: 'spindle power', frac: power_frac },
     { key: 'SPINDLE SPEED LIMIT', label: 'spindle speed', frac: rpm_frac },
+    { key: 'SPINDLE POWER LIMIT', label: 'spindle power', frac: power_frac },
+    { key: 'TORQUE LIMIT',        label: 'spindle torque', frac: torque_frac },
+    { key: 'CHATTER',             label: 'chatter', frac: chatter_frac },
   ];
-  const worst = limits.reduce((a, b) => (b.frac > a.frac ? b : a));
+  /* `assessBoring` says 'CUTS CLEAN' when nothing stops the cut — NOT 'RUNS',
+     which is what `assess()` says. Reading the wrong word made every clean cut
+     report as a refusal, which is the same class of mistake as reading the
+     wrong field name for the bore depth. The pass condition is one word. */
+  const refused = as.verdict !== 'CUTS CLEAN';
+  const nearest = limits.reduce((a, b) => (b.frac > a.frac ? b : a));
+  const worst = (refused && limits.find((l) => l.key === as.verdict)) || nearest;
   return {
     ok: true, power_frac, torque_frac, rpm_frac, chatter_frac,
     pkW: as.step.Pc_kW, F_mean_N: as.step.F_mean_N,
     sag_um: as.err.deflection_mean_um,
     mrr_mm3_min: as.step.MRR,
     cut_min: g.job.bore_depth_mm / Math.max(as.step.f, 0.001) + 0.4,
+    verdict: as.verdict,
     binding: worst.key, binding_label: worst.label, binding_frac: worst.frac,
-    would_cut: worst.frac <= 1,
+    /* The nearest wall whether or not it stops you — a meter should show how
+       close you are to the nearest one even when you are clear of it. */
+    closest: nearest.label, closest_frac: nearest.frac,
+    would_cut: !refused,
     /* Per-pass time is what makes feed a real decision rather than a free win:
        leaning on the feed buys removal rate and costs the spindle, and the two
        are the same equation. Reporting minutes here is what lets the player

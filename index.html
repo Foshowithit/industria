@@ -181,6 +181,10 @@ const REC = RECmod.isRecording() ? RECmod : null;
 
 const $ = (id) => document.getElementById(id);
 const cl = (v, a, b) => Math.min(b, Math.max(a, v));
+/** Money on screen. `£-647.5` is not a number a shop writes on anything: the
+ *  sign belongs before the symbol and the pence are part of the figure. The
+ *  arithmetic stays exact; only the rendering is rounded. */
+const money = (v) => `${v < 0 ? '-' : ''}\u00a3${Math.abs(v).toFixed(2)}`;
 
 /** How many castings the crate DRAWS, which is not the same as how many it
  *  holds once one is on the table. The crate object is the shop's, so the
@@ -271,6 +275,8 @@ const M = {
   bench: MATS.bench,
   bright: tint(MATS.paint, 0xeef1f4),
   slot: tint(MATS.iron, 0x6d7076),
+  paper: tint(MATS.paint, 0xf2efe6),
+  ink:   tint(MATS.paint, 0x8d949a),
 };
 
 const box = (w, h, d, mat, x = 0, y = 0, z = 0, parent = scene) => {
@@ -608,6 +614,47 @@ for (const [wx, wz] of [[-1.0, 1.9], [1.0, 1.9], [-1.0, -1.5], [1.0, -1.5]]) {
 }
 box(2.1, 0.06, 0.5, M.warn, 0, 0.60, -2.36, VAN);    // the rear step, painted
 VAN.visible = false;                                  // it comes when it comes
+
+/* ══ THE JOB BOARD — where the next morning's work is pinned ══════════════
+   L2. Until now `JOBS` held two fully-specified jobs and the player could only
+   ever play the first one; the second was reachable from a test hook and from
+   nowhere else. A shop's work does not arrive on the machine — it arrives on a
+   BOARD, and a machinist walks over and reads it. So the board is an object
+   like everything else here: it is by the roll-up door on the way in, it has
+   the week's cards pinned to it, and you read it by looking at it.
+
+   Nothing on a card is a number this page invented. Client, bore, tolerance
+   grade, band width, the rate and the van's slot all come off the job spec in
+   `game.mjs`, which is the same object the kernel is handed. A card cannot say
+   the job is easier than the job is. */
+const JOBBOARD = new THREE.Group();
+JOBBOARD.position.set(-6.6, 0, -16.3);
+scene.add(JOBBOARD);
+box(2.36, 1.66, 0.10, M.dark, 0, 1.62, 0, JOBBOARD);            // frame
+box(2.18, 1.48, 0.05, M.bright, 0, 1.62, 0.06, JOBBOARD);       // the face
+box(2.18, 0.14, 0.06, M.warn, 0, 2.28, 0.07, JOBBOARD);         // header strip
+const BOARD_CARDS = [];
+G.JOBS.forEach((j, i) => {
+  const c = new THREE.Group();
+  c.position.set(G.JOBS.length === 1 ? 0 : (-0.52 + i * 1.04), 1.50, 0.10);
+  c.rotation.z = (i % 2 ? -1 : 1) * 0.014;
+  JOBBOARD.add(c);
+  box(0.88, 1.08, 0.012, M.paper, 0, 0, 0, c);                  // the sheet
+  const band = box(0.88, 0.17, 0.014, M.warn, 0, 0.455, 0.003, c);
+  for (let k = 0; k < 6; k++) {                                 // ruled lines
+    box(0.68, 0.013, 0.015, M.ink, -0.04, 0.27 - k * 0.108, 0.003, c);
+  }
+  const pin = cyl(0.018, 0.018, 0.022, M.brass, 10);
+  pin.rotation.x = Math.PI / 2; pin.position.set(0, 0.51, 0.012); c.add(pin);
+  BOARD_CARDS.push({ job: j, group: c, band });
+});
+/** The board reads the same state the machine does: the card for the job you
+ *  are set up on is flagged, the rest are offers. One derivation, so the board
+ *  and the machine cannot disagree about which job is yours. */
+function syncBoard() {
+  if (!GAME) return;
+  BOARD_CARDS.forEach(({ job, band }) => { band.material = GAME.job.id === job.id ? M.warn : M.ink; });
+}
 
 /* ── THE REST OF THE SHOP — inhabited (§49), and not all of it about you ── */
 /* a second machine running someone else's job, cooling tower, blower */
@@ -991,7 +1038,7 @@ add(CALIPERS, 'Vernier calipers — 150 mm', 'pick them up', () => {
 
 add(TRAVELER, "Traveler — Halvorsen Pumps", 'read it', () => {
   CARRIED.traveler = true; SEEN.any = true;
-  say('Traveler', `Op 20 — bore Ø${GAME.job.nominal_mm} ${GAME.job.grade} to ${GAME.job.depth_mm} deep.<br>
+  say('Traveler', `Op 20 — bore Ø${GAME.job.nominal_mm} ${GAME.job.grade} to ${GAME.job.bore_depth_mm} deep.<br>
     Band ${GAME.job.band_low_mm.toFixed(3)} – ${GAME.job.band_high_mm.toFixed(3)} mm. Material ${GAME.mat.label}.`);
   logLine('Read the traveler. <b>Ø40 H6, 30 deep.</b> Band is 16 µm wide. That is the whole game.');
 }, () => true);
@@ -1013,22 +1060,61 @@ add(OTHER2.g, 'VMC No. 3 — running Ashcombe', 'watch', () => {
 
 /* the tool board — §77: the first time is manual, the fiftieth is a shortcut.
    No menu; you look at a specific bar and take it. */
-for (const [id, mesh, lbl] of [['bar12', BOARDS.bar12, 'Ø12'], ['bar16', BOARDS.bar16, 'Ø16'], ['bar20', BOARDS.bar20, 'Ø20']]) {
-  add(mesh, `Boring bar ${lbl} — carbide, in a holder`, 'load it in the spindle', () => {
-    const r = G.loadTool(GAME, id, stickout);
-    if (!r.ok) {
-      say('You', r.why === 'TOO SHORT' ? 'That one won\u2019t reach 30 deep.'
-        : r.why === 'OVERHUNG' ? 'That\u2019s hanging too far out — it will sing.'
-        : `Won\u2019t go in: ${r.why}`);
-      return;
-    }
-    GAME.machine.spindle_on = true;
-    if (audioReady) { AUD.clack({ gain: 0.5, pitch: 1500 }); AUD.spindleStart('mine', { to_Hz: 32, seconds: 2.4 }); }
-    logLine(`Loaded the <b>${r.spec.label}</b> at ${stickout} mm out. ${r.spec.note}`);
-    toast(`Bar in. ${r.spec.D} mm, ${stickout} mm out. ` +
-      (lastRead ? `Last gauge reading stands at Ø${lastRead.mm.toFixed(4)}.` : `<b>You have not measured it yet.</b>`), 3800);
-  }, () => true);
+/** Put a bar in the spindle. ONE function, because the LOOK item, the game and
+ *  the acceptance gate all have to go through the same door.
+ *
+ *  The refusal text is why this was extracted. It read "That one won't reach
+ *  30 deep" — hard-coded, true of J1, false of every other job on the board.
+ *  It now reads the bore off the job the machine is actually set up on, which
+ *  is the same number `loadTool` refused against a line earlier. */
+function loadBar(id) {
+  const r = G.loadTool(GAME, id, stickout);
+  if (!r.ok) {
+    say('You', r.why === 'TOO SHORT'
+      ? `That one won't reach ${GAME.job.bore_depth_mm} deep.`
+      : r.why === 'OVERHUNG' ? 'That\u2019s hanging too far out — it will sing.'
+      : `Won\u2019t go in: ${r.why}`);
+    if (REC) REC.refusal('load_tool', r.why, { clock_min: GAME.clock_min, bar: id });
+    return { ok: false, why: r.why };
+  }
+  GAME.machine.spindle_on = true;
+  if (audioReady) { AUD.clack({ gain: 0.5, pitch: 1500 }); AUD.spindleStart('mine', { to_Hz: 32, seconds: 2.4 }); }
+  logLine(`Loaded the <b>${r.spec.label}</b> at ${stickout} mm out. ${r.spec.note}`);
+  toast(`Bar in. ${r.spec.D} mm, ${stickout} mm out. ` +
+    (lastRead ? `Last gauge reading stands at Ø${lastRead.mm.toFixed(4)}.` : `<b>You have not measured it yet.</b>`), 3800);
+  return { ok: true, spec: r.spec };
 }
+for (const [id, mesh, lbl] of [['bar12', BOARDS.bar12, 'Ø12'], ['bar16', BOARDS.bar16, 'Ø16'], ['bar20', BOARDS.bar20, 'Ø20']]) {
+  add(mesh, `Boring bar ${lbl} — carbide, in a holder`, 'load it in the spindle',
+      () => loadBar(id), () => true);
+}
+
+/* ── THE BOARD'S VERB — reading it, and taking the next job off it ───────
+   L2. The card for the job you are set up on is flagged; the others are
+   offers. Every figure on the board is read from the job spec the kernel is
+   handed, so a card cannot describe a job as easier than it is. */
+add(JOBBOARD, "Job board — the week's work", 'read it', () => {
+  const lines = G.JOBS.map((j) => {
+    const mine = j.id === GAME.job.id;
+    /* `toFixed(0)`, not the raw float. The difference of two decimal-mm
+       constants is 15.999999999998238, and a card that says so is a card no
+       shop would ever pin up. The kernel keeps the full precision; the DISPLAY
+       rounds, the same way `newGame` already logs the band. */
+    const band = ((j.band_high_mm - j.band_low_mm) * 1000).toFixed(0);
+    return `${mine ? '<b>' : ''}${j.id} · ${j.client}${mine ? '</b> <i>— on your machine</i>' : ''}<br>` +
+      `Ø${j.nominal_mm} ${j.grade}, band ${band} µm · ${j.start_hole_dia_mm} mm as-cast, ` +
+      `${j.bore_depth_mm} deep · £${j.rate} · van ${W.hhmm(G.departsMin(j))}`;
+  });
+  const offers = G.JOBS.filter((j) => j.id !== GAME.job.id);
+  const opts = offers.map((j) => [`Take ${j.id} — ${j.client}, Ø${j.nominal_mm} ${j.grade}`,
+                                  () => takeJob(j.id)]);
+  say('Board', lines.join('<br><br>'), opts.length ? opts : undefined);
+  logLine(`Board: <b>${G.JOBS.length}</b> on the books — ` +
+    (GAME.finished
+      ? 'yours is settled, the next one can be taken.'
+      : 'this one is not settled yet.') +
+    ` Banked <b>${money(GAME.money)}</b>.`);
+}, () => true);
 
 /* ── ROUND 9 VERBS — the floor the part moves across ──────────────────────
    Every one of these reads the PHYSICAL state and says what is there. None of
@@ -1041,7 +1127,7 @@ add(CRATE, 'Casting crate — Ø40 housings, as-cast', 'count them', () => {
   const r = crateMeta();
   say('You', n > 0
     ? `${n} casting${n === 1 ? '' : 's'} in the crate. Ø${GAME.job.start_hole_dia_mm} as-cast bore, ` +
-      `${GAME.job.depth_mm} deep. Same drawing, same material.`
+      `${GAME.job.bore_depth_mm} deep. Same drawing, same material.`
     : 'The crate is empty. Whatever happens now, it happens without another casting.');
   logLine(n > 0
     ? `Crate: <b>${n}</b> casting${n === 1 ? '' : 's'} left. Each one is ${GAME.job.start_hole_dia_mm} mm as-cast.`
@@ -1756,7 +1842,7 @@ function doInspect() {
   if (r.outcome === 'ACCEPTED') {
     say('Earl', "\u201cThat's in. Get it on the rack by the door — the van's the van, " +
       "it doesn't come to you.\u201d");
-    toast(`<b>ACCEPTED.</b> ${r.net >= 0 ? '+' : ''}£${r.net}` +
+    toast(`<b>ACCEPTED.</b> ${money(r.net)}` +
       (r.late ? ' — the window has closed' : '') + `<br>` + revealLine(), 10000);
     logLine(`<b>ACCEPTED</b> at ${G.hhmm(GAME.clock_min)}. ${r.note} ` +
       `Part <b>${r.part_id}</b> is on the rack, slot ${G.rackParts(GAME).length} of ${GAME.rack_slots}.`);
@@ -1783,6 +1869,17 @@ function doInspect() {
     phase = 'RACKED';
   }
   SEEN.corrected = true;
+  /* ── THE WAY TO THE NEXT JOB ─────────────────────────────────────────────
+     The board is by the roll-up door and a player who has just shipped has no
+     reason to know that. One line, once, in the panel they are already reading
+     when a part settles — not an arrow, not a marker, no quest log. §48 asks
+     for the world to tell them; this is the world's own noticeboard being
+     mentioned by the only voice that is not a menu. */
+  if (!earlSaid.toldAboutBoard) {
+    earlSaid.toldAboutBoard = true;
+    logLine(`<b>Job board</b> by the roll-up door — <b>${G.JOBS.length}</b> on the books. ` +
+      `Take the next one when you are clear of this.`);
+  }
   /* The way out. On the public build the session lives in this browser and
      nowhere else, so the player is the only one who can hand it over. Offered
      as a TOAST and not a dialogue on purpose: the field manual makes the five
@@ -1843,13 +1940,18 @@ function doFetchBlank() {
   GAME.clock_min = clocks.job_min + opMin;
   clockFloorMin = Math.max(clockFloorMin, GAME.state_clock_floor);
 
-  buildPartMesh(GAME.job.start_hole_dia_mm, GAME.job.depth_mm);
+  /* `depth_mm` does not exist on a job spec — the field is `bore_depth_mm`.
+     Reading the wrong one passed `undefined` into the extruded geometry, and
+     the Traveler and the crate both told the player the bore was "undefined"
+     deep. Nothing threw: the per-frame sync further down reads the CORRECT
+     field, which is the only reason the part still rendered. */
+  buildPartMesh(GAME.job.start_hole_dia_mm, GAME.job.bore_depth_mm);
   lastRead = null; predicted_um = null; biteCmd_um = 0; revealed = null;
   if (audioReady) AUD.clack({ gain: 0.45, pitch: 1100 });
   syncFloor();
   toast(`<b>${r.part.id}</b> in the machine. ${GAME.job.start_hole_dia_mm} mm as-cast, and the ` +
     `machine is not cold any more.<br>Cost ${r.cost.minutes.toFixed(1)} min` +
-    (r.cost.cost ? ` and £${r.cost.cost}` : '') + ` · ${GAME.stock_on_hand} castings left.`, 6500);
+    (r.cost.cost ? ` and ${money(r.cost.cost)}` : '') + ` · ${GAME.stock_on_hand} castings left.`, 6500);
   logLine(`Clamped <b>${r.part.id}</b> on the parallels. ` +
     (r.cost.scrap ? 'Same setup, insert untouched.'
                   : '<b>New setup</b> — parallels, clamps and a fresh touch-off.') +
@@ -2171,18 +2273,75 @@ function enter() {
   $('gate').style.display = 'none';
   renderer.domElement.requestPointerLock?.();
   audioGo();                       // browsers only allow audio from a gesture
-  GEAR();
+  startShift(G.DEFAULT_JOB_ID, { announce: false, carry: false });
   if (REC) REC.sessionStart({ game: GAME, clocks });
 }
-function GEAR() {
-  GAME = G.newGame();
+/** ── START A SHIFT. THE ONE RESET PATH. ──────────────────────────────────
+   Every way into a job comes through here: the gate at the start of the game,
+   the card on the job board, and the `job()` hook the acceptance gate drives.
+   One path, so a player and a test cannot disagree about what a fresh job
+   looks like — which is the same rule the kernel follows about the bore.
+
+   `carry` moves the day's money forward. `newGame(job, thermal, money)` has
+   taken a carried balance since it was written and nothing ever passed one.
+
+   THE PER-PART STATE DIES WITH THE PART. Everything in the block below is a
+   fact about the casting that was in the machine — the dial you had set, the
+   reading you took, whether a part was still live for a second cut. None of it
+   belongs to the next job, and leaving any of it set is how a new job would
+   silently start with the old job's dial still on it. */
+function startShift(jobId, { announce = true, carry = true } = {}) {
+  const spec = G.jobById(jobId || G.DEFAULT_JOB_ID);
+  const carried = (carry && GAME) ? GAME.money : 0;
+
+  GAME = G.newGame(spec, undefined, carried);
+
   clocks.world_min = START_SHIFT_MIN;
   clocks.job_min = START_SHIFT_MIN;   // your clock starts at 05:55 too
   clocks.job_taken = true;            // the shift is yours; the deadline is what can hurt you
   opMin = 0;
+  clockFloorMin = 0;
   GAME.clock_min = clocks.job_min;
   earlIdleSince = START_SHIFT_MIN;
-  logLine('<b>05:55.</b> Clocked on. Shift starts at 06:00.');
+
+  biteCmd_um = 0; predicted_um = null; lastRead = null; revealed = null;
+  partStillLive = false; secondPartSeen = false;
+  achebeDue = null; shipWindow = null; GONE_SENT = false;
+  roughBite_mm = 0.3; roughFeed_mm_rev = 0.12;
+
+  buildPartMesh(spec.start_hole_dia_mm, spec.bore_depth_mm);
+  syncFloor();
+  syncBoard();
+
+  /* A NEW MORNING, AND THE LOG STARTS WITH IT. The van took yesterday's parts
+     and yesterday's lines belong to yesterday; leaving them above today's would
+     print "Clocked on, 05:55" twice in the same panel, which is how a reader
+     stops trusting the panel. The recorder keeps the full session either way. */
+  $('log').innerHTML = '';
+  logLine(`<b>${W.hhmm(START_SHIFT_MIN)}.</b> Clocked on. ` +
+    `<b>${spec.client}</b> on the bench — Ø${spec.nominal_mm} ${spec.grade}.`);
+  if (announce) {
+    toast(`<b>${spec.title}</b><br>${spec.client} · £${spec.rate} · ` +
+      `band ${spec.band_low_mm.toFixed(3)}–${spec.band_high_mm.toFixed(3)} mm · ` +
+      `van ${W.hhmm(G.departsMin(spec))}`, 7000);
+  }
+  if (REC) REC.action('start_shift', { job_id: spec.id, carried_money: carried,
+    nominal_mm: spec.nominal_mm, start_hole_dia_mm: spec.start_hole_dia_mm });
+  return GAME;
+}
+
+/** Take the next job off the board. Refused while the current one is still in
+ *  the machine — not as a progression gate, but because it is not tomorrow
+ *  until this one is on the rack or in the bin, and Earl would say so. */
+function takeJob(id) {
+  if (!GAME.finished) {
+    say('Earl', "\u201cFinish what's in the machine first. It isn't tomorrow until " +
+      "that one's either on the rack or in the bin.\u201d");
+    if (REC) REC.refusal('take_job', 'JOB_NOT_SETTLED', { clock_min: GAME.clock_min });
+    return false;
+  }
+  startShift(id);
+  return true;
 }
 $('gate').onclick = enter;
 /* clicking back into the canvas re-captures the mouse without restarting */
@@ -2322,7 +2481,15 @@ function frame(now) {
       ? `Ø${lastRead.mm.toFixed(4)} ±${lastRead.sigma_um.toFixed(2)} µm`
       : 'not measured';
     $('hBand').textContent = `${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}`;
-    $('hMoney').innerHTML = `ON THE DAY <b>£${GAME.money}</b>` + (FPS ? ` <span style="opacity:.45">${FPS.toFixed(0)}fps</span>` : '');
+    /* MONEY NOW CROSSES DAYS. `money` is the balance the shop is carrying;
+       `finished` is what THIS job settled at. Before L2 the two were the same
+       number because there was only ever one job, and the line said "on the
+       day". Both are shown now, because a total that only goes up is not the
+       same fact as what the last part was worth. */
+    const todayNet = GAME.finished ? GAME.finished.net : 0;
+    $('hMoney').innerHTML = `ON THE DAY <b>${money(todayNet)}</b>` +
+      (GAME.money !== todayNet ? ` · BANKED <b>${money(GAME.money)}</b>` : '') +
+      (FPS ? ` <span style="opacity:.45">${FPS.toFixed(0)}fps</span>` : '');
     /* ── THE FLOOR, as counts of objects. See the note beside #hFloor. ──── */
     {
       const rack = G.rackParts(GAME), bin = G.binParts(GAME), gone = G.goneParts(GAME);
@@ -2427,17 +2594,18 @@ window.INDUSTRIA = {
      across, which is the same discipline `newGame` already carries. */
   job: (id) => {
     if (!id) return GAME ? GAME.job.id : null;
-    const spec = G.jobById(id);
-    const money = GAME ? GAME.money : 0;
-    GAME = G.newGame(spec, undefined, money);
-    biteCmd_um = 0; predicted_um = null;
-    lastRead = null; revealed = null;
-    if (REC) REC.action('set_job', { job_id: spec.id, nominal_mm: spec.nominal_mm,
-      start_hole_dia_mm: spec.start_hole_dia_mm, clock_min: GAME.clock_min });
-    toast(`Set up <b>${spec.title}</b> — ${spec.client}.`, 4200);
-    return spec.id;
+    /* THE SAME DOOR THE BOARD USES. This hook used to rebuild GAME by hand and
+       skip everything around it — the clocks, the scene, the part mesh and the
+       per-part state — so a gate that switched jobs and a player who switched
+       jobs were looking at two different games. */
+    startShift(id, { carry: true });
+    return G.jobById(id).id;
   },
   warm: doWarmUp, touch: doTouchOff, vibe: (n) => vibrate(n),
+  /* `loadTool` was the one verb with no exposed entry point, which meant the
+     acceptance gate could not set the machine up at all. Same function the
+     player's LOOK item calls. */
+  tool: (id) => loadBar(id),
   /* ── ROUND 9 — THE FLOOR, FOR THE FOUR-HISTORY TEST ─────────────────────
      `floor` is the whole point of the round's verification: it reports what
      an observer sees WITH THE MACHINE HIDDEN. It calls the game layer's own
