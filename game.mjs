@@ -159,6 +159,166 @@ export function systemRecord(g) {
   };
 }
 
+/* ══ THE INSERT, THE SCALE, AND THE DAY IT STOPS ══════════════════════════
+   Three ways a machine goes wrong that are not the machine's structure and not
+   the operator's hands. Each one moves the CAUSE of a bad part one step further
+   from the cut, which is what the whole ladder in VISION.md is about. */
+
+/* ── TOOL LIFE, BY TAYLOR, BECAUSE THE LAW IS THE POINT ───────────────────
+   An edge does not wear out in proportion to how much metal it removes; it wears
+   out in proportion to how hot it runs, and Taylor's equation is the classical
+   statement of that: vc · T^n = C, with n around 0.28 for carbide on steel.
+
+   THE CONSEQUENCE IS NOT LINEAR AND THAT IS THE WHOLE REASON IT IS HERE. Over the
+   six speeds this machine offers, with a 30-minute reference life at 120 m/min:
+
+       60 m/min -> 357 min      180 m/min ->  8.6 min
+       90 m/min ->  84 min      240 m/min ->  2.6 min
+      120 m/min ->  30 min      320 m/min ->  0.9 min
+
+   So running fast does not cost a bit more tooling — it costs a different ORDER of
+   tooling, and it is the trade the spindle override needed in order to be a
+   decision rather than a free win. Until now the game said in as many words that
+   it did not model insert life. It does now. */
+export const INSERT = {
+  ref_vc: 120, ref_life_min: 30, taylor_n: 0.28,
+  cost: 42, change_min: 3,
+};
+
+/* ══ AND THE PRICE OF SPEED, WHICH IS THE POINT AND MUST NOT BE "FIXED" ═══
+   Measured on this machine's own numbers: at 320 m/min an edge lasts 0.9
+   MINUTES of cutting, so a J1 pass spends about half of one. Against that, going
+   from 120 to 320 m/min makes the same pass 2.7x faster.
+
+   SO THE TRADE IS ROUGHLY £42 TO SAVE 75 SECONDS, and a reader who sees those
+   numbers and reaches for a smaller `cost` or a gentler `taylor_n` has missed
+   what they are for. THAT IS THE CORRECT PRICE AND IT IS SUPPOSED TO HURT: the
+   top of the speed range exists for the morning the van is coming and the part is
+   not finished, and it should be a bad deal on every other morning. The override
+   was added so that speed would be a DECISION; a decision with no cost is a
+   button.
+
+   What the player is being taught, without being told: cutting speed is bought
+   with tooling, and a shop that runs fast all the time is a shop that spends its
+   margin on inserts. `n = 0.28` is the classical Taylor exponent for carbide on
+   steel and `ref_life_min = 30` is an ordinary reference life; the numbers are
+   the trade, not a tuning knob. */
+export function insertLifeMin(vc) {
+  const v = Math.max(10, vc || INSERT.ref_vc);
+  return INSERT.ref_life_min * Math.pow(INSERT.ref_vc / v, 1 / INSERT.taylor_n);
+}
+
+/* ── CALIBRATION, WHICH IS NOT WEAR ───────────────────────────────────────
+   Wear makes a machine cut differently every time. CALIBRATION makes it cut
+   WRONG THE SAME WAY EVERY TIME — the position scale is out, so the axis goes
+   where the control says plus an error, and every part comes off the same amount
+   off. That is the more dangerous of the two, because it is repeatable: a
+   machinist trusts a machine that repeats, and a machine that repeats a lie will
+   be believed for weeks.
+
+   It is also the ONLY one of the three the system can model: a calibration error
+   is a fact about the machine that the machine can be told, so a forecast that
+   knows it is exact. Wear the system has not looked at is not. The difference
+   between those two is the difference between the seat being useful and the seat
+   being dangerous. */
+export const CALIB = {
+  ceiling_um: 30,
+  drift_per_cut_min_um: 0.018,     // ~1.8 µm per 100 minutes of metal-cutting
+  cost: 260, minutes: 25,
+};
+
+/* ── AND THE DAY IT STOPS ─────────────────────────────────────────────────
+   A WEAR-OUT MODEL RATHER THAN A HAZARD, and the difference is stated because it
+   is a modelling choice and not a physical one: a real machine fails by hazard,
+   spread across a distribution. This one fails after a NUMBER OF CUTTING MINUTES
+   set by its condition when it was last serviced, which is deterministic, testable
+   and predictable by a player who reads the panel. A game whose machine fails at
+   random teaches nobody anything about maintenance; a game whose machine fails
+   after exactly as long as it was going to fail teaches the arithmetic that
+   actually gets machines serviced. */
+export const FAILURE = {
+  mtbf_min_at_condition: (c) => Math.max(25, 10 + (Math.max(200, c) - 200) * 0.55),
+  repair_cost: 480, repair_min: 55,
+};
+
+/** How much of the edge this pass used, as a fraction of its life. */
+export function insertWearPerMin(vc) {
+  return 1 / insertLifeMin(vc);
+}
+
+/** A new edge in the spindle. Costs money and clock, and you cannot change an
+ *  insert with the spindle turning — which is the same rule maintenance has. */
+export function changeInsert(g, { cost = INSERT.cost, minutes = INSERT.change_min } = {}) {
+  /* NOT WITH THE SPINDLE TURNING — the same rule maintenance and calibration
+     have, and for the same reason: a spinning spindle is not something a person
+     puts their hands near. The first version of this function had a comment
+     describing exactly that rule and an empty `if` body, so it did not enforce
+     it. A comment that describes a check the code does not make is the defect
+     this build keeps producing, so the check is here now. */
+  if (g.machine.spindle_on) {
+    return { ok: false, why: 'SPINDLE_RUNNING',
+      detail: 'The spindle is turning. Stop it before you go near the tool.' };
+  }
+  const before = g.machine.insert_wear ?? 0;
+  g.machine.insert_wear = 0;
+  g.money -= cost;
+  g.charges.push({ t: g.clock_min, kind: 'INSERT', paid: 0, fee: cost,
+    note: `New edge — ${(before * 100).toFixed(0)}% of the last one used.` });
+  g.clock_min += minutes;
+  g.state_clock_floor = Math.max(g.state_clock_floor, g.clock_min);
+  log(g, 'note', `Changed the insert. The old edge had <b>${(before * 100).toFixed(0)}%</b> ` +
+    `of its life gone. ${minutes} minutes and £${cost}.`);
+  return { ok: true, before, cost, minutes };
+}
+
+/** Put the machine back on its own scale. */
+export function calibrateMachine(g, { cost = CALIB.cost, minutes = CALIB.minutes } = {}) {
+  if (g.machine.spindle_on) {
+    return { ok: false, why: 'SPINDLE_RUNNING',
+      detail: 'The spindle is turning. Calibration is done with the machine stopped.' };
+  }
+  const before = g.machine.calib_um ?? 0;
+  g.machine.calib_um = 0;
+  g.machine.calib_at_min = g.clock_min;
+  g.money -= cost;
+  g.charges.push({ t: g.clock_min, kind: 'CALIBRATION', paid: 0, fee: cost,
+    note: `Calibrated — the scale was out by ${before.toFixed(1)} µm.` });
+  g.clock_min += minutes;
+  g.state_clock_floor = Math.max(g.state_clock_floor, g.clock_min);
+  log(g, 'note', `Calibrated. The scale was reading <b>${before.toFixed(1)} µm</b> ` +
+    `out and every part had been coming off that much wrong. ${minutes} minutes and £${cost}.`);
+  return { ok: true, before, cost, minutes };
+}
+
+/** Run the failure check. Called after every pass, because that is what wears a
+ *  machine and there is no other clock it could honestly run on. */
+export function checkFailure(g) {
+  if (g.machine.down_until !== null && g.machine.down_until !== undefined) return { failed: false };
+  if (g.machine.cut_min_total < (g.machine.fail_at_cut_min ?? Infinity)) return { failed: false };
+  g.machine.spindle_on = false;
+  g.machine.down_until = g.clock_min + FAILURE.repair_min;
+  return { failed: true, why: 'MACHINE_DOWN', at_min: g.clock_min,
+    minutes: FAILURE.repair_min, cost: FAILURE.repair_cost };
+}
+
+/** Somebody comes out. Restores the machine to a serviceable condition and puts
+ *  the clock back on its feet — but it eats the deadline. */
+export function repairMachine(g, { cost = FAILURE.repair_cost, minutes = FAILURE.repair_min } = {}) {
+  const before = g.machine.condition;
+  g.machine.condition = Math.min(WEAR.condition_ceiling, before + 300);
+  g.machine.cut_min_total = 0;
+  g.machine.fail_at_cut_min = FAILURE.mtbf_min_at_condition(g.machine.condition);
+  g.machine.down_until = null;
+  g.money -= cost;
+  g.charges.push({ t: g.clock_min, kind: 'BREAKDOWN', paid: 0, fee: cost,
+    note: `Breakdown — ${minutes} minutes down.` });
+  g.clock_min += minutes;
+  g.state_clock_floor = Math.max(g.state_clock_floor, g.clock_min);
+  log(g, 'note', `Machine is back up. Condition <b>${before.toFixed(0)} → ` +
+    `${g.machine.condition.toFixed(0)}</b>. ${minutes} minutes gone and £${cost}.`);
+  return { ok: true, before, after: g.machine.condition, cost, minutes };
+}
+
 /* ── THE BOOK, AS A FUNCTION ──────────────────────────────────────────────
    The recommendation is SEARCHED FOR, not asserted. The catalogue offers the
    deepest bite at its feed that a machine in calibration will actually run, and
@@ -833,6 +993,16 @@ export function newGame(job = JOBS[0], thermal = THERMAL, money = 0) {
       cut_min_total: 0,
       /* Surface speed at the edge, set by the operator and held for the job. */
       vc_m_min: SPEEDS.default,
+      /* ── THE DURABLE STATE, WHICH BELONGS TO THE SHOP AND NOT TO THE JOB ────
+         These four outlive the part. `startShift` seeds them from the shop's own
+         machine and the frame loop writes them back, so a machine that was
+         wearing yesterday is still worn this morning — which is the entire
+         reason a career over several days means anything at all. Before this,
+         condition reset to 800 every shift and no machine could ever age. */
+      calib_um: 0,               // how far the position scale is out
+      insert_wear: 0,            // 0..1 of the edge's life, on the bar in the spindle
+      down_until: null,          // cut-minute total at which it stops, null = healthy
+      fail_at_cut_min: FAILURE.mtbf_min_at_condition(WEAR.condition_open),
     },
 
     /* THE SYSTEM'S OWN STATE. `surveyed_condition` is what it believes the
@@ -1073,6 +1243,13 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
   if (!g.tool) return { ok: false, why: 'NO TOOL', detail: 'Load a boring bar first.' };
   if (!(bite_mm > 0)) return { ok: false, why: 'NO BITE', detail: 'The dial has to move.' };
 
+  /* A STOPPED MACHINE CUTS NOTHING. This is checked before anything else, because
+     every other number in this function is a statement about a machine that is
+     running. */
+  if (g.machine.down_until !== null && g.machine.down_until !== undefined) {
+    return { ok: false, why: 'MACHINE_DOWN',
+      detail: 'The machine is down. Somebody has to come out.' };
+  }
   const spec = g.toolSpec;
   const feed = feed_mm_rev != null ? feed_mm_rev : 0.15;
   const hotR = hotBoreDia(g) / 2;
@@ -1128,7 +1305,11 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
   // earlier version did — makes the bar cut BEHIND where it physically sits,
   // removing metal at a radius smaller than the tool occupies. Not a thing that
   // can happen, and it wrecked the dial-to-result mapping.
-  const tool = makeTool({ D: spec.D, z: spec.z, stickout_L: g.stickout_L });
+  /* THE EDGE IN THE SPINDLE IS THE EDGE THE MACHINE HAS. `wear` is read by
+     `specificCuttingForce`, so a tired insert cuts harder here exactly as it does
+     in the kernel's own reference cases. */
+  const tool = { ...makeTool({ D: spec.D, z: spec.z, stickout_L: g.stickout_L }),
+                 wear: g.machine.insert_wear ?? 0 };
   const thermalArgs = {
     dt_tool_K: g.machine.spindleC - g.machine.refSpindleC,
     dt_screw_K: g.machine.screwC - g.machine.refScrewC,
@@ -1172,7 +1353,12 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
   // is) and by its fixed runout (it cuts the high side of its own circle). Both
   // move the whole edge OUTWARD. The sag is already inside h_act and must not be
   // applied again.
-  const cut_hotR = hotR + (b_hot_um + runout_um) / 1000;
+  /* AND THE MACHINE'S OWN SCALE, which is out by however much it is out by. A
+     position error, not a force one: the axis goes where the control says plus
+     `calib_um`, so every bore comes off that much bigger and — because it is
+     repeatable — the machine is believed while it lies. See CALIB in this file. */
+  const calib_um = g.machine.calib_um ?? 0;
+  const cut_hotR = hotR + (b_hot_um + runout_um + calib_um) / 1000;
   const new_edge_coldR = cut_hotR - edgeOffset_um(g) / MM_TO_UM;
 
   // ── time ────────────────────────────────────────────────────────────────
@@ -1187,6 +1373,25 @@ export function cutOnce(g, { bite_mm, feed_mm_rev, vc, label }) {
   g.machine.cut_min_total += cut_min;
   g.machine.condition = Math.max(WEAR.condition_min,
     g.machine.condition - cut_min * WEAR.condition_per_cut_min);
+  /* AND THE TWO THINGS THAT ARE NOT WEAR. The scale drifts away from the truth,
+     and the insert spends its life — by TAYLOR, so the rate is a function of the
+     speed the operator chose, which is what makes the spindle override cost
+     something. */
+  g.machine.calib_um = Math.min(CALIB.ceiling_um,
+    (g.machine.calib_um ?? 0) + cut_min * CALIB.drift_per_cut_min_um);
+  /* `vc` THE PARAMETER, NOT `rec.vc_m_min`. The record is built further down
+     this function, so reading it here was a temporal-dead-zone error — caught
+     immediately by the first test that took a cut, and worth a note because the
+     two values are the SAME number for a boring cut, so a lazier fix (moving the
+     wear line below the record) would have hidden which one was meant. */
+  g.machine.insert_wear = Math.min(1,
+    (g.machine.insert_wear ?? 0) + cut_min * insertWearPerMin(vc));
+  /* AND WHETHER IT STOPS. */
+  const broke = checkFailure(g);
+  if (broke.failed) {
+    log(g, 'world', `<b>The machine has stopped.</b> ${broke.minutes} minutes before ` +
+      `anybody can get to it.`);
+  }
 
   // ── heat ────────────────────────────────────────────────────────────────
   // TWO sources, and over a job the idle one dominates:
@@ -1804,7 +2009,11 @@ export function envelope(g, { bite_mm, feed_mm_rev = 0.12, vc = 120 }) {
   if (!g) return { ok: false, why: 'NO GAME' };
   if (!g.tool) return { ok: false, why: 'NO TOOL' };
   const spec = g.toolSpec;
-  const tool = makeTool({ D: spec.D, z: spec.z, stickout_L: g.stickout_L });
+  /* THE EDGE IN THE SPINDLE IS THE EDGE THE MACHINE HAS. `wear` is read by
+     `specificCuttingForce`, so a tired insert cuts harder here exactly as it does
+     in the kernel's own reference cases. */
+  const tool = { ...makeTool({ D: spec.D, z: spec.z, stickout_L: g.stickout_L }),
+                 wear: g.machine.insert_wear ?? 0 };
   const as = assessBoring({ b: bite_mm, feed: feed_mm_rev, vc, bore_D_mm: hotBoreDia(g) },
     { tool, material: g.mat }, g.mach);
   const f = (x) => (isFinite(x) ? x : 99);

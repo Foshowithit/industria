@@ -715,11 +715,14 @@ export const KEYPAD = {
 
     { id: 'measure',   label: 'MEASURE',  tone: 'cool' },
     { id: 'inspect',   label: 'UNLOAD',   tone: 'cool' },
-    /* Two blank positions, because a real pendant has them and because a grid
-       padded to a rectangle with invented functions is worse than one that
-       admits it has room. */
-    { id: null,        label: '',         tone: 'plain' },
-    { id: null,        label: '',         tone: 'plain' },
+    /* THE TWO POSITIONS THAT WERE LEFT BLANK ARE NOW THE TWO THAT WERE MISSING.
+       They were deliberately empty — a real pendant has gaps and a grid padded to
+       a rectangle with invented functions is worse than one that admits it has
+       room — and the wear model filled them: an insert that spends its life by
+       Taylor, and a position scale that drifts off the truth. Both are things a
+       machinist does at the machine, and neither had a key. */
+    { id: 'insert',    label: 'INSERT',   tone: 'cool' },
+    { id: 'calib',     label: 'CALIB',    tone: 'cool' },
   ],
 };
 

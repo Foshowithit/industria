@@ -373,6 +373,122 @@ function rigged({ condition = WEAR.condition_open } = {}) {
   ok('DWG-notes', 'and the material note', d.notes.some((n) => /MATERIAL/.test(n)));
 }
 
+/* ── INS-* / CAL-* / FAIL-*  THE THREE WAYS IT GOES WRONG THAT ARE NOT STRUCTURE
+   An insert spends its life by Taylor, a scale drifts off the truth, and a
+   machine eventually stops. Each moves the CAUSE of a bad part one step further
+   from the cut, and each is asserted here because each is a claim about the
+   ORDER of things rather than about a number. */
+{
+  const G = await import('./game.mjs');
+  const rig = () => {
+    const g = newGame();
+    g.tool = 'bar20'; g.stickout_L = 45;
+    g.toolSpec = G.TOOLING.find((t) => t.id === 'bar20');
+    g.part.holeDia_cold_mm = 39.0;
+    g.machine.edgeR_cold_mm = 19.5;
+    return g;
+  };
+
+  /* ── the edge ─────────────────────────────────────────────────────────── */
+  ok('INS-1', "Taylor's law: faster is a different ORDER of tool life, not a bit less",
+    G.insertLifeMin(320) < G.insertLifeMin(120) / 10);
+  ok('INS-2', 'and the reference speed gives the reference life',
+    Math.abs(G.insertLifeMin(120) - 30) < 1e-9);
+  ok('INS-3', 'slower is longer, monotonically',
+    [60, 90, 120, 180, 240, 320].every((v, i, a) =>
+      i === 0 || G.insertLifeMin(v) < G.insertLifeMin(a[i - 1])));
+
+  ok('INS-4', 'a cut spends the edge', (() => {
+    const g = rig();
+    cutOnce(g, { bite_mm: 0.4, feed_mm_rev: 0.12, vc: 120, label: 't' });
+    return (g.machine.insert_wear ?? 0) > 0;
+  })());
+  ok('INS-5', 'faster spends it faster', (() => {
+    const a = rig(), b = rig();
+    cutOnce(a, { bite_mm: 0.4, feed_mm_rev: 0.12, vc: 120, label: 't' });
+    cutOnce(b, { bite_mm: 0.4, feed_mm_rev: 0.12, vc: 320, label: 't' });
+    return b.machine.insert_wear > a.machine.insert_wear * 3;
+  })());
+  /* AND A WORN EDGE PUSHES THE PART THE RECOVERABLE WAY — it deflects more, so it
+     takes LESS off, so the bore comes out SMALL. Calibration, below, pushes the
+     other way. The two failures are opposite and that is worth asserting. */
+  ok('INS-6', 'a worn edge leaves the bore SMALLER — it deflects, so it cuts less', (() => {
+    const a = rig(), b = rig();
+    b.machine.insert_wear = 1;
+    cutOnce(a, { bite_mm: 0.4, feed_mm_rev: 0.12, vc: 120, label: 't' });
+    cutOnce(b, { bite_mm: 0.4, feed_mm_rev: 0.12, vc: 120, label: 't' });
+    return b.part.holeDia_cold_mm < a.part.holeDia_cold_mm;
+  })());
+  ok('INS-7', 'and it cannot be changed with the spindle turning',
+    G.changeInsert(Object.assign(rig(), { machine: { spindle_on: true } })).ok === false);
+  ok('INS-8', 'changing it costs money and clock and leaves a fresh edge', (() => {
+    const g = rig();
+    g.machine.insert_wear = 0.9;
+    const r = G.changeInsert(g, { cost: 42, minutes: 3 });
+    return r.ok && g.machine.insert_wear === 0 && g.money === -42 && r.before === 0.9;
+  })());
+
+  /* ── the scale ────────────────────────────────────────────────────────── */
+  ok('CAL-1', 'the scale drifts with cutting', (() => {
+    const g = rig();
+    cutOnce(g, { bite_mm: 0.4, feed_mm_rev: 0.12, vc: 120, label: 't' });
+    return (g.machine.calib_um ?? 0) > 0;
+  })());
+  /* THE SIGNATURE OF A CALIBRATION ERROR: the same way wrong, every time. */
+  ok('CAL-2', 'and it puts the bore BIGGER, every time, by the same amount', (() => {
+    const out = [0, 1, 2].map(() => {
+      const g = rig();
+      g.part.holeDia_cold_mm = 39.0;
+      g.machine.edgeR_cold_mm = 19.5;
+      g.machine.calib_um = 5;
+      cutOnce(g, { bite_mm: 0.4, feed_mm_rev: 0.12, vc: 120, label: 't' });
+      return g.part.holeDia_cold_mm;
+    });
+    const clean = (() => {
+      const g = rig();
+      cutOnce(g, { bite_mm: 0.4, feed_mm_rev: 0.12, vc: 120, label: 't' });
+      return g.part.holeDia_cold_mm;
+    })();
+    return out[0] > clean && Math.abs(out[0] - out[1]) < 1e-9 && Math.abs(out[1] - out[2]) < 1e-9;
+  })());
+  ok('CAL-3', 'calibration puts it back on the money', (() => {
+    const g = rig();
+    g.machine.calib_um = 12;
+    const r = G.calibrateMachine(g, { cost: 260, minutes: 25 });
+    return r.ok && g.machine.calib_um === 0 && r.before === 12;
+  })());
+  ok('CAL-4', 'and cannot be done with the spindle turning',
+    G.calibrateMachine({ machine: { spindle_on: true } }).ok === false);
+
+  /* ── and the day it stops ─────────────────────────────────────────────── */
+  ok('FAIL-1', 'a worse machine has a shorter mean time between failures',
+    G.FAILURE.mtbf_min_at_condition(300) < G.FAILURE.mtbf_min_at_condition(900));
+  ok('FAIL-2', 'it stops when it has run as long as it was going to', (() => {
+    const g = rig();
+    /* AT OR BELOW the total, not above it — `checkFailure` fires when the total
+       has REACHED the threshold, and the first version of this test set the
+       threshold just past it and asserted a failure that correctly did not
+       happen. */
+    g.machine.fail_at_cut_min = g.machine.cut_min_total;
+    const broke = G.checkFailure(g);
+    return broke.failed && g.machine.down_until !== null;
+  })());
+  ok('FAIL-3', 'and a stopped machine cuts nothing', (() => {
+    const g = rig();
+    g.machine.down_until = 100;
+    const r = cutOnce(g, { bite_mm: 0.4, feed_mm_rev: 0.12, vc: 120, label: 't' });
+    return r.ok === false && r.why === 'MACHINE_DOWN';
+  })());
+  ok('FAIL-4', 'a repair puts it back and resets the clock on the next failure', (() => {
+    const g = rig();
+    g.machine.fail_at_cut_min = 0; g.machine.cut_min_total = 1;
+    G.checkFailure(g);
+    const r = G.repairMachine(g);
+    return r.ok && g.machine.down_until === null && g.machine.fail_at_cut_min > 0 &&
+      g.machine.condition > r.before;
+  })());
+}
+
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);
 if (failed.length) {
@@ -384,6 +500,7 @@ if (failed.length) {
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'}  ${pass} passed, ${fail} failed, ${rows.length} total`);
 if (fail === 0) console.log('the system forecasts the machine it surveyed, and is wrong exactly when that is not the machine');
 process.exit(fail === 0 ? 0 : 1);
+
 
 
 

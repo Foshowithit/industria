@@ -22,7 +22,7 @@ import {
   MATERIALS, MACHINES, makeTool,
   removalStep, stability, assess, tipDeflection_um,
   boringStep,
-  itWidth_um, toleranceCheck, KERNEL_VERSION, errorBudget,
+  itWidth_um, toleranceCheck, KERNEL_VERSION, errorBudget, specificCuttingForce, KC_WEAR_GAIN,
 } from './kernel.mjs';
 import { JOBS } from './game.mjs';
 
@@ -414,6 +414,36 @@ checkTrue('K4-EXT-6', 'every grade any job spec asks for is computable',
     { tool: bar, material: MATERIALS.steel_4140 }, VMC);
   check('BORE-8', 'an explicit n with no bore falls back to the bar', bare.vc_m_min,
     Math.PI * 20 * 1000 / 1000, 1e-9, 1e-9, '');
+}
+
+/* ── WEAR-*  A WORN INSERT CUTS HARDER, NOT DULLER ───────────────────────
+   The file had no wear term, so a bar was as sharp on its last part as its
+   first. These assert the ordering the physics requires — and that F = kc·b·h
+   still holds, because wear enters through kc and must not quietly break the
+   force law the rest of the module is built on. */
+{
+  const tool = makeTool({ D: 20, z: 1, stickout_L: 45 });
+  const fresh = { ...tool, wear: 0 };
+  const worn = { ...tool, wear: 1 };
+  const rip = { b: 0.4, feed: 0.12, vc: 120, bore_D_mm: 40 };
+  const a = boringStep(rip, { tool: fresh, material: MATERIALS.steel_4140 }, VMC, {});
+  const b = boringStep(rip, { tool: worn, material: MATERIALS.steel_4140 }, VMC, {});
+
+  checkTrue('WEAR-K1', 'a worn edge raises the specific cutting force', b.kc > a.kc);
+  check('WEAR-K2', 'by the stated gain at full wear', b.kc / a.kc, 1 + KC_WEAR_GAIN, 1e-9, '');
+  checkTrue('WEAR-K3', 'and so raises the cutting force at the same chip', b.F_mean_N > a.F_mean_N);
+  checkTrue('WEAR-K4', 'and the power it needs', b.Pc_kW > a.Pc_kW);
+  check('WEAR-K5', 'but F = kc*b*h still holds — wear enters through kc and nothing else',
+    b.F_mean_N / a.F_mean_N, b.kc / a.kc, 1e-6, '');
+  checkTrue('WEAR-K6', 'half wear is halfway', (() => {
+    const h = boringStep(rip, { tool: { ...tool, wear: 0.5 }, material: MATERIALS.steel_4140 }, VMC, {});
+    return h.kc > a.kc && h.kc < b.kc;
+  })());
+  checkTrue('WEAR-K7', 'a bar with no wear field at all behaves exactly as before',
+    Math.abs(boringStep(rip, { tool, material: MATERIALS.steel_4140 }, VMC, {}).kc - a.kc) < 1e-9);
+  checkTrue('WEAR-K8', 'and the wear cannot be driven out of range',
+    Math.abs(specificCuttingForce(MATERIALS.steel_4140, 0.12, 9) -
+             specificCuttingForce(MATERIALS.steel_4140, 0.12, 1)) < 1e-9);
 }
 
 /* ── report ───────────────────────────────────────────────────────────── */

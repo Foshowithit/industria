@@ -1601,6 +1601,8 @@ function pressKey(id) {
     case 'bite_up':   stepRoughBite(1);  return;
     case 'book':      readBook();  return;
     case 'maint':     callMaint(); return;
+    case 'insert':    changeEdge(); return;
+    case 'calib':     callCalibration(); return;
     case 'touch':     doTouchOff(); return;
     case 'warm':      doWarmUp();   return;
     case 'rough':     doRough();    return;
@@ -1846,6 +1848,49 @@ function readBook() {
   say('Tooling sheet', body, opts);
   if (REC) REC.action('read_book', { bar: b.barId, bite_mm: b.bite_mm, feed: b.feed_mm_rev,
     sheet_condition: b.assumes.machineCondition, machine_condition: GAME.machine.condition });
+}
+
+/** A NEW EDGE. Taylor makes this unavoidable rather than optional: at 320 m/min
+ *  an insert is done inside a minute of cutting, so running fast is paid for in
+ *  edges — which is the cost the spindle override needed in order to be a
+ *  decision rather than a free win. */
+function changeEdge() {
+  const r = G.changeInsert(GAME, { cost: G.INSERT.cost, minutes: G.INSERT.change_min });
+  if (!r.ok) {
+    say('You', 'Not with it turning. Stop the spindle.');
+    if (REC) REC.refusal('change_insert', r.why, { clock_min: GAME.clock_min });
+    return;
+  }
+  GAME.machine.spindle_on = false;
+  if (GAME.state_clock_floor > clocks.job_min + opMin) opMin = GAME.state_clock_floor - clocks.job_min;
+  clockFloorMin = Math.max(clockFloorMin, GAME.state_clock_floor);
+  GAME.clock_min = clocks.job_min + opMin;
+  if (SHOP) SHOP.cash -= r.cost;
+  toast(`<b>New edge.</b> The old one had <b>${(r.before * 100).toFixed(0)}%</b> of its ` +
+    `life gone.<br>${r.minutes} minutes and ${money(r.cost)}.`, 6000);
+  logLine(`Changed the insert — the old edge was <b>${(r.before * 100).toFixed(0)}%</b> used. ` +
+    `${r.minutes} min, ${money(r.cost)}.`);
+}
+
+/** PUT THE MACHINE BACK ON ITS OWN SCALE. Wear makes a machine cut differently
+ *  every time; a calibration error makes it cut wrong the SAME way every time,
+ *  which is worse, because a machinist trusts a machine that repeats. */
+function callCalibration() {
+  const r = G.calibrateMachine(GAME, { cost: G.CALIB.cost, minutes: G.CALIB.minutes });
+  if (!r.ok) {
+    say('You', 'Calibration is done with the machine stopped.');
+    if (REC) REC.refusal('calibrate', r.why, { clock_min: GAME.clock_min });
+    return;
+  }
+  if (GAME.state_clock_floor > clocks.job_min + opMin) opMin = GAME.state_clock_floor - clocks.job_min;
+  clockFloorMin = Math.max(clockFloorMin, GAME.state_clock_floor);
+  GAME.clock_min = clocks.job_min + opMin;
+  if (SHOP) SHOP.cash -= r.cost;
+  toast(`<b>Calibrated.</b> The scale was <b>${r.before.toFixed(1)} µm</b> out — ` +
+    `every part had been coming off that much the same way wrong.<br>` +
+    `${r.minutes} minutes and ${money(r.cost)}.`, 7000);
+  logLine(`Calibrated the machine. It had been reading <b>${r.before.toFixed(1)} µm</b> out. ` +
+    `${r.minutes} min, ${money(r.cost)}.`);
 }
 
 /** Book the machine in. The only thing that puts condition back, and it cannot
@@ -2098,6 +2143,17 @@ function machinePanel() {
        player can see it without opening anything. */
     F('machine', `${GAME.machine.condition.toFixed(0)} of 1000 · ` +
       `TIR ${G.runout_um_for(GAME.machine.condition).toFixed(1)} µm`) +
+    /* THE THREE THINGS THAT GO WRONG THAT ARE NOT THE MACHINE'S STRUCTURE.
+       A player has to be able to see the edge running out and the scale
+       drifting, or neither is a decision — and they have to see the machine
+       DOWN, because "why will it not cut" is a question the panel must answer. */
+    F('edge', GAME.tool ? `${(GAME.machine.insert_wear * 100).toFixed(0)}% of its life used` +
+      (GAME.machine.insert_wear > 0.8 ? ' <b>— change it</b>' : '') : '<i>no bar loaded</i>') +
+    F('scale', GAME.machine.calib_um < 0.05 ? 'on the money'
+      : `<b>${GAME.machine.calib_um.toFixed(1)} µm out</b>` +
+        (GAME.machine.calib_um > 6 ? ' <b>— recalibrate</b>' : '')) +
+    (GAME.machine.down_until !== null && GAME.machine.down_until !== undefined
+      ? F('machine', '<b style="color:#e05a4e">DOWN — waiting on a fitter</b>') : '') +
     /* WHAT THE SPINDLE IS SET TO, which is a decision the operator makes and
        not a reading of what the last cut did. The row above reports the rpm and
        surface speed the last pass actually ran at; this one is the setting. */
@@ -3265,7 +3321,26 @@ function startShift(jobId, { announce = true, carry = true, newDay = null } = {}
   /* THE BUSINESS. Created once, on the first clock-on, from the clients that
      actually appear in JOBS — so a job spec naming a client the shop has never
      heard of is impossible rather than merely unlikely. */
-  if (!SHOP) SHOP = newShop({ cash: 0, clients: [...new Set(G.JOBS.map((j) => j.client_id))] });
+  if (!SHOP) {
+    SHOP = newShop({ cash: 0, clients: [...new Set(G.JOBS.map((j) => j.client_id))] });
+    /* ══ THE MACHINE BELONGS TO THE SHOP, NOT TO THE JOB ═══════════════════
+       `startShift` rebuilds GAME from a fresh job spec on purpose — nothing of
+       the old PART may leak across. But the machine is not the part. Its
+       condition, its scale and the life left in the edge in its spindle are
+       facts about a physical object that was there before this job and will be
+       there after it, and until now every one of them reset to new at 05:55.
+
+       THE CONSEQUENCE WAS NOT SUBTLE: no machine could ever age. A shop could
+       run a hundred parts over a hundred mornings and open each one with a
+       spindle at condition 800 and a scale exactly on the money, which made
+       `maintain`, `calibrate` and the whole wear model into things that only
+       mattered inside a single shift. */
+    SHOP.machine = {
+      condition: G.WEAR.condition_open, cut_min_total: 0, calib_um: 0,
+      insert_wear: 0, down_until: null,
+      fail_at_cut_min: G.FAILURE.mtbf_min_at_condition(G.WEAR.condition_open),
+    };
+  }
   /* A NEW MORNING COSTS THE SHOP ITS OVERHEAD. `carry` distinguishes clocking
      on for the first time in a build that has no save from turning up for
      tomorrow: the first morning is not a continuation of a business, and
@@ -3290,6 +3365,14 @@ function startShift(jobId, { announce = true, carry = true, newDay = null } = {}
 
   /* THE DRAWING ON THE WALL IS THIS JOB. */
   paintDrawing(spec);
+  /* THE MACHINE IT ALREADY HAD THIS MORNING. Seeded after `newGame` because the
+     thermal state is legitimately fresh — a machine that has been off overnight
+     IS cold — while everything that wears is not. */
+  Object.assign(GAME.machine, {
+    condition: SHOP.machine.condition, cut_min_total: SHOP.machine.cut_min_total,
+    calib_um: SHOP.machine.calib_um, insert_wear: SHOP.machine.insert_wear,
+    down_until: SHOP.machine.down_until, fail_at_cut_min: SHOP.machine.fail_at_cut_min,
+  });
   buildPartMesh(spec.start_hole_dia_mm, spec.bore_depth_mm);
   /* THE SYSTEM READS THE MACHINE WHEN IT CLOCKS ON, and not again until it is
      asked. A fresh survey on a fresh morning is what makes the drift WITHIN a
@@ -3390,6 +3473,14 @@ function frame(now) {
        The invariant, from world.mjs and kept here: you can lose this job for a
        DECISION, never for taking a long time to UNDERSTAND something. Nothing
        below may punish the player for being new. */
+    /* THE MACHINE'S DURABLE STATE GOES BACK TO THE SHOP EVERY FRAME. One write
+       point, so the job's machine and the shop's machine cannot drift apart —
+       and if they ever did, the shop's would be the one that matters. */
+    Object.assign(SHOP.machine, {
+      condition: GAME.machine.condition, cut_min_total: GAME.machine.cut_min_total,
+      calib_um: GAME.machine.calib_um, insert_wear: GAME.machine.insert_wear,
+      down_until: GAME.machine.down_until, fail_at_cut_min: GAME.machine.fail_at_cut_min,
+    });
     W.advanceClocks(clocks, dtReal);
     if (clocks.job_min + opMin < clockFloorMin) opMin = clockFloorMin - clocks.job_min;
     GAME.clock_min = clocks.job_min + opMin;

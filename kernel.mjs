@@ -169,8 +169,33 @@ export function meanChipThickness(fz_mm, ae_mm, D_mm) {
 }
 
 /** Kienzle specific cutting force at mean chip thickness: kc = kc1_1*h^-mc */
-export function specificCuttingForce(mat, h_mm) {
-  return h_mm <= 0 ? Infinity : mat.kc1_1 * Math.pow(h_mm, -mat.mc);
+/* ══ TOOL WEAR RAISES THE CUTTING FORCE ══════════════════════════════════
+   This module had no wear term at all: `makeTool` carried a diameter, an edge
+   count and a stickout, and `specificCuttingForce` was a pure function of the
+   material and the chip thickness. So an insert was as sharp on its last part as
+   on its first, forever, in a game about why parts come out wrong.
+
+   A WORN INSERT IS NOT A DULLER CUTTER, IT IS A MORE EXPENSIVE ONE. Flank wear
+   rubs: the clearance face ploughs against the finished surface instead of
+   passing behind it, and the specific cutting force rises with the wear land.
+   The standard account puts that rise at roughly a fifth to a third over the
+   useful life of an edge, which is why a machine that was comfortable at the
+   start of a run can be at its power limit by the end of it — with nothing
+   changed except that the insert has been cutting.
+
+   WEAR IS A FRACTION OF THE EDGE'S LIFE, 0 to 1, not a dimension. What the
+   land actually measures is tool and coating dependent and this module does not
+   model it; what it models is the consequence, and `wear` is the dial for it.
+
+   CALIBRATED, NOT DERIVED: `KC_WEAR_GAIN` is 0.32, the top of the range above,
+   and it is stated here so it can be argued with. The ORDERING is physical and
+   is what the tests assert — more wear, more force, at any chip thickness. */
+export const KC_WEAR_GAIN = 0.32;
+
+export function specificCuttingForce(mat, h_mm, wearFrac = 0) {
+  if (h_mm <= 0) return Infinity;
+  const w = Math.max(0, Math.min(1, wearFrac || 0));
+  return mat.kc1_1 * Math.pow(h_mm, -mat.mc) * (1 + KC_WEAR_GAIN * w);
 }
 
 /** Peak-to-mean tangential force ratio. Interrupted milling is not steady: the
@@ -334,7 +359,9 @@ export function boringStep(rip, params, machine) {
 
   // Chip thickness IS the feed per revolution. No immersion factor: the bar is
   // in continuous contact, so `b` and `h` are the whole story.
-  const kc = specificCuttingForce(material, h);
+  /* THE INSERT'S OWN STATE, read off the tool. A bar carries how much of its
+     edge life is gone; nothing else in this kernel has to know about it. */
+  const kc = specificCuttingForce(material, h, tool.wear ?? 0);
   // One revolution lays down a helical band of width b and thickness h; at vc
   // m/min that band is vc*1000 mm long, so:
   const MRR = b * h * vc_m_min * 1000;
