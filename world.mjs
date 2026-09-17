@@ -53,9 +53,20 @@ export function cutAcoustics(step, opts = {}) {
   const { z = 1, verdict = 'CUTS CLEAN', rubbing = false } = opts;
 
   if (rubbing) {
-    /* No impulse train. Continuous friction excitation, narrowband, high. */
+    /* No impulse train. Continuous friction excitation, narrowband, high.
+
+       BUT THE SPINDLE DOES NOT STOP WHEN THE INSERT RUBS. This branch used to
+       return `rpm: 0, spindle_Hz: 0`, which silenced the bearing whine and the
+       1x/2x tones for the whole scene — and that contradicts this file's own
+       stated principle one function down: "a spindle turning in air is never
+       silent". A rubbing cut is a spindle at speed with the edge skidding, so
+       the spindle is still there and only the impulse train is missing. The step
+       is in the argument list; there was never any need to discard it. */
+    const n = (step && Number.isFinite(step.n) && step.n > 0) ? step.n : 0;
     return {
-      state: 'RUBBING', rpm: 0, spindle_Hz: 0, tooth_Hz: 0, load: 0, bite_um: 0,
+      state: 'RUBBING', rpm: n, spindle_Hz: n / 60, tooth_Hz: 0,
+      load: step ? clamp01(step.power_frac) : 0,
+      bite_um: (step?.b_radial_mm ?? 0) * 1000,
       squeal_Hz: 1900, harmonic_gain: 0.0, noise_gain: 0.7,
       label: 'the insert is rubbing, not cutting',
     };

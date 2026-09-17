@@ -66,7 +66,16 @@ export const delayFor = (distance_m) => Math.max(0, distance_m) / SPEED_OF_SOUND
    THE ENGINE
    ══════════════════════════════════════════════════════════════════════════════ */
 
-export function createAudio({ busy = false } = {}) {
+/* ── `context` IS FOR VERIFICATION AND NOTHING ELSE ────────────────────────
+   Pass an OfflineAudioContext and the whole audio graph builds inside it, so a
+   test can drive the shop through a scene and RENDER it, then measure what came
+   out. That is the only way this project can check sound without ears: the
+   brief's Gate A asks "does the machine sound right", no human has ever heard
+   this build, and "it should work" is not evidence.
+
+   It changes nothing when omitted — the page passes no context and gets the
+   same interactive AudioContext it always did. */
+export function createAudio({ busy = false, context = null } = {}) {
   let ctx = null;
   let master = null;
   const voices = new Map();          // id -> voice
@@ -75,8 +84,8 @@ export function createAudio({ busy = false } = {}) {
   function ensure() {
     if (ctx) return ctx;
     const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
-    if (!AC) return null;
-    ctx = new AC({ latencyHint: 'interactive' });
+    if (!AC && !context) return null;
+    ctx = context || new AC({ latencyHint: 'interactive' });
 
     master = ctx.createGain();
     master.gain.value = 0.9;
@@ -133,7 +142,13 @@ export function createAudio({ busy = false } = {}) {
     if (started) return true;
     started = true;
 
-    if (ctx.state === 'suspended') ctx.resume();
+    /* An OfflineAudioContext starts 'suspended' too, and resume() on one is a
+       no-op that some implementations reject — so the state is checked and the
+       call is guarded, because a throw here would take the whole graph down
+       before a single sample was scheduled. */
+    if (ctx.state === 'suspended' && typeof ctx.resume === 'function' && !ctx.startRendering) {
+      try { ctx.resume(); } catch (e) { /* offline contexts do not need it */ }
+    }
 
     /* ROOM TONE — a large industrial building. Two octaves of low rumble plus
        a very quiet high hiss (HVAC + lighting). Present always, at low level:
@@ -176,8 +191,36 @@ export function createAudio({ busy = false } = {}) {
     if (voices.has(id)) return voices.get(id);
     if (!ensure()) return null;
 
+    /* ══ THIS GAIN WAS ZERO AND NOTHING EVER RAISED IT ═══════════════════════
+       Every generator in this function — the bearing whine, the 1x and 2x
+       spindle tones, the impulse train, the rub, the chatter — routes through
+       `out` and `out` connects to the master. With `out.gain` at 0 the whole
+       machine voice was silent, and it had been silent since it was written.
+
+       MEASURED, not deduced. `tools/audio-probe.html` renders each scene offline
+       through an OfflineAudioContext and compares it against the room tone
+       alone. Every machine scene came back within 8 % of the room:
+
+           a clean cut         0.935 x the room
+           idle spindle        0.954 x
+           chattering          1.006 x
+           a cut 14 m away     0.923 x
+
+       So a player has only ever heard the building — the HVAC rumble, the mains
+       hum, one-shot clacks and footsteps. Four machines, one compressor and a
+       radio with a working synthesis graph and no sound coming out of any of
+       them, and nothing in the game said so, because there is nothing to say it.
+
+       WHY IT SURVIVED: this is the same species as `M.iron`, `job.depth_mm` and
+       `describeBore` — a correct thing that is never connected — and it is the
+       one of the four that no screenshot and no unit test could ever have shown,
+       because its only symptom is silence and its only evidence is a measurement.
+
+       THE SUB-GAINS BELOW WERE TUNED AGAINST A SILENT OUTPUT, so their relative
+       balance is unverified: nobody has heard any of it. They are left exactly as
+       written and the probe now reports what they actually produce. */
     const out = ctx.createGain();
-    out.gain.value = 0;
+    out.gain.value = 1.0;
     out.connect(master);
 
     /* Spindle whine — bearing noise. Band-passed noise around a tone that

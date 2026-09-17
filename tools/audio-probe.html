@@ -1,0 +1,256 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>INDUSTRIA — audio probe</title>
+<style>
+  :root{--ink:#e8edf2;--dim:#8b98a6;--ok:#5fbf7a;--bad:#e05a4e;--warn:#e8a33d}
+  html,body{margin:0;background:#0a0d11;color:var(--ink);
+    font:13px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  #out{padding:18px;white-space:pre;max-width:1100px}
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .dim{color:var(--dim)} .warn{color:var(--warn)}
+  h1{font-size:14px;letter-spacing:.14em;color:var(--dim);font-weight:500;margin:0 0 14px}
+</style>
+<div id="out">rendering…</div>
+<script type="module">
+/* ══ THE AUDIO PROBE ═══════════════════════════════════════════════════════
+   §13 asks for sound as a SYSTEM — a spindle under load must not sound like a
+   spindle idling, and a rubbing cut must not sound like a cutting one — and no
+   human has ever heard this build. Neither has the agent that wrote it.
+
+   So the sound is MEASURED. `createAudio` takes an injected context, so each
+   scene below is rendered through an OfflineAudioContext with the same code the
+   page runs, and the result is analysed with a Goertzel bank at named
+   frequencies. Every assertion is a claim `world.mjs` already makes in a
+   comment, turned into a number:
+
+     · the tooth-passing line is "the dominant line in the spectrum of any
+       milling cut"  → a cut must have more energy at tooth_Hz than an idle
+       spindle at the same speed
+     · "a spindle turning in air is never silent and never changes pitch when
+       the cut starts"  → the 1x/2x spindle tone must be present in BOTH, at the
+       same frequency
+     · rubbing is "no impulse train, continuous friction excitation, narrowband,
+       high"  → LESS at tooth_Hz, MORE up at the squeal
+
+   This is not a substitute for ears. It cannot say whether the shop sounds
+   GOOD. It can say whether the model does what it claims, which is the half of
+   the question a machine can answer. */
+import { createAudio } from '../audio.mjs';
+import * as W from '../world.mjs';
+import * as K from '../kernel.mjs';
+
+const out = document.getElementById('out');
+const rows = [];
+const say = (html) => { rows.push(html); out.innerHTML = rows.join('\n'); };
+
+const SR = 44100, SECONDS = 2.0;
+
+/** Energy at one frequency, via Goertzel. Enough to fingerprint a scene. */
+function toneEnergy(x, f, sr = SR) {
+  const k = 2 * Math.cos(2 * Math.PI * f / sr);
+  let s1 = 0, s2 = 0;
+  for (let i = 0; i < x.length; i++) { const s0 = x[i] + k * s1 - s2; s2 = s1; s1 = s0; }
+  return Math.sqrt(Math.max(0, s1 * s1 + s2 * s2 - k * s1 * s2)) / x.length;
+}
+const rms = (x) => Math.sqrt(x.reduce((a, v) => a + v * v, 0) / x.length);
+
+/** Render one scene and fingerprint it. */
+async function render(label, build) {
+  const oc = new OfflineAudioContext(1, Math.round(SR * SECONDS), SR);
+  const AUD = createAudio({ context: oc });
+  AUD.start();
+  const claimed = build(AUD);
+  const buf = await oc.startRendering();
+  const all = buf.getChannelData(0);
+  /* The last second only: every gain in the graph slews at tau = 60 ms, so the
+     first second is the graph arriving, not the scene. */
+  const x = all.subarray(SR, all.length);
+  const f = claimed.probe;
+  return {
+    label, claim: claimed.claim, rms: rms(x),
+    tooth: toneEnergy(x, f.tooth_Hz),
+    sp1: toneEnergy(x, f.spindle_Hz),
+    sp2: toneEnergy(x, f.spindle_Hz * 2),
+    squeal: toneEnergy(x, 1900),
+    high: toneEnergy(x, 6000),
+    state: claimed.state,
+  };
+}
+
+/* ── the scenes ───────────────────────────────────────────────────────────── */
+const VM = K.MACHINES.vmc_40taper_7k5;
+const mat = K.MATERIALS.steel_4140;
+const tool = K.makeTool({ D: 20, z: 1, stickout_L: 45 });
+const cutStep = (b, feed) => K.assessBoring({ b, feed, vc: 120, bore_D_mm: 36 },
+  { tool, material: mat }, VM, { runout_um: 5 }).step;
+
+const N = 1900;                                   // a shared spindle speed
+const idle = W.idleAcoustics(VM, { rpmFrac: N / VM.n_max, spindle_on: true });
+const step = cutStep(0.4, 0.12);
+const cutA = W.cutAcoustics(step, { z: 1, verdict: 'CUTS CLEAN' });
+const rubA = W.cutAcoustics(step, { z: 1, rubbing: true });
+const chatA = W.cutAcoustics(step, { z: 1, verdict: 'CHATTER' });
+const cut3 = W.cutAcoustics(step, { z: 3, verdict: 'CUTS CLEAN' });
+
+const scenes = [
+  /* THE BASELINE. The room bed is always present and is not part of any
+     machine's scene, so every machine measurement has to be read against it or
+     the bed is being measured instead of the machine. This scene exists because
+     the first run of this probe could not tell the difference — see the note
+     under the table. */
+  ['nothing: the room only', () => ({ probe: { tooth_Hz: N / 60, spindle_Hz: N / 60 },
+    state: 'NONE', claim: 'the building, with no machine running' })],
+  ['idle spindle, 1900 rpm', (AUD) => {
+    AUD.setMachine('mine', idle, { distance_m: 2, gain: 1 });
+    /* THE PROBE FREQUENCY IS 3x THE REV RATE, not 1x, so that this scene's
+       `tooth` figure is measured at the SAME FREQUENCY the 3-edge cut's is. The
+       first version compared the idle at 31 Hz against the cutter at 95 Hz and
+       called it a failure of the audio; it was a failure of the arithmetic. A
+       measurement only means something against another measurement at the same
+       frequency. */
+    return { probe: { tooth_Hz: (N / 60) * 3, spindle_Hz: N / 60 }, state: 'IDLING',
+      claim: 'bearing whine and motor hum at 1x and 2x rpm, no impulse train' };
+  }],
+  ['a clean cut at the same speed', (AUD) => {
+    /* The spindle tone is set from the acoustics' own rpm, so the comparison
+       against idle is at the same 1x. */
+    const a = { ...cutA, rpm: N, spindle_Hz: N / 60, tooth_Hz: N / 60 };
+    AUD.setMachine('mine', a, { distance_m: 2, gain: 1 });
+    return { probe: { tooth_Hz: N / 60, spindle_Hz: N / 60 }, state: a.state,
+      claim: 'the same spindle tone PLUS the tooth-passing impulse train' };
+  }],
+  ['the insert rubbing', (AUD) => {
+    AUD.setMachine('mine', rubA, { distance_m: 2, gain: 1 });
+    return { probe: { tooth_Hz: cutA.tooth_Hz, spindle_Hz: 0 }, state: 'RUBBING',
+      claim: 'no impulse train; narrowband squeal at 1900 Hz' };
+  }],
+  /* A 3-EDGE CUTTER, because with a single-point bar the tooth-passing rate IS
+     the revolution rate and "the impulse train appears" cannot be told apart
+     from "the spindle tone is there". The claim in world.mjs is about milling
+     cutters and this is the only scene where it is testable. */
+  ['a 3-edge cut, same speed', (AUD) => {
+    const a = { ...cut3, rpm: N, spindle_Hz: N / 60, tooth_Hz: (N / 60) * 3 };
+    AUD.setMachine('mine', a, { distance_m: 2, gain: 1 });
+    return { probe: { tooth_Hz: (N / 60) * 3, spindle_Hz: N / 60 }, state: a.state,
+      claim: 'the tooth line at 3x the rev rate' };
+  }],
+  ['the bar chattering', (AUD) => {
+    const a = { ...chatA, rpm: N, spindle_Hz: N / 60, tooth_Hz: N / 60 };
+    AUD.setMachine('mine', a, { distance_m: 2, gain: 1 });
+    return { probe: { tooth_Hz: N / 60, spindle_Hz: N / 60 }, state: a.state,
+      claim: 'the cut, with the bar ringing on top of it' };
+  }],
+  ['the same cut, 1 m away', (AUD) => {
+    const a = { ...cutA, rpm: N, spindle_Hz: N / 60, tooth_Hz: N / 60 };
+    AUD.setMachine('mine', a, { distance_m: 1, gain: 1 });
+    return { probe: { tooth_Hz: N / 60, spindle_Hz: N / 60 }, state: a.state,
+      claim: 'loud' };
+  }],
+  ['the same cut, 14 m away', (AUD) => {
+    const a = { ...cutA, rpm: N, spindle_Hz: N / 60, tooth_Hz: N / 60 };
+    AUD.setMachine('mine', a, { distance_m: 14, gain: 1 });
+    return { probe: { tooth_Hz: N / 60, spindle_Hz: N / 60 }, state: a.state,
+      claim: 'quiet' };
+  }],
+];
+
+const R = {};
+for (const [label, build] of scenes) R[label] = await render(label, build);
+
+/* ── the table ────────────────────────────────────────────────────────────── */
+const F = (v) => v.toExponential(2);
+say('<h1>INDUSTRIA · AUDIO PROBE · offline render, ' + SR + ' Hz, ' + SECONDS + ' s</h1>');
+say('scene                          rms      @tooth     @1x        @2x        @1900      @6k       claim');
+for (const [label] of scenes) {
+  const r = R[label];
+  say(label.padEnd(30) + ' ' + F(r.rms) + '  ' + F(r.tooth) + '  ' + F(r.sp1) + '  ' +
+      F(r.sp2) + '  ' + F(r.squeal) + '  ' + F(r.high) + '  ' +
+      '<span class="dim">' + r.claim + '</span>');
+}
+
+/* ── the assertions ───────────────────────────────────────────────────────── */
+const ID = R['idle spindle, 1900 rpm'];
+const CU = R['a clean cut at the same speed'];
+const RU = R['the insert rubbing'];
+const CH = R['the bar chattering'];
+const N1 = R['the same cut, 1 m away'];
+const N14 = R['the same cut, 14 m away'];
+
+const ROOM = R['nothing: the room only'];
+say('');
+say('THE ROOM BED, and every machine scene measured against it:');
+say('  room only            rms ' + F(ROOM.rms) +
+    '   @tooth ' + F(ROOM.tooth) + '   @1x ' + F(ROOM.sp1));
+for (const [label] of scenes.slice(1)) {
+  const r = R[label];
+  say(('  ' + label).padEnd(23) + ' rms ' + F(r.rms) +
+      '   x' + (r.rms / ROOM.rms).toFixed(2) + ' over the room' +
+      '   @tooth x' + (r.tooth / Math.max(ROOM.tooth, 1e-12)).toFixed(2));
+}
+
+const checks = [];
+const c = (id, claim, pass, detail) => checks.push({ id, claim, pass: !!pass, detail });
+
+const C3 = R['a 3-edge cut, same speed'];
+c('A1', 'a multi-edge cut leaves a tooth line an idle spindle does not',
+  C3.tooth > ID.tooth * 5, `3-edge @3x-rev ${F(C3.tooth)} vs idle ${F(ID.tooth)}`);
+c('A2', 'the spindle is not silent in air — it has its own tone',
+  ID.sp1 > 1e-5, `idle @1x ${F(ID.sp1)}`);
+c('A3', 'and it keeps that tone when the cut starts (pitch does not change)',
+  CU.sp1 > ID.sp1 * 0.4, `cut @1x ${F(CU.sp1)} vs idle ${F(ID.sp1)}`);
+c('A4', 'rubbing has NO impulse train',
+  RU.tooth < CU.tooth * 0.5, `rub ${F(RU.tooth)} vs cut ${F(CU.tooth)}`);
+c('A5', 'and its energy is up at the squeal instead',
+  RU.squeal > RU.tooth, `rub @1900 ${F(RU.squeal)} vs @tooth ${F(RU.tooth)}`);
+c('A6', 'chatter is not the same sound as a clean cut',
+  Math.abs(CH.tooth - CU.tooth) > 1e-6 || Math.abs(CH.squeal - CU.squeal) > 1e-6,
+  `tooth ${F(CH.tooth)} vs ${F(CU.tooth)}; 1.9k ${F(CH.squeal)} vs ${F(CU.squeal)}`);
+c('A7', 'distance makes it quieter',
+  N14.rms < N1.rms * 0.75, `14 m ${F(N14.rms)} vs 1 m ${F(N1.rms)}`);
+c('A0', 'a machine is AUDIBLE over the room bed at all',
+  CU.rms > ROOM.rms * 1.5, `cut ${F(CU.rms)} vs room ${F(ROOM.rms)}`);
+
+say('');
+let pass = 0, fail = 0;
+for (const k of checks) {
+  if (k.pass) pass++; else fail++;
+  say((k.pass ? '<span class="ok">PASS</span>' : '<span class="bad">FAIL</span>') +
+      '  ' + k.id.padEnd(5) + k.claim +
+      '\n      <span class="dim">' + k.detail + '</span>');
+}
+say('');
+say((fail === 0 ? '<span class="ok">PASS</span>' : '<span class="bad">FAIL</span>') +
+    `  ${pass} passed, ${fail} failed, ${checks.length} total`);
+say('<span class="warn">NO HUMAN HAS LISTENED TO THIS.</span> ' +
+    '<span class="dim">These numbers say the model does what it claims. They cannot say whether the shop sounds good.</span>');
+
+/* ── and the two properties that are not taste ─────────────────────────────
+   Nobody here can say whether this sounds GOOD. Two things can still be
+   settled numerically: that it does not clip, and that the compressor is
+   earning its place. Both are the reasons the mix exists at all. */
+{
+  const four = new OfflineAudioContext(1, Math.round(SR * SECONDS), SR);
+  const A4 = createAudio({ context: four });
+  A4.start();
+  const a = { ...cutA, rpm: N, spindle_Hz: N / 60, tooth_Hz: N / 60 };
+  for (const [i, d] of [2, 6, 9, 13].entries()) {
+    A4.setMachine('m' + i, a, { distance_m: d, gain: 1, pan: (i - 1.5) / 2 });
+  }
+  const buf4 = await four.startRendering();
+  const x4 = buf4.getChannelData(0).subarray(SR);
+  let peak = 0;
+  for (let i = 0; i < x4.length; i++) { const v = Math.abs(x4[i]); if (v > peak) peak = v; }
+  const one = R['a clean cut at the same speed'];
+  const rms4 = Math.sqrt(x4.reduce((s, v) => s + v * v, 0) / x4.length);
+  c('A8', 'four machines at once do not clip',
+    peak < 0.99, `peak ${peak.toFixed(3)} (1.0 is full scale)`);
+  c('A9', 'the mix bus compresses — four machines are not four times one',
+    rms4 / one.rms < 3.0, `4 machines = ${(rms4 / one.rms).toFixed(2)}x one machine`);
+  say('');
+  say('FOUR MACHINES: peak ' + peak.toFixed(3) + ' · rms ' + F(rms4) +
+      ' · ' + (rms4 / one.rms).toFixed(2) + 'x a single machine');
+  R['four machines'] = { rms: rms4 };
+}
+
+/* A machine-readable blob for a probe to read without parsing the page. */
+window.__audioProbe = { ok: fail === 0, pass, fail, checks, scenes: R };
+</script>
