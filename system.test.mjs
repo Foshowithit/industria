@@ -331,6 +331,12 @@ function rigged({ condition = WEAR.condition_open } = {}) {
    right for J1 and wrong for J3 is exactly the failure being guarded against. */
 {
   const { drawingFor, JOBS } = await import('./game.mjs');
+  const { bandUm } = await import('./world.mjs');
+  /* The widths the four jobs declare, written out rather than derived — this is
+     the independent copy by design. Every other copy in the build reads the
+     helper; if the helper and this disagree, one of them is wrong and the suite
+     says so instead of the page printing a third number. */
+  const DECLARED_BAND_UM = { J1: 16, J2: 30, J3: 11, J4: 74 };
   const plus3 = (job) => '+' + (job.band_high_mm - job.nominal_mm).toFixed(3);
   const minus3 = (job) => ((job.band_low_mm - job.nominal_mm) >= 0 ? '+' : '') +
     (job.band_low_mm - job.nominal_mm).toFixed(3);
@@ -364,6 +370,19 @@ function rigged({ condition = WEAR.condition_open } = {}) {
        three places, which is the property that matters. */
     ok(`DWG-${job.id}-text`, `${job.id}: the callout carries both limits to three places`,
       d1.tol_text.includes(plus3(job)) && d1.tol_text.includes(minus3(job)));
+    /* THE PRINTED WIDTH IS THE SHEET'S WIDTH. The board card, the offer line and
+       the traveler panel print a band in whole microns; the sheet prints one
+       too. The page used to carry three inline copies of the subtraction, which
+       is three chances to print three widths for one band. `bandUm` is the one
+       derivation they read now, asserted here against the sheet's independent
+       arithmetic and against the width the job declares — so a band that moved
+       is caught rather than quietly reprinted. */
+    eq(`DWG-${job.id}-width`, `${job.id}: the printed band width is whole microns`,
+      bandUm(job), Math.round((job.band_high_mm - job.band_low_mm) * 1000));
+    eq(`DWG-${job.id}-declared`, `${job.id}: and it is the width the job declares`,
+      bandUm(job), DECLARED_BAND_UM[job.id]);
+    eq(`DWG-${job.id}-sheet`, `${job.id}: and the sheet agrees with the page`,
+      d1.band_um, bandUm(job));
   }
   /* And the sheet is a sheet: a drawing with no title block or no datum is a
      sketch, and the brief's Gate A asks whether the drawing READS right. */

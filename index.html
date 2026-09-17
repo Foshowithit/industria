@@ -7,7 +7,13 @@
 <title>INDUSTRIA — your first shift at Halvorsen Pumps</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2314181d'/><circle cx='16' cy='16' r='9' fill='none' stroke='%237d8b98' stroke-width='5'/></svg>">
 <style>
-  :root{ --ink:#e8edf2; --dim:#8b98a6; --warn:#e8a33d; --bad:#e05a4e; --ok:#5fbf7a; --panel:rgba(10,14,18,.82); }
+  /* THE BACKDROP HAS TO BE DARKER THAN WHAT IS BEHIND IT, OR YOU READ THE
+     WORLD THROUGH THE PRINTING. At .82 a cold viewer photographed the shop's own
+     DIAL and SPINDLE signage showing through the machine panel, and the panel's
+     numbers and the machine's numbers arrived on the same few pixels. .93 is
+     still a panel you can see the shop through — the point is that the type on
+     it wins. */
+  :root{ --ink:#e8edf2; --dim:#8b98a6; --warn:#e8a33d; --bad:#e05a4e; --ok:#5fbf7a; --panel:rgba(10,14,18,.93); }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden;background:#0a0d11;color:var(--ink);
     font:14px/1.45 ui-monospace,"SF Mono",Menlo,Consolas,monospace}
@@ -15,7 +21,17 @@
   #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 62%,rgba(0,0,0,.32) 100%)}
 
   /* ── diegetic HUD: no quest arrows, no floating clutter (§48) ───────────── */
-  .hud{position:fixed;pointer-events:none;text-shadow:0 1px 3px #000}
+  /* THE HUD HAS TO SURVIVE A LIT SCREEN BEHIND IT. A 3px drop shadow is enough
+     over a wall and it is nothing over an emissive display: the pendant's own
+     screen is the brightest thing in the room, it stands at the left of the
+     frame on the walk in and at the right of the frame at the machine, and a
+     cold viewer caught both ends of the same fault — the job title printed
+     through the green STOPPED screen and read as "garbled and overstruck", and
+     `GAUGE …` printed through the spindle line and read as "clipped off the
+     screen edge" when nothing was clipped at all. Same fix in both places: the
+     wide halo `#hint` already carries, because a caption over a bright surface
+     is a solved problem and the answer is a dark cloud, not a bigger font. */
+  .hud{position:fixed;pointer-events:none;text-shadow:0 1px 3px #000,0 0 11px rgba(0,0,0,.92)}
   #tl{top:14px;left:16px}
   #tl .job{font-size:15px;letter-spacing:.02em}
   #tl .cli{color:var(--dim);font-size:12px}
@@ -55,28 +71,94 @@
   #panel,#cutpanel{background:var(--panel);border:1px solid #2a333d;border-radius:3px;
     padding:11px 12px;display:none}
   #panel.on,#cutpanel.on{display:block}
-  #cutpanel .row{display:flex;justify-content:space-between;font-size:12px;padding:1px 0}
-  #cutpanel .row i{color:var(--dim);font-style:normal}
+  /* ── ONE ROW LAYOUT FOR ALL THREE READOUT BOXES ──────────────────────────
+     These were three copies of the same two declarations, and the copy is what
+     broke. `justify-content:space-between` with no gap and no cap on the label
+     lets a label that reaches the end of the column and a value that wraps BOTH
+     keep laying out on the same pixels: the cold viewer read `you expect` back as
+     "expector PRED" because the label's second word and the value's first line
+     had merged into one line of type, and read `stock … · to band top 37 µm` back
+     as two separate facts because the wrap split it there.
+
+     So: the label wraps, and the value takes the remainder, right-aligned, so the
+     numbers form a column the eye can run down and compare pass to pass; and the
+     gap is the gutter that was missing.
+
+     THE LABEL USED TO BE CUT, NOT WRAPPED — `max-width:46%` with `nowrap` and an
+     ellipsis — and it was measured as the defect it is: eleven rows across the
+     three boxes ended in `…`, mid-word (`Tool deflecti…`, `Extra deflect…`,
+     `Ballscrew the…`, `speed …`, `st…`), and the value's `min-width:0` had
+     removed the floor that would have kept it whole. An ellipsis is not
+     overflow: `scrollWidth` never exceeded `clientWidth` on any of them, which
+     is exactly why the overflow check could not see it. The label wraps now,
+     nothing is hidden, and the value keeps its automatic min-content floor — a
+     row whose label and value both hit their floors still fits, because the
+     widest label word and the widest value run both measure narrow.
+     `i:not(:only-child)` is load-bearing: one row in this panel is a label with
+     no value ("Controls are on the pendant …"), and it must not be squeezed by
+     a value that is not there. */
+  #panel .row,#cutpanel .row,#budget .row{display:flex;gap:10px;font-size:12px;padding:1px 0}
+  #panel .row > i,#cutpanel .row > i,#budget .row > i{color:var(--dim);font-style:normal}
+  #panel .row > i:not(:only-child),#cutpanel .row > i:not(:only-child),
+  #budget .row > i:not(:only-child){flex:0 1 auto;white-space:normal}
+  #panel .row > span,#cutpanel .row > span,#budget .row > span{flex:1 1 auto;
+    text-align:right}
+  /* a parenthetical rides with its number instead of being broken off it */
+  #panel .row > span i,#cutpanel .row > span i,#budget .row > span i{white-space:nowrap}
+  /* A VALUE THAT IS A SENTENCE IS NOT A VALUE. It gets the full width under its
+     own label, where it cannot be mistaken for the row above or below.
+     THE ID IS LOAD-BEARING, AND THESE THREE RULES WERE MISSING IT. Written as
+     bare classes they lost to the box rules above — `#cutpanel .row{display:
+     flex}` is an id against a class, so the row it was written for never once
+     laid out this way: computed display was `flex`, the label's two words were
+     squeezed onto two lines, and the sentence stayed right-aligned beside them
+     (`text-align` was lost the same way, to the id-scoped span rule). On screen
+     that read as `you` stacked over `expect` at the left with the instruction
+     running down the right, so the label looked like the first words of the
+     sentence — the exact misreading this layout exists to prevent. The
+     `white-space` rule below already carried its id for this same reason; the
+     other three were written one class short and nobody had looked. */
+  #panel .row.wide,#cutpanel .row.wide,#budget .row.wide{display:block}
+  #panel .row.wide > i,#cutpanel .row.wide > i,#budget .row.wide > i{display:block;max-width:none}
+  #panel .row.wide > span,#cutpanel .row.wide > span,#budget .row.wide > span{text-align:left}
+  /* …and the sentence itself has to be allowed to wrap: `nowrap` on a row span's
+     `i` is right for a parenthetical riding its number and wrong for a line of
+     instruction, which is one unbreakable run that ran 266 px past the panel's
+     right edge — off the screen at 1280×720 — out of a box 240 px wide. Written
+     with the id so it outranks the parenthetical rule above, which a bare
+     `.row.wide` cannot: that is one class short. */
+  #panel .row.wide > span i,#cutpanel .row.wide > span i,
+  #budget .row.wide > span i{white-space:normal}
+  /* A VALUE AND ITS QUALIFIER ARE ONE UNIT. `nowrap` on the `i` keeps the
+     parenthesis whole but still let the number sit alone on the line above it —
+     which a cold viewer read as an orphaned line with no owner ("(−0.4 vs
+     dial)"). The pair now rides together and moves down as a block when it does
+     not fit beside its label, which is what a reader expects of a measurement
+     and its qualifier. */
+  #panel .row > span > .pair,#cutpanel .row > span > .pair,
+  #budget .row > span > .pair{white-space:nowrap}
   #cutpanel kbd{background:#1b2229;border:1px solid #333d47;border-radius:2px;padding:0 4px;font-size:11px;color:var(--ink)}
   #panel h4{margin:0 0 8px;font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;font-weight:500}
-  #panel .row{display:flex;justify-content:space-between;font-size:12px;padding:1px 0}
-  #panel .row i{color:var(--dim);font-style:normal}
   #panel .cut,#cutpanel .cut{margin-top:8px;padding-top:8px;border-top:1px solid #2a333d}
   #panel kbd{background:#1b2229;border:1px solid #333d47;border-radius:2px;padding:0 4px;font-size:11px;color:var(--ink)}
   /* the attribution column — left of the work, under the job header, above the
      log. Anchored to the TOP: it is a printout on the wall, and a printout that
      grows downward off a fixed top edge cannot walk into anything. */
   /* BOUNDED ON BOTH SIDES. On the top by the job header, on the bottom by the
-     log's own cap — measured: at 1280x720 the column wants 358 px, has 328, and
-     the three thermometers on one row is what bought the difference. If rows are
-     added here and it starts clipping, that is the signal to move something,
-     because the alternative is what the viewer saw: this column printing
-     through the pass lines of the log below it. */
-  #budget{left:16px;top:150px;bottom:calc(16px + 26vh + 10px);width:252px;background:var(--panel);
+     log's own cap — but the bottom is a MAXIMUM now, not a second edge. Pinned
+     top and bottom, the box was as tall as the space it had and the printout sat
+     in its upper half: 267 px of content in a 355 px rectangle at 1280x720, and
+     the dead black below `total` grew as the width fix stopped the rows wrapping.
+     Two edges and a hug are different claims: the top edge and the maximum are
+     what keep it off the log, and `calc(74vh - 176px)` is the same line the old
+     `bottom` drew (720 - 150 - 16 - 26vh - 10 at any viewport height), so nothing
+     about the guarantee moved. If rows are added here and it starts clipping,
+     that is the signal to move something, because the alternative is what the
+     viewer saw: this column printing through the pass lines of the log below. */
+  #budget{left:16px;top:150px;max-height:calc(74vh - 176px);width:328px;background:var(--panel);
     border:1px solid #2a333d;border-radius:3px;padding:11px 12px;overflow:hidden;display:none}
   #budget.on{display:block}
-  #budget .row{display:flex;justify-content:space-between;font-size:12px;padding:1px 0}
-  #budget .row i{color:var(--dim);font-style:normal}
+  /* the row layout lives with the other two boxes — see the note above #panel */
   #budget b{color:var(--ink);font-weight:500}
   /* A SHORT WINDOW DEGRADES ON PURPOSE, OR IT CLIPS THE TOTAL. Measured at
      1280x620: the column wants 358 px and has 283, and `overflow:hidden` would
@@ -85,6 +167,25 @@
      the CONTEXT for the terms, not the terms) and the rows tighten by a point.
      A deliberate drop beats a silent clip: one is a decision, the other is a
      readout that is lying about its own contents. */
+  /* THE WIDTH IS A MEASUREMENT, NOT A PREFERENCE. Wrapping stopped the mid-word
+     cuts and then printed every row as two lines with the unit orphaned —
+     `Tool deflection under` / `MEAN force    µm` — one fact split in two, the
+     same class of defect as the cut. Measured in the page at this type size: the
+     widest row that is not a sentence is the deflection term and the thermal
+     triple, both 292 px (231 + 10 + 51 and 152 + 10 + 130), and the widest label
+     alone needs 299 px at 12 px — which is why no font size rescues a 252 px box,
+     and 11 px and 10 px were measured and rejected as both too small for a wall
+     printout and still too wide. 328 px gives 302 px of content inside the 24 px
+     of padding and the 2 px border: the widest row clears by 10 px, the rest by
+     more, and the value stands beside its label on one line.
+     THE STOCK SENTENCE LEFT AS A VALUE at the same time. It was 253 px of prose
+     that grows toward 320 px with a four-digit band figure, and a value that is
+     a sentence is not a value; it is two labelled facts in the build code now.
+     THE PADDING-TIGHTENING RULE WENT WITH THE WRAPPING IT PAID FOR. It bought
+     22 px of height because wrapping cost 18 lines; every row is one line now
+     and the column measures 267 px of content against its 355 px maximum at
+     1280x720. A rule kept as insurance against a defect that is gone is a rule
+     that hides the next one. Below 680 the triple still goes as it always did. */
   @media (max-height:680px){
     #budget .thermal{display:none}
     #budget .row{font-size:11.5px;padding:0}
@@ -131,9 +232,35 @@
      Cap the log's width just short of the dialogue's left edge so the two
      columns can never meet. 50vw = half the #talk max-width (min(620px,86vw));
      the 24px is the gutter. Verified 0 overlap at 1280/1366/1440/1920. */
-  #log{left:16px;bottom:16px;max-width:calc(50vw - min(310px,43vw) - 24px);max-height:26vh;overflow:hidden;
-    display:flex;flex-direction:column-reverse;gap:2px;font-size:12px}
-  #log div{color:var(--dim)}
+  /* THE OLDEST LINE FADES, IT DOES NOT GET SLICED. This column is
+     `column-reverse` — the newest line is at the bottom and older lines stack
+     upward — and with a `max-height` and `overflow:hidden` the line past the cap
+     is cut through the middle of its own letterforms. Three separate stills of
+     the cold-viewer set carried the same complaint ("bottom-left writing is cut
+     off at the top"), which is what a half-row of type looks like when you cannot
+     scroll to it. The fade says `this is the edge of the column` in the same way
+     a darkroom door says it, and it cannot be mistaken for a print fault.
+     THE FADE ALONE DID NOT CLEAR IT. Two further cold-viewer rounds reported the
+     same cut line, because a fade dims a half-row, it does not stop it being a
+     half-row: the top line was still type sliced through its letters, now also
+     washed out, and "only `are not your machines.` is visible, hard to read" is
+     what that looks like. `fitLogRows` now hides any row the column cannot show
+     whole, so the topmost line is always a complete one, and the mask only has to
+     soften the column's edge — six pixels, not twenty-four. */
+  /* THE COLUMN HAS TO SURVIVE A BRIGHT FLOOR. A cold viewer read the log's dim
+     lines as "clipped and low contrast against floor" while the floor behind
+     them was a pale machine deck and the type was 12px grey over it. The scrim
+     runs to the corner of the screen, so it has no bottom edge to read as a
+     pasted bar, and the fill under it is one mix of the palette's own tokens —
+     62% --dim over 38% --ink is #aeb8c3 — so the hierarchy survives the lift:
+     the column's body is still quieter than its <b> and .new lines. */
+  #log{left:0;bottom:0;max-width:calc(50vw - min(310px,43vw) + 8px);max-height:26vh;overflow:hidden;
+    display:flex;flex-direction:column-reverse;gap:2px;font-size:12px;
+    padding:2px 16px 14px;
+    background:linear-gradient(to top,rgba(10,14,18,.88) 0,rgba(10,14,18,.70) 56%,rgba(10,14,18,0));
+    -webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,.3) 0,#000 6px);
+    mask-image:linear-gradient(to bottom,rgba(0,0,0,.3) 0,#000 6px)}
+  #log div{color:#aeb8c3}
   #log div b{color:var(--ink);font-weight:500}
   #log .new{color:var(--ink)}
 
@@ -146,7 +273,14 @@
   #gate .sub{color:var(--dim);margin-top:18px;font-size:13px;line-height:1.7}
   #gate .go{margin-top:30px;color:var(--warn);font-size:13px}
   #gate .fine{color:#5c6774;font-size:11px;margin-top:22px;line-height:1.6}
-  #hint{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);color:#5c6774;font-size:11px}
+  /* THE ONE LINE OF TYPE THAT IS NOT IN A BOX, so it has to stand on its own
+     against whatever is behind it. #5c6774 was a smudge on the walkway — the cold
+     viewer read it as "faint gray on gray" and then could not say what the
+     controls were. It is now the dim ink the rest of the HUD uses, with the same
+     shadow the .hud layer gives everything else: this element was never inside
+     `.hud`, which is why it had no shadow at all and every other block did. */
+  #hint{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);color:var(--dim);font-size:11px;
+    text-shadow:0 1px 3px #000,0 0 10px rgba(0,0,0,.9)}
 </style>
 </head>
 <body>
@@ -966,7 +1100,19 @@ function partObject(parent, x, y, z, dead = false) {
   const shape = new THREE.Shape(); shape.absarc(0, 0, rO, 0, Math.PI * 2, false);
   const hole = new THREE.Path(); hole.absarc(0, 0, rI, 0, Math.PI * 2, true); shape.holes.push(hole);
   const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.030, bevelEnabled: false, curveSegments: 24 });
-  geo.rotateX(-Math.PI / 2); geo.translate(0, 0.030, 0);
+  /* ROTATE AND STOP. The extrude runs along +z from 0 to depth, so after this
+     one rotation the ring already spans y 0..0.030 — the anchor IS the surface
+     it sits on, which is how every caller in this file places a part. A second
+     `translate(0, 0.030, 0)` used to sit here, written on the belief that the
+     rotation had put the ring at y 0..−0.030. Measured against the vendored
+     three.js it put every casting 30 mm in the air: the crate stack floated at
+     rim height and the rack slots floated above the shelf, and a cold viewer
+     counted the crate wrong because the third casting sat up where the rim
+     crosses it. The lift is gone; `y` means the surface. (The same
+     rotate-then-lift idiom stands in `buildPartMesh`, where it is LOAD-BEARING:
+     the clamp seat at 0.042 was derived against that raised part, so do not
+     "unify" the two without re-deriving the clamps.) */
+  geo.rotateX(-Math.PI / 2);
   const m = new THREE.Mesh(geo, dead ? M_PART_DEAD : M_PART_GOOD);
   m.castShadow = m.receiveShadow = true; g.add(m);
   return g;
@@ -1001,14 +1147,16 @@ box(0.92, 0.05, 0.68, M.wood, 0, 0.52, 0, CRATE);
 box(0.08, 0.34, 0.62, M_CRATE, -0.42, 0.68, 0, CRATE);
 box(0.08, 0.34, 0.62, M_CRATE,  0.42, 0.68, 0, CRATE);
 box(0.86, 0.30, 0.06, M_CRATE, 0, 0.66, -0.29, CRATE);
-const CRATE_STACK = new THREE.Group(); CRATE_STACK.position.set(0, 0.86, 0); CRATE.add(CRATE_STACK);
+/* 0.545 is the deck's top face (`0.52 + 0.05/2`) and 0.02 is where a deck load
+   sits when it was set down by hand. The group used to stand at 0.86 — the rim —
+   with two castings stacked 31 mm apart and the third buried behind the front
+   one, so the crate read as two castings and a float. Three across the deck is
+   the same count on one surface, all three countable from the shop floor. */
+const CRATE_STACK = new THREE.Group(); CRATE_STACK.position.set(0, 0.545, 0.02); CRATE.add(CRATE_STACK);
 /* Up to three castings are drawn in the crate. Their count is the only thing
    that changes about this object; nothing re-sizes. */
 const crateParts = [];
-for (let i = 0; i < 3; i++) {
-  const p = partObject(CRATE_STACK, (i % 2 ? 0.19 : -0.19), (i > 1 ? 0.031 : 0), (i > 1 ? 0.02 : -0.02));
-  crateParts.push(p);
-}
+[-0.25, 0, 0.25].forEach((x) => crateParts.push(partObject(CRATE_STACK, x, 0, 0)));
 
 /* ── (3) THE FINISHED RACK — where an accepted part waits for the van ─────
    Next to the roll-up door, because that is where a rack goes. */
@@ -1029,7 +1177,10 @@ box(0.40, 0.02, 0.035, new THREE.MeshStandardMaterial({ color: 0xc9cdd2, roughne
     0, 1.44, -0.40, RACK);
 const RACK_SLOT_X = [-0.72, -0.24, 0.24, 0.72];
 const rackObjects = RACK_SLOT_X.map((x) => {
-  const p = partObject(RACK, x, 0.578, 0, false); p.visible = false; return p;
+  /* 0.575 is the shelf's top face (`0.55 + 0.05/2`). The parts sat at 0.578
+     plus a 30 mm lift inside `partObject`, which put a "waiting for the van"
+     casting in mid-air above the shelf. */
+  const p = partObject(RACK, x, 0.575, 0, false); p.visible = false; return p;
 });
 
 /* ── (4) THE SCRAP BIN — and the material really is gone ──────────────── */
@@ -1460,6 +1611,33 @@ const CALIPERS = new THREE.Group(); CALIPERS.position.set(1.75, 1.0, 1.5); scene
 box(0.30, 0.014, 0.05, M.steel, 0, 0, 0, CALIPERS);
 box(0.10, 0.02, 0.07, M.dark, 0.15, 0.006, 0, CALIPERS);
 box(0.012, 0.05, 0.075, M.steel, -0.14, 0.03, 0, CALIPERS);
+/* THE SCALE, THE THUMBWHEEL AND THE LOCK SCREW, BECAUSE THE FRAME SAYS SO. The
+   talk line printed on the frame that shows these is "There is a thumbwheel and
+   a lock screw", and the object drawn under it was a plain bar with two blocks
+   on it — the same defect as a rack counted at four slots above a line saying
+   the rack is empty, one object over. The beam's broad faces are its ±Y; the
+   scale is a strip a shade proud of both (0.0150 against the beam's 0.0140) and
+   the ticks a shade prouder again (0.0162), so ONE box shows on both faces and
+   nothing depends on which side of it you happen to be standing. */
+box(0.26, 0.0150, 0.030, M.ground, 0, 0, 0, CALIPERS);
+for (let i = 0; i < 11; i++) box(0.0022, 0.0162, 0.024, M.dark, -0.13 + i * 0.026, 0, 0, CALIPERS);
+{
+  const wheel = cyl(0.010, 0.010, 0.022, M.dark, 16);  // knurled thumbwheel, axis across the beam
+  wheel.position.set(0.09, 0, 0.035); CALIPERS.add(wheel);
+  const screw = cyl(0.0045, 0.0045, 0.013, M.dark, 12); // lock screw, standing on the slider
+  screw.rotation.x = Math.PI / 2; screw.position.set(0.155, 0, 0.042); CALIPERS.add(screw);
+}
+/* THE JAWS, BECAUSE A CALIPER IS TOLD APART BY ITS SILHOUETTE. The scale, the
+   wheel and the screw were all there and the object still read as a bar with a
+   bright ladder on it — the review of the held still read those marks as pale
+   blocks. A vernier caliper is recognised by its prongs: a fork at the fixed
+   end, the same fork on the slider, and the depth rod out the back of it. The
+   lower jaws hang to one depth because they are the faces that close on the
+   work; the beam joins each pair, which is why the fork is not open at the top. */
+box(0.012, 0.055, 0.075, M.steel, -0.140, -0.0275, 0, CALIPERS);  // fixed lower jaw
+box(0.012, 0.055, 0.075, M.steel,  0.112, -0.0275, 0, CALIPERS);  // moving lower jaw
+box(0.012, 0.030, 0.075, M.steel,  0.112,  0.021,  0, CALIPERS);  // moving upper jaw
+box(0.060, 0.005, 0.008, M.steel,  0.230,  0.000,  0, CALIPERS);  // depth rod
 
 /* paperwork: the traveler on the machine, and the drawing on the wall */
 const TRAVELER = new THREE.Group(); TRAVELER.position.set(1.05, 0.99, 1.5); TRAVELER.rotation.y = -0.3; scene.add(TRAVELER);
@@ -1549,6 +1727,16 @@ scatterFloorChips(90);
    the diameter it actually is — because a bore rendered at a plausible size would
    be this build telling a lie with geometry. */
 let HELD = null;                  // the part id in your hands, or null
+/* ── ONE DERIVATION FOR WHAT IS ON THE SHELF ─────────────────────────────
+   A PART IN YOUR HANDS IS NOT ON THE SHELF, and the rack's count is derived
+   here and nowhere else. The header printed `rack 1 of 4` from the raw rack
+   while the log's newest line printed `The rack is empty` from the same list
+   minus the part in hand — one fact, two derivations, disagreeing in a single
+   frame, and a cold viewer read the shop contradicting itself. The floor, the
+   rack, the slot a finished part lands in, the header and the recorder all read
+   this. The log does not: it prints what happened, not how many there are, so
+   the count reaches the screen once — in the header, where it is current. */
+const onShelf = () => G.rackParts(GAME).filter((p) => p.id !== HELD);
 let HELD_MESH = null, heldSpin = 0, heldTilt = 0.35;
 const HELD_SCALE_TO_VIEW = 0.0016;   // mm -> world units at arm's length
 
@@ -1639,8 +1827,14 @@ function takeInHand(partId) {
   say('You', `<b>${partId}</b> — a Ø${GAME.job.nominal_mm} bearing housing, ` +
     `Ø${dia.toFixed(4)} mm through the bore. Turn your hand to look at it; ` +
     `<b>E</b> again to put it back on the rack.`);
-  logLine(`Picked up <b>${partId}</b>. The bore is Ø${dia.toFixed(4)} mm. ` +
-    `The rack has <b>${G.rackParts(GAME).filter((x) => x.id !== partId).length}</b> left on it.`);
+  /* THE LOG PRINTS EVENTS AND MEASUREMENTS, NEVER A COUNT OF STATE. The header's
+     count reads `onShelf` and is current every frame; a count printed here is a
+     snapshot that stays on screen after the next act makes it false. A cold
+     viewer read `rack 0 of 4` in the header, `Rack: 1 of 4 slots used` from a
+     look four acts back and `The rack is empty` from this line as three versions
+     of one number — two of them stale, none of them wrong, and the frame read as
+     a shop that cannot count its own parts. */
+  logLine(`Picked up <b>${partId}</b>. The bore is Ø${dia.toFixed(4)} mm.`);
   return true;
 }
 function putDown() {
@@ -1698,7 +1892,7 @@ const NEW_CHIPS = [];
  *
  * Shared (and therefore never disposed) because a per-chip material would be
  * disposed on eviction while other chips still referenced it. */
-const CHIP_MAT = new THREE.MeshStandardMaterial({ color: 0xc8ccd0, roughness: 0.55, metalness: 0.12 });
+const CHIP_MAT = new THREE.MeshStandardMaterial({ color: 0xc8ccd0, roughness: 0.35, metalness: 0.12 });
 const CHIP_GEO = new THREE.TetrahedronGeometry(1.0);
 function chipsFromPass(rec, material) {
   const info = W.chipFromPass(rec, material);
@@ -1720,13 +1914,23 @@ function chipsFromPass(rec, material) {
    * worklight is. Parented to `spindleGroup`, the chips land in cell space like
    * the part, the vise and the tool do — measured at the bar nose, local
    * y = -0.64, which is the bottom of `barMesh`. */
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 16; i++) {
     const c = new THREE.Mesh(CHIP_GEO, CHIP_MAT);
-    const s = 0.008 + Math.random() * 0.01;
+    /* THE PROOF WAS NUMERIC AND THE PROBLEM WAS STILL REAL. The census this
+       geometry replaced put 10/10 chips at exactly the tabletop plane — none
+       buried, none behind the part — and at a player's stance the pile still
+       read as a few dark specks. Two causes, both this emitter's: at 8–18 mm
+       these were the smallest chips in the building (the decorative floor
+       scatter and the chip tray both carry 12–26 mm ones), and a 6 cm circle
+       put every one of them inside the part's own contact shadow, where a
+       mid-tone straw chip on a darkened table has nothing to contrast with.
+       Now 16 chips of 12–24 mm thrown across ~20 cm, so a pass leaves a
+       scatter a player can see from where a player stands. */
+    const s = 0.012 + Math.random() * 0.012;
     c.scale.setScalar(s);
-    c.position.set(barMesh.position.x + (Math.random() - 0.5) * 0.06,
+    c.position.set(barMesh.position.x + (Math.random() - 0.5) * 0.10,
                    -0.63 - Math.random() * 0.04,
-                   (Math.random() - 0.5) * 0.06);
+                   (Math.random() - 0.5) * 0.10);
     /* Thrown DOWN and out, under the tool — the old velocity launched them
        upward at 0.7+, which is why the spray spread across the shop instead of
        falling past the vise.
@@ -1736,12 +1940,12 @@ function chipsFromPass(rec, material) {
      * and `stepChips` applies gravity in the same units -- mixing a raw metric
      * constant into a scaled world is what made a correctly-placed chip
      * invisible. */
-    /* A little wider than it was: ten chips per pass landing inside a 6 cm
-       circle built a spike rather than a scatter, and a spike is not what a
-       table looks like after a morning. */
-    c.userData.v = new THREE.Vector3((Math.random() - .5) * 0.55,
+    /* Thrown harder sideways too: a chip leaving a roughing cut carries real
+       tangential speed, and a wider fan is also what lets some of them clear
+       the fixture's shadow and land on table the worklight actually hits. */
+    c.userData.v = new THREE.Vector3((Math.random() - .5) * 0.84,
                                      -(0.06 + Math.random() * 0.10),
-                                     (Math.random() - .5) * 0.55);
+                                     (Math.random() - .5) * 0.84);
     c.userData.spin = 2.0 + Math.random() * 3.0;
     spindleGroup.add(c); NEW_CHIPS.push(c);
   }
@@ -1914,11 +2118,45 @@ function say(who, text, options) {
   clearTimeout(talkTimer);
   if (!options) talkTimer = setTimeout(() => { t.innerHTML = ''; }, 5400);
 }
+/* ONE LOOK, ONE LINE. Looking at the rack prints TWO lines — the slots and the
+   van's booking — so a player who presses E twice reads the same two sentences
+   twice with the clock unchanged, and a cold viewer took the repeat for the game
+   saying one thing twice. The line the player just read is not news. An
+   incoming line identical to one of the last few printed is dropped from the
+   column; it is NOT dropped from the session record, which records what was
+   done and not what was read. Four is the window because the widest single look
+   prints two lines and a look plus its reaction is four. */
+const recentLog = [];
 function logLine(html) {
+  if (REC) REC.hint({ kind: 'log', who: null, text: html, is_question: false });
+  if (recentLog.includes(html)) return;
+  recentLog.unshift(html);
+  if (recentLog.length > 4) recentLog.pop();
   const d = document.createElement('div'); d.innerHTML = html;
   const L = $('log'); L.prepend(d); L.children[0].classList.add('new');
-  if (REC) REC.hint({ kind: 'log', who: null, text: html, is_question: false });
   while (L.children.length > 9) L.lastChild.remove();
+  fitLogRows();
+}
+/* ── WHOLE ROWS ONLY AT THE TOP ───────────────────────────────────────────
+   The column is capped and bottom-anchored, so the row that does not fit is the
+   oldest one, and it is cut through its own letterforms at the container's top
+   edge. A fade dims that half-row; it does not make it a row. So a row the
+   column cannot show whole is not shown at all, and the topmost line in the
+   column is always one you can read from its first letter. Hidden, never
+   removed: the element stays a child of #log, so the count the tests read and
+   the session record are exactly what they were. `children[0]` is the newest
+   line — `column-reverse` puts it at the bottom — and is never hidden, even if
+   one line wraps taller than the whole column. */
+function fitLogRows() {
+  const L = $('log');
+  if (!L) return;
+  for (const c of L.children) c.style.display = '';
+  const top = L.getBoundingClientRect().top;
+  for (let i = L.children.length - 1; i >= 1; i--) {
+    const c = L.children[i];
+    if (c.getBoundingClientRect().top >= top - 0.5) break;
+    c.style.display = 'none';
+  }
 }
 
 /* ── PHYSICAL FEEDBACK — §51: grab, clamp, tighten must feel like something.
@@ -1971,6 +2209,7 @@ addEventListener('mousemove', (e) => {
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  fitLogRows();          // a narrower viewport wraps a line onto two rows
 });
 
 /* ── INTERACTION — look at a thing, it tells you what it is ─────────────── */
@@ -1978,6 +2217,15 @@ const raycaster = new THREE.Raycaster();
 raycaster.far = 3.4;
 const LOOK = [];   // { obj, name, verb, act, when }
 const add = (obj, name, verb, act, when) => { LOOK.push({ obj, name, verb, act, when }); return obj; };
+/* A LOOK ENTRY CAN NAME ITSELF FROM THE JOB IT IS ON. The traveler names the
+   client whose paperwork it is and the crate names the diameter of the castings
+   that came with this job, so the same two objects in the same room on J2's
+   shift were still describing J1's part — the traveler on the machine read
+   "Halvorsen Pumps" over a Kestrel job, and its log line re-typed J1's numbers
+   (`Ø40 H6, 30 deep, 16 µm`) straight over the top of the SAY line, which reads
+   the job. ONE RESOLVER, because a name that resolves in the aim prompt but not
+   in the debug verb would let a gate and a player look at two different things. */
+const lookName = (e) => typeof e.name === 'function' ? e.name() : e.name;
 
 add(benchtop, 'Workbench — Bench No. 2', 'clean the vise', () => {
   phase = phase === 'ARRIVE' ? 'VISE_CLEAN' : phase; SEEN.any = true;
@@ -1994,16 +2242,49 @@ add(PARALLELS, 'Parallels — matched pair', 'take them', () => {
 }, () => !CARRIED.parallels);
 
 add(CALIPERS, 'Vernier calipers — 150 mm', 'pick them up', () => {
-  CARRIED.calipers = true; CALIPERS.visible = false;
+  CARRIED.calipers = true;
+  /* TAKEN IS A PLACE, NOT A FLAG. These used to be hidden with
+     `CALIPERS.visible = false`, which left the bench bare and the calipers
+     nowhere: a still of the bench carried `Took the calipers.` in the log with
+     nothing in the frame to take, and a cold viewer called it out.
+
+     AND IN THE FRUSTUM, OR NOWHERE. The first pose hung them 0.37 m below the
+     eye — "at your hip" — and they were invisible in every frame at every
+     pitch, because a camera child is posed inside the frustum, not in the
+     shop: at 0.42 m the frame is only ±0.30 m tall, so anything below that is
+     under the bottom edge, and pitching the camera cannot rescue it because
+     the frame swings down WITH the object. They hang where a right hand
+     actually is: 0.51 m from the eye, a little right and below. AND WHOLE,
+     OR THE FORK IS WHAT GETS CUT: the first of those poses ran the beam
+     across the bottom-right corner, and the near pair of jaws — the ones
+     that close on the work, the reason the object reads as calipers at all
+     — went out through the edge of the frame in both held stills. The pose
+     sits 3.5 cm higher than that, fork inside the corner, both upper jaws
+     up into the frame. */
+  camera.add(CALIPERS);
+  CALIPERS.position.set(0.24, -0.175, -0.42);
+  {
+    const jaws = new THREE.Vector3(-0.35, 0.94, 0).normalize();   // out of both jaws
+    const beam = new THREE.Vector3(1, 0, -0.3).normalize();       // the 300 mm of it
+    const x = beam.sub(jaws.clone().multiplyScalar(beam.dot(jaws))).normalize();
+    const z = jaws.clone(), y = z.clone().cross(x).normalize();
+    CALIPERS.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  }
   say('You', 'Heavy for their size. There is a thumbwheel and a lock screw.');
   logLine('<b>Took the calipers.</b> Press <b>M</b> at the machine to measure the bore.');
 }, () => !CARRIED.calipers);
 
-add(TRAVELER, "Traveler — Halvorsen Pumps", 'read it', () => {
+add(TRAVELER, () => `Traveler — ${GAME.job.client}`, 'read it', () => {
   CARRIED.traveler = true; SEEN.any = true;
   say('Traveler', `Op 20 — bore Ø${GAME.job.nominal_mm} ${GAME.job.grade} to ${GAME.job.bore_depth_mm} deep.<br>
-    Band ${GAME.job.band_low_mm.toFixed(3)} – ${GAME.job.band_high_mm.toFixed(3)} mm. Material ${GAME.mat.label}.`);
-  logLine('Read the traveler. <b>Ø40 H6, 30 deep.</b> Band is 16 µm wide. That is the whole game.');
+    Band Ø${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)} mm. Material ${GAME.mat.label}.`);
+  /* THE LOG SAYS THE SAME JOB THE SAY LINE JUST SAID. It was typed once, for
+     J1, and every figure in it was a constant: on a Kestrel shift the two lines
+     printed one after the other in the same panel named the same bore as Ø80
+     and Ø40. The width is `W.bandUm`, the one place a band width in microns is
+     derived, so the card, the board and the panel cannot disagree. */
+  logLine(`Read the traveler. <b>Ø${GAME.job.nominal_mm} ${GAME.job.grade}, ` +
+    `${GAME.job.bore_depth_mm} deep.</b> Band is ${W.bandUm(GAME.job)} µm wide. That is the whole game.`);
 }, () => true);
 
 add(DRAWING, 'Drawing — the job on the wall', 'read it', () => {
@@ -2073,10 +2354,15 @@ add(JOBBOARD, "Job board — the week's work", 'read it', () => {
   const lines = offers.map((o) => {
     const j = o.job;
     const mine = j.id === GAME.job.id;
-    const band = ((j.band_high_mm - j.band_low_mm) * 1000).toFixed(0);
+    const band = W.bandUm(j);
     const head = `${mine ? '<b>' : ''}${j.id} · ${j.client}${mine ? '</b> <i>— on your machine</i>' : ''}`;
+    /* THE SAME TWO NUMBERS THE MACHINE PANEL PRINTS, IN THE SAME DRESS: every
+       diameter wears Ø, every length wears its unit, the band is a width in µm.
+       The card used to write `Ø40` and then `36 mm` for the other diameter of
+       the same part — two diameters, one signed and one not — and `30 deep`
+       with no unit at all on a card that also prints microns. */
     const spec = `Ø${j.nominal_mm} ${j.grade}, band ${band} µm · ` +
-      `${j.start_hole_dia_mm} mm as-cast, ${j.bore_depth_mm} deep · van ${W.hhmm(G.departsMin(j))}`;
+      `Ø${j.start_hole_dia_mm} mm as-cast, ${j.bore_depth_mm} mm deep · van ${W.hhmm(G.departsMin(j))}`;
     /* A card a client has NOT put up is still printed, and says why. A job that
        silently vanishes from the wall is a job the player cannot learn from. */
     if (!o.offered) {
@@ -2118,7 +2404,7 @@ add(JOBBOARD, "Job board — the week's work", 'read it', () => {
   for (const o of offers) {
     if (!o.offered || o.job.id === GAME.job.id) continue;
     opts.push([`Take ${o.job.id} — ${o.job.client}, Ø${o.job.nominal_mm} ${o.job.grade}, ` +
-      `band ${((o.job.band_high_mm - o.job.band_low_mm) * 1000).toFixed(0)} µm at ${money(o.rate)}`,
+      `band ${W.bandUm(o.job)} µm at ${money(o.rate)}`,
       () => takeJob(o.job.id)]);
   }
   say('Board', letter + lines.join('<br><br>') + adviceLine + books, opts.length ? opts : undefined);
@@ -2526,16 +2812,22 @@ function callMaint() {
    the bin is a bin, and the only instrument in the shop that measures a bore
    is the one in your hand. */
 
-add(CRATE, 'Casting crate — Ø40 housings, as-cast', 'count them', () => {
+/* THE Ø ON THE CRATE IS THE DRAWING'S, NOT THE CRATE'S. As it read, the label
+   (`Ø90 housings, as-cast`) and the line the crate speaks (`Ø88 mm as-cast
+   bore`) sat in one frame with two different diameters and no way to tell which
+   was which — the viewer who flagged the frame's sizes called it out. The
+   drawing's Ø is what these castings are FOR; the hole in them is 88. */
+add(CRATE, () => `Casting crate — as-cast housings for the Ø${GAME.job.nominal_mm} bore`, 'count them', () => {
   const n = GAME.stock_on_hand;
   const r = crateMeta();
   say('You', n > 0
-    ? `${n} casting${n === 1 ? '' : 's'} in the crate. Ø${GAME.job.start_hole_dia_mm} as-cast bore, ` +
-      `${GAME.job.bore_depth_mm} deep. Same drawing, same material.`
+    ? `${n} casting${n === 1 ? '' : 's'} in the crate. Ø${GAME.job.start_hole_dia_mm} mm as-cast bore, ` +
+      `${GAME.job.bore_depth_mm} mm deep. Same drawing, same material.`
     : 'The crate is empty. Whatever happens now, it happens without another casting.');
-  logLine(n > 0
-    ? `Crate: <b>${n}</b> casting${n === 1 ? '' : 's'} left. Each one is ${GAME.job.start_hole_dia_mm} mm as-cast.`
-    : 'The crate is <b>empty</b>.');
+  /* NO COUNT HERE. The header prints `crate N` every frame and this line
+     outlives the act that printed it; see the note beside the rack verb. */
+  if (n > 0) logLine(`Crate: cast housings, Ø${GAME.job.start_hole_dia_mm} mm as-cast bore, ` +
+    `${GAME.job.bore_depth_mm} mm deep.`);
   if (n > 0 && !SEEN.crate) {
     SEEN.crate = true;
     setTimeout(() => say('Earl', `\u201cThat's the crate. ${W.hhmm(G.arrivalMin(GAME.job))} is the van. ` +
@@ -2545,7 +2837,7 @@ add(CRATE, 'Casting crate — Ø40 housings, as-cast', 'count them', () => {
 
 add(RACK, 'Finished-part rack — by the roll-up door', 'check it', () => {
   if (HELD) { putDown(); return; }
-  const rack = G.rackParts(GAME);
+  const rack = onShelf();
   const send = rack.filter((p) => p.disposition === 'SEND');
   const rework = rack.filter((p) => p.disposition === 'REWORK');
   /* §73'S Part RUNG HAS A VERB. Reading a shelf is not holding the part, and the
@@ -2559,9 +2851,21 @@ add(RACK, 'Finished-part rack — by the roll-up door', 'check it', () => {
         ? 'in spec, traveller signed, waiting for the van'
         : 'under the bottom of the band, flagged to finish at the customer'}`).join('<br>'),
     opts.length ? opts : undefined);
-  logLine(`Rack: <b>${rack.length}</b>/${GAME.rack_slots} slots — ` +
-    (rack.length ? rack.map((p) => `${p.id} (${p.disposition})`).join(', ')
-                 : 'empty') + '.');
+  /* NO RACK LINE AT ALL. Taking the count out of it was only half the repair:
+     what was left named the parts, and a cold viewer read that name against the
+     live header in the same frame — `Rack: J1-01 (REWORK)` from four acts ago,
+     `rack 0 of 4` in the corner — as the shop disagreeing with itself about its
+     own floor. A name goes stale into a contradiction the moment the line that
+     took the part away is not read with it, and nothing on a screen makes a
+     reader do that. THE TEST, and it is the one that settled this: does the
+     line carry a fact that is in the log nowhere else? The count is in the
+     header, which is the only surface re-derived every frame. What is on the
+     rack is in the log as EVENTS — every part that reached it was put there by
+     a settlement line that names it and says where it went (`on the rack by the
+     door`, `on the rack, flagged to the customer for rework`) — and the van
+     says what it took. So the line was a second derivation of a fact already
+     recorded, printed as a state, and it is gone. The look still answers the
+     question where the answer is current when it is printed: in the panel. */
   logLine(`Van books ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}. ` +
     (GAME.courier.left
       ? (send.length || rework.length || GONE_SENT ? 'It has been and gone — with the part.'
@@ -2574,10 +2878,8 @@ add(SCRAPBIN, 'Scrap bin — rust, dents, dead parts', 'look in it', () => {
   say('You', bin.length === 0
     ? 'Empty, apart from the dents. Nothing of yours in there yet.'
     : bin.map((p) => `${p.id} — ${p.under_um ? p.under_um.toFixed(1) + ' µm under.' : 'dead.'}`).join('<br>'));
-  logLine(bin.length === 0
-    ? 'Scrap bin: empty.'
-    : `Scrap bin: <b>${bin.length}</b> — ${bin.map((p) => p.id).join(', ')}. ` +
-      `That metal does not come back.`);
+  if (bin.length) logLine(`Scrap bin: ${bin.map((p) => p.id).join(', ')}. ` +
+    `That metal does not come back.`);
 }, () => true);
 
 add(FIXTURE, 'Holding fixture — parallels and two strap clamps', 'look at the setup', () => {
@@ -2603,7 +2905,11 @@ add(FIXTURE, 'Holding fixture — parallels and two strap clamps', 'look at the 
     : 'Nothing on the parallels. The clamps are thrown back clear of the table, ' +
       'and the dial reference died with the last part.') +
     `<br><br>${look.text}` +
-    (look.layer < 3 ? `<br><i>There is more here than you can read yet.</i>` : ''));
+    /* THE HINT NAMES THE ACT. "There is more here than you can read yet" was a
+       promise with no verb in it — a cold viewer called it circular, and they
+       were right: the layers unlock by MEASURING (`seen.measured` then
+       `seen.corrected`), not by looking again. So the line says what to do. */
+    (look.layer < 3 ? `<br><i>Measure it and it says more.</i>` : ''));
   logLine(on
     ? `Fixture: <b>${p ? p.id : 'part'}</b> clamped. Dial reference is this bore.`
     : 'Fixture: <b>empty</b>. Clamps thrown back. Touch off again — the old datum is gone.');
@@ -2618,7 +2924,6 @@ add(RADIO, "Someone's radio", 'listen', () => {
 
 add(APRON, 'Loading bay — one drop on the ticket', 'read the board', () => {
   const until = G.departsMin(GAME.job) - GAME.clock_min;
-  const rack = G.rackParts(GAME);
   say('Booked', `HALLAM COURIERS — PPI-PUMP-1<br>One collection: Halvorsen Pumps, ` +
     `Ø${GAME.job.nominal_mm} ${GAME.job.grade} bearing housing.<br>` +
     `Window ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}. ` +
@@ -2627,8 +2932,13 @@ add(APRON, 'Loading bay — one drop on the ticket', 'read the board', () => {
     ? (G.collectableParts(GAME).length || GONE_SENT
         ? `Bay: collected at ${W.hhmm(GAME.courier.departed_at)}. A part went out.`
         : `Bay: left at ${W.hhmm(GAME.courier.departed_at)} with nothing on the rack.`)
-    : `Bay: booked ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}. ` +
-      `${until >= 0 ? until.toFixed(0) + ' min of production left.' : 'The window has closed.'}`);
+    /* NO COUNTDOWN HERE. `N min of production left` was the header's own
+       `in N min` printed a second time on a surface that keeps it — the log
+       from four acts ago argued with the corner of the screen about how much
+       of the window was left. The booked hours cannot go stale; how much of
+       the window remains belongs to the header, which is current every frame. */
+    : `Bay: booked ${W.hhmm(G.arrivalMin(GAME.job))}–${W.hhmm(G.departsMin(GAME.job))}.` +
+      (until >= 0 ? '' : ' The window has closed.'));
 }, () => true);
 
 add(VAN, 'Hallam Couriers — the 10:30 drop', 'look at it', () => {
@@ -2741,6 +3051,14 @@ function machinePanel() {
   const bore = W.boreGeometry(GAME, G.partGrowth_um);
   $('pnTitle').textContent = GAME.mach.label;
   const F = (a, b) => `<div class="row"><i>${a}</i><span>${b}</span></div>`;
+  /* A ROW THAT IS A SENTENCE, NOT A READING. The prediction that has not been
+     stated is written as an instruction, and an instruction is longer than the
+     label column is wide. In the flex row its label and its value were laid out
+     on the same line, wrapped, and re-merged — a cold viewer read the pieces
+     back as `expector PRED`, a word the source has never contained. A wide row
+     stacks instead: label on its own line, the sentence under it, nothing to
+     interleave. */
+  const FW = (a, b) => `<div class="row wide"><i>${a}</i><span>${b}</span></div>`;
   $('pnRows').innerHTML =
     /* RPM AND THE SURFACE SPEED IT PRODUCES. A machinist reads both, and the
        pair is the honest picture: the same rpm is a different cutting speed on
@@ -2774,7 +3092,11 @@ function machinePanel() {
     F('speed set', `${GAME.machine.vc_m_min} m/min <i>(pendant SPD \u2212 / +)</i>`);
   const surplus = last ? (last.bite_realised_um - last.bite_cmd_um) : 0;
   $('pnCut').innerHTML =
-    F('dial', `${biteCmd_um} µm radius`) +
+    /* "DIALLED IN", not "dial". Everywhere else in this shop "the dial" is the
+       machine's DRO — the zeroed reference you read a position off. This row is
+       not a reading; it is the bite the operator has SET for the next cut, and
+       a cold viewer crossed the two and saw one word holding two numbers. */
+    F('dialled in', `${biteCmd_um} µm radius`) +
     /* THE SYSTEM'S OPEN CLAIM, ON THE MACHINE, WHERE YOU DECIDE. It sits beside
        the player's own expectation because they are the same kind of thing — two
        claims about a part that has not been cut — and because a player who
@@ -2785,15 +3107,16 @@ function machinePanel() {
       if (!c || c.actual_mm !== null) return '';
       return F('system said', `Ø${c.predicted_mm.toFixed(4)} mm`);
     })() +
-    F('you expect', predicted_um === null
+    (predicted_um === null
       /* THE INSTRUCTION NAMES THE WORLD, NOT A KEY. The pendant replaced the
          on-screen legend, so any text that still taught Shift+1-6 would be
          teaching a control scheme the game no longer shows. The keys still
          work — a machinist who knows them should not be slowed down — but the
-         thing the game POINTS AT is the machine in front of you. */
-      ? '<i>not stated — aim at <b>PRED −</b> or <b>PRED +</b> on the pendant and press <kbd>E</kbd></i>'
-      : `${predicted_um} µm`) +
-    (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm <i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} vs dial)</i>`) : '') +
+         thing the game POINTS AT is the machine in front of you.
+         WIDE, because it is a sentence: see the note beside `FW`. */
+      ? FW('you expect', '<i>not stated — aim at <b>PRED −</b> or <b>PRED +</b> on the pendant and press <kbd>E</kbd></i>')
+      : F('you expect', `${predicted_um} µm`)) +
+    (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm <span class="pair"><i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} vs dialled in)</i></span>`) : '') +
     /* THE LEGEND IS GONE. It was three rows of `kbd` tags teaching a control
        scheme, which is the one thing §48 forbids outright — and the build's own
        gate report counted it as its largest remaining debt. The controls are on
@@ -2822,8 +3145,11 @@ function machinePanel() {
     const lastCut = GAME.history[GAME.history.length - 1];
     pb.innerHTML =
       `<div class="row" style="margin-top:6px"><i>the part</i><span></span></div>` +
-      `<div class="row"><i>stock</i><span>${(GAME.part.holeDia_cold_mm / 2).toFixed(2)} mm radius · ` +
-        `to band top ${bore.stock_to_band_um.toFixed(0)} µm</span></div>` +
+      /* THREE PLACES: the CMM the log quotes prints −59.7 µm, and 20.008 −
+         19.970 only reads as that subtraction if both are carried to the third
+         place. Two decimals turned a defence into a coincidence. */
+      `<div class="row"><i>stock</i><span>${(GAME.part.holeDia_cold_mm / 2).toFixed(3)} mm radius</span></div>` +
+      `<div class="row"><i>stock to band top</i><span>${bore.stock_to_band_um.toFixed(0)} µm</span></div>` +
       /* three thermometers, one row: a machine's thermal state is read as a
          set, and the three rows it took were the difference between this
          column fitting above the log and printing through it */
@@ -2831,11 +3157,21 @@ function machinePanel() {
         `${m.screwC.toFixed(1)} / ${GAME.part.partC.toFixed(1)}</span></div>` +
       (lastCut && lastCut.err_terms
         ? (() => {
-            const terms = lastCut.err_terms.filter((t) => Math.abs(t.um) >= 0.05);
+            /* THE COLUMN HAS TO ADD UP. The total used to be summed from the
+               raw terms while every row above it was filtered (|µm| ≥ 0.05)
+               and rounded for print — two derivations of one fact, so the
+               printed column could read 5.4 µm of causes under a total of
+               5.2 µm, and a reader who checked the arithmetic caught the
+               wall lying. The rows are built once, as the exact strings that
+               get printed, and the total is the sum of those strings. */
+            const printed = lastCut.err_terms
+              .filter((t) => Math.abs(t.um) >= 0.05)
+              .map((t) => [String(t.name).replace(/\s*\(.*\)$/, ''), t.um.toFixed(1)]);
+            const total = printed.reduce((a, r) => a + Number(r[1]), 0).toFixed(1);
             return `<div class="row" style="margin-top:6px"><i>why the bore is wrong</i><span></span></div>` +
-              terms.map((t) => `<div class="row"><i>${String(t.name).replace(/\s*\(.*\)$/, '')}</i>` +
-                `<span>${t.um >= 0 ? '+' : ''}${t.um.toFixed(1)} µm</span></div>`).join('') +
-              `<div class="row"><i><b>total</b></i><span><b>${lastCut.err_terms.reduce((a, t) => a + t.um, 0).toFixed(1)} µm</b></span></div>`;
+              printed.map(([name, um]) => `<div class="row"><i>${name}</i>` +
+                `<span>${Number(um) > 0 ? '+' : ''}${um} µm</span></div>`).join('') +
+              `<div class="row"><i><b>total</b></i><span><b>${total} µm</b></span></div>`;
           })()
         : '');
     /* AN EMPTY PANEL IS A DARK RECTANGLE ON THE WALL. It appears when the
@@ -2888,9 +3224,14 @@ function doMeasure() {
   });
   const bore = W.boreGeometry(GAME, G.partGrowth_um);
   const off = r.reading_mm - GAME.job.nominal_mm;
+  /* THE GAUGE'S CLAIM IS PRINTED TO THE PLACE THE PART CAN DEFEND. The CMM the
+     log quotes later says −59.7 µm, and the gauge's own last digit used to be
+     rounded away here — the error between the claim in your hand and the
+     machine's truth (the whole subject of this shop) could not be worked out
+     from the two printed numbers. */
   logLine(`Gauge says <b>Ø${r.reading_mm.toFixed(4)}</b> mm at ${r.partC.toFixed(1)} °C ` +
-    `(±${r.sigma_um.toFixed(2)} µm) — ${(off * 1000).toFixed(0)} µm from nominal. ` +
-    `<b>${bore.stock_to_band_um.toFixed(0)} µm</b> of radius left under the top of the band.`);
+    `(±${r.sigma_um.toFixed(2)} µm) — ${(off * 1000).toFixed(1)} µm from nominal. ` +
+    `The dial has <b>${bore.stock_to_band_um.toFixed(0)} µm</b> of radius left under the top of the band.`);
   if (!earlSaid.corrected && Math.abs(off) > 2) {
     earlSaid.corrected = true; SEEN.corrected = true;
     setTimeout(() => say('Earl', "\u201cYou're measuring the bell-mouth. Back the thumbwheel " +
@@ -3274,7 +3615,7 @@ function doRough() {
       prevClock = g.clock_min;
     }
     void prevClock;
-    REC.action('rough_done', { clock_min: g.clock_min, dialR_um: r.passes[r.passes.length - 1].edge_coldR_mm * 1000 });
+    REC.action('rough_done', { clock_min: g.clock_min, dialR_um: g.machine.edgeR_cold_mm * 1000 });
   }
   noteDriveAttempt(bite, feed, env, false);
   /* The cut just happened, so the meter's reading for this setting has just
@@ -3286,16 +3627,32 @@ function doRough() {
   const last = r.passes[r.passes.length - 1];
   chipsFromPass(last, g.mat);
   if (audioReady) { AUD.cutEnter('mine', { tooth_Hz: 60, gain: 0.3 }); AUD.chipFall(1); }
-  /* What the DIAL holds — not what the part is. After roughing, the dial offset
-     and the true radius have diverged by the accumulated surplus, and that gap
-     IS the lesson. Printing the true radius here would destroy it. */
-  const dialR_um = last.edge_coldR_mm * 1000;
-  const nomR_um = (g.job.nominal_mm / 2) * 1000;
+  /* ── THE MACHINE'S READING, TAKEN FROM THE MACHINE ───────────────────────
+     This printed the last PASS RECORD's `edge_coldR_mm` — which is the dial as
+     it stood BEFORE that pass — so the line announced a position one whole pass
+     stale (19.81 mm against a machine standing at 19.97 mm, eight times the
+     16 µm band) while the DRO, in the same frame, painted the live one. Two
+     derivations of one fact, and the frame contradicted itself.
+
+     It also carried a conclusion the model does not produce — "It has added
+     the surplus on every pass." The dial is re-derived from the wall the edge
+     actually reached, pass by pass, so it tracks the bore; it does not
+     accumulate a surplus. Show the reading; the surplus is already shown per
+     pass, in the line above and on the pendant. Quoted in the machine's own
+     register — mm at the two decimals the readout resolves — because a log line
+     does not get to read a position finer than the scale that positions it.
+     The "Last pass" command is printed to one decimal for the same reason the
+     panel's "realised" is: the machine's roughing passes command a fractional
+     bite (158.09476... on pass 7), the panel computes its difference from the
+     unrounded value, and a command rounded to whole microns would invite the
+     reader to work out -0.3 where the panel, correctly, says -0.4. */
+  const dialR_mm = g.machine.edgeR_cold_mm;
+  const nomR_mm = g.job.nominal_mm / 2;
   logLine(`Roughed <b>${r.passes.length} passes</b> in ${r.minutes.toFixed(1)} min. ` +
-    `Dial now reads <b>${dialR_um.toFixed(0)} µm</b> radius. ` +
-    `Last pass: dial ${last.bite_cmd_um.toFixed(0)} µm, removed ${last.bite_realised_um.toFixed(1)} µm.`);
-  toast(`Roughing done. The dial says ${dialR_um.toFixed(0)} µm — <b>that is not the size.</b> ` +
-    `It has added the surplus on every pass. Measure, then sneak up on ${nomR_um.toFixed(0)}.`, 5600);
+    `Dial now reads <b>${dialR_mm.toFixed(2)} mm</b> radius. ` +
+    `Last pass: dial ${last.bite_cmd_um.toFixed(1)} µm, removed ${last.bite_realised_um.toFixed(1)} µm.`);
+  toast(`Roughing done. The dial reads ${dialR_mm.toFixed(2)} mm radius. ` +
+    `Measure, then sneak up on ${nomR_mm.toFixed(2)} mm.`, 5600);
 }
 function doCut() {
   const g = GAME;
@@ -3338,9 +3695,9 @@ function doCut() {
   g.machine.spindle_on = true;
   if (audioReady) { AUD.cutEnter('mine', { tooth_Hz: 60, gain: 0.3 }); AUD.clack({ gain: 0.4, pitch: 1200 }); }
   const surplus = rec.bite_realised_um - rec.bite_cmd_um;
-  logLine(`Pass ${rec.n}: dial <b>${rec.bite_cmd_um.toFixed(0)} µm</b> → removed ` +
+  logLine(`Pass ${rec.n}: dial <b>${rec.bite_cmd_um.toFixed(1)} µm</b> → removed ` +
     `<b>${rec.bite_realised_um.toFixed(1)} µm</b> (${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)}). ` +
-    `Dial is now at ${(rec.edge_coldR_mm * 1000).toFixed(0)} µm radius. ` +
+    `Dial is now at <b>${g.machine.edgeR_cold_mm.toFixed(2)} mm</b> radius. ` +
     `Measure it if you want to know where it actually is.`);
   /* THE CHIP'S THICKNESS AND THE DIAL ARE DIFFERENT DIMENSIONS, and this line
      used to invite the reader to compare them: it read "126 µm thick — the dial
@@ -3417,15 +3774,30 @@ function doInspect() {
       "it doesn't come to you.\u201d");
     toast(`<b>ACCEPTED.</b> ${money(r.net)}` +
       (r.late ? ' — the window has closed' : '') + `<br>` + revealLine(), 10000);
+    /* THE SLOT COUNT IS NOT PRINTED HERE ANY MORE. `slot 1 of 4` was the
+       header's `rack N of 4` derived a second time, on a line that stays on
+       screen after the next part moves: a cold viewer read the stale copy
+       against the live header as the shop disagreeing with itself about its
+       own floor. The part's name cannot go stale. */
     logLine(`<b>ACCEPTED</b> at ${G.hhmm(GAME.clock_min)}. ${r.note} ` +
-      `Part <b>${r.part_id}</b> is on the rack, slot ${G.rackParts(GAME).length} of ${GAME.rack_slots}.`);
+      `Part <b>${r.part_id}</b> is on the rack by the door.`);
     phase = 'RACKED';
   } else if (r.outcome === 'SCRAP') {
     say('Earl', "\u201cIt's over. There's no putting metal back in a hole.\u201d");
-    toast(`<b>${v.verdict}</b> — band ${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}.` +
+    toast(`<b>${v.verdict}</b> — band Ø${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)} mm.` +
+      /* THE MONEY IS SAID HERE NOW, from the same `r.fee` the day line reads.
+         A cold viewer watched `ON THE DAY −£2,127.50` appear in the corner with
+         nothing on screen accounting for it: the toast named the verdict and
+         the number had no parent. This is that number's parent. */
+      `<br>Out the casting and the morning: ${money(-r.fee)} off the day.` +
       `<br>` + revealLine(), 10000);
-    logLine(`<b>${v.verdict}</b> — ${r.note} ` +
-      `Part <b>${r.part_id}</b> is in the scrap bin and ${GAME.stock_on_hand} castings are left in the crate.`);
+    /* The crate count was the same second derivation as the ACCEPTED slot
+       count above; the part's name is not. And the hour is a dateline here for
+       the same reason as on the rework line further down: a verdict that is a
+       phrase cannot take ` at HH:MM` after it without the time reading as a
+       condition of the phrase. */
+    logLine(`<b>${G.hhmm(GAME.clock_min)}.</b> <b>${v.verdict}</b> — ${r.note} ` +
+      `Part <b>${r.part_id}</b> is in the scrap bin.`);
     phase = 'SCRAPPED';
     /* HE WALKS OVER. Twenty minutes after the part was scrapped, Mr. Achebe
        has tried to fit a bearing into it and failed, and the man from the
@@ -3435,10 +3807,22 @@ function doInspect() {
     scheduleAchebe();
   } else {
     say('Earl', "\u201cIt's under. Get it on the rack — they can take the rest out at their end.\u201d");
-    toast(`<b>${v.verdict}</b> — band ${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}.` +
+    toast(`<b>${v.verdict}</b> — band Ø${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)} mm.` +
+      `<br>The customer reworks it and charges you: ${money(-r.fee)} off the day.` +
       `<br>` + revealLine(), 10000);
-    logLine(`<b>${v.verdict}</b> — ${r.note} Part <b>${r.part_id}</b> is on the rack, ` +
-      `flagged to the customer for rework.`);
+    /* AND THE HOUR IT HAPPENED — as a DATELINE, not as `at HH:MM` after the
+       verdict. This verdict is a PHRASE (`UNDERSIZE — can still be cut`), so
+       the first version of this line printed `can still be cut at 05:59`, which
+       reads as a deadline for the cutting: an hour that exists on no other
+       surface, in a shop whose one deadline is the van at 10:50. Seen in the
+       rendered log, not reasoned about. So the hour goes first, the way the
+       log's own clock-on line carries it (`05:55. On the floor.`), where
+       nothing can attach it to the verdict — and `is on the rack` stays what
+       it is, the consequence clause of a dated event. ACCEPTED keeps its
+       `at HH:MM` because that verdict is a bare word: `ACCEPTED at 05:58.`
+       cannot be read as a deadline. */
+    logLine(`<b>${G.hhmm(GAME.clock_min)}.</b> <b>${v.verdict}</b> — ${r.note} ` +
+      `Part <b>${r.part_id}</b> is on the rack, flagged to the customer for rework.`);
     phase = 'RACKED';
   }
   SEEN.corrected = true;
@@ -3570,7 +3954,7 @@ function doFetchBlank() {
   lastRead = null; predicted_um = null; biteCmd_um = 0; revealed = null;
   if (audioReady) AUD.clack({ gain: 0.45, pitch: 1100 });
   syncFloor();
-  toast(`<b>${r.part.id}</b> in the machine. ${GAME.job.start_hole_dia_mm} mm as-cast, and the ` +
+  toast(`<b>${r.part.id}</b> in the machine. Ø${GAME.job.start_hole_dia_mm} mm as-cast, and the ` +
     `machine is not cold any more.<br>Cost ${r.cost.minutes.toFixed(1)} min` +
     (r.cost.cost ? ` and ${money(r.cost.cost)}` : '') + ` · ${GAME.stock_on_hand} castings left.`, 6500);
   logLine(`Clamped <b>${r.part.id}</b> on the parallels. ` +
@@ -3749,11 +4133,9 @@ function syncFloor() {
   const { shown } = crateMeta();
   crateParts.forEach((o, i) => { o.visible = i < shown; });
   /* (3) the rack: presence only, slot by slot */
-  /* A PART IN YOUR HANDS IS NOT ON THE SHELF. One fact, one place: the rack
-     renders what is on the rack, and what is held is excluded here rather than
-     hidden with a visibility flag that something else would have to remember to
-     undo. */
-  const rack = G.rackParts(GAME).filter((p) => p.id !== HELD);
+  /* A PART IN YOUR HANDS IS NOT ON THE SHELF — the floor drops it, and every
+     count in the shop reads the same derivation. See `onShelf`, beside HELD. */
+  const rack = onShelf();
   rackObjects.forEach((o, i) => {
     const r = rack[i];
     o.visible = !!r;
@@ -3867,8 +4249,10 @@ function updateLook() {
   if (hit) {
     /* A LOOK entry may name itself from live state. The pad's name is the key
        under the crosshair, which is the only way the player learns what a key
-       does without a legend. */
-    $('lkName').textContent = (hit.obj === pendPad && pendHover) ? pendHover.label : hit.name;
+       does without a legend — and the traveler's name is the client of the job
+       on the machine. Both go through `lookName`, so the prompt and the debug
+       verb cannot resolve the same entry to two different names. */
+    $('lkName').textContent = (hit.obj === pendPad && pendHover) ? pendHover.label : lookName(hit);
     /* §53: what you can even SEE depends on what you have done */
     const p = W.perceptionOf({ crude: '', material: '', process: '', engineer: '' }, SEEN);
     $('lkAct').innerHTML = `<span class="verb">E</span> ${hit.verb}` +
@@ -4053,7 +4437,7 @@ function startShift(jobId, { announce = true, carry = true, newDay = null } = {}
     `<b>${spec.client}</b> on the bench — Ø${spec.nominal_mm} ${spec.grade}.`);
   if (announce) {
     toast(`<b>${spec.title}</b><br>${spec.client} · £${spec.rate} · ` +
-      `band ${spec.band_low_mm.toFixed(3)}–${spec.band_high_mm.toFixed(3)} mm · ` +
+      `band Ø${spec.band_low_mm.toFixed(3)}–${spec.band_high_mm.toFixed(3)} mm · ` +
       `van ${W.hhmm(G.departsMin(spec))}`, 7000);
   }
   if (dayCost) {
@@ -4336,7 +4720,15 @@ function frame(now) {
     $('hGauge').textContent = lastRead
       ? `Ø${lastRead.mm.toFixed(4)} ±${lastRead.sigma_um.toFixed(2)} µm`
       : 'not measured';
-    $('hBand').textContent = `${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)}`;
+    /* THE BAND WEARS ITS OWN BASIS. It is the drawing's number, and the drawing
+       writes it the way a drawing does — `Ø40 H6 (+0.016 / +0.000)` — while the
+       panel two inches to its left writes the same sizes as `mm radius` and
+       `µm`. A cold viewer held both on screen at once twice and both times said
+       the units switched "without warning", which is what one fact written two
+       ways looks like to somebody who has not been told which is which. The
+       machine's own reading above already says `Ø… µm`; the band is a diameter
+       in mm, so it now says Ø and mm too. */
+    $('hBand').textContent = `Ø${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)} mm`;
     /* MONEY NOW CROSSES DAYS. `money` is the balance the shop is carrying;
        `finished` is what THIS job settled at. Before L2 the two were the same
        number because there was only ever one job, and the line said "on the
@@ -4359,18 +4751,31 @@ function frame(now) {
       (REC && FPS ? ` <span style="opacity:.45">${FPS.toFixed(0)}fps</span>` : '');
     /* ── THE FLOOR, as counts of objects. See the note beside #hFloor. ──── */
     {
-      const rack = G.rackParts(GAME), bin = G.binParts(GAME), gone = G.goneParts(GAME);
+      const rack = onShelf(), bin = G.binParts(GAME), gone = G.goneParts(GAME);
       const until = G.departsMin(GAME.job) - GAME.clock_min;
       const van = GAME.courier.left
         ? `<span class="vandone">van gone${gone.length ? ', 1 collected' : ', nothing on it'}</span>`
         : (until <= 0
             ? '<span class="vanout">van leaving</span>'
+            /* `— in 291 min`, not `— 291 min`. The dash is a separator and the
+               number is a countdown, but at 11px a cold viewer read the pair as
+               a subtraction — "van -291 min" — which is a number the game has
+               never had. One word removes the reading. */
             : `<span class="${until < 10 ? 'vanout' : ''}">van ${G.hhmm(G.departsMin(GAME.job))}` +
-              ` — ${until.toFixed(0)} min</span>`);
+              ` — in ${until.toFixed(0)} min</span>`);
       $('hFloor').innerHTML =
         `<div><s>crate</s> <b>${GAME.stock_on_hand}</b> · <s>table</s> ` +
         `<b>${GAME.part.mounted ? (G.currentPart(GAME) || {}).id || 'part' : 'empty'}</b></div>` +
-        `<div><s>rack</s> <b>${rack.length}</b>/${GAME.rack_slots} · <s>bin</s> <b>${bin.length}</b></div>` +
+        /* "N of 4", and the bin says what it is when it is nothing. `3/4` beside
+           a bin count read as one fraction with two halves, and a cold viewer
+           took the `0` downstairs against the `N of 4` upstairs as the same slot
+           count reported twice. The words are the whole fix. The number is
+           `onShelf` — a part in your hand is not on the shelf — and this is now
+           the ONLY place the count is printed: the log printed its own copy, and
+           a cold viewer read the stale copy against this line as the shop
+           disagreeing with itself. */
+        `<div><s>rack</s> <b>${rack.length}</b> of ${GAME.rack_slots}` +
+        ` · <s>bin</s> <b>${bin.length || 'empty'}</b></div>` +
         `<div>${van}</div>`;
     }
 
@@ -4420,11 +4825,11 @@ window.INDUSTRIA = {
      Without this the window silently under-reports: a scripted run that kept
      interacting looked identical to a player who stopped dead, which is the one
      distinction the window exists to make. */
-  act: (name) => { const L = LOOK.find((e) => e.name.toLowerCase().includes(name.toLowerCase()));
-    if (!L) return { ok: false, why: 'no such thing', have: LOOK.map((e) => e.name) };
-    tapShipWindow('interact', L.name);
-    L.act(); return { ok: true, did: L.name }; },
-  items: () => LOOK.map((e) => e.name),
+  act: (name) => { const L = LOOK.find((e) => lookName(e).toLowerCase().includes(name.toLowerCase()));
+    if (!L) return { ok: false, why: 'no such thing', have: LOOK.map(lookName) };
+    tapShipWindow('interact', lookName(L));
+    L.act(); return { ok: true, did: lookName(L) }; },
+  items: () => LOOK.map(lookName),
   audio: () => ({ ready: audioReady, api: !!(globalThis.AudioContext || globalThis.webkitAudioContext),
                   ctx_state: AUD && AUD.context ? AUD.context.state : null }),
   carry: CARRIED, seen: SEEN,
@@ -4548,7 +4953,7 @@ window.INDUSTRIA = {
     if (clocks.world_min < want) clocks.world_min = want;
     return GAME.clock_min;
   },
-  courier: () => ({ ...GAME.courier, rack: G.rackParts(GAME).map((p) => p.id),
+  courier: () => ({ ...GAME.courier, rack: onShelf().map((p) => p.id),
     bin: G.binParts(GAME).map((p) => p.id),
     until_min: +(G.untilCourier_min(GAME)).toFixed(2) }),
   /* Force the courier resolution. Same function the frame loop calls, so the

@@ -1153,7 +1153,7 @@ export function newGame(job = JOBS[0], thermal = THERMAL, money = 0) {
   log(g, 'note',
     `Bore is Ø${job.nominal_mm} ${job.grade} — a ${band.toFixed(0)} µm band, ` +
     `${job.band_low_mm.toFixed(3)} to ${job.band_high_mm.toFixed(3)} mm. ` +
-    `${job.start_hole_dia_mm} mm as found.`);
+    `Ø${job.start_hole_dia_mm} mm as found.`);
   log(g, 'note', 'Machine was calibrated cold when the job started. It is not cold now.');
   return g;
 }

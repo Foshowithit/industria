@@ -253,6 +253,21 @@ try {
   die(`generated bootstrap does not parse — ${err.message}\n  (no bundle written; fix and rebuild)`);
 }
 
+/* ── AND THE APP BODY, WHICH THE CHECK ABOVE CANNOT SEE INTO ──────────────
+   index.html's own module script goes into that bootstrap as an ESCAPED
+   STRING, so it is never parsed at build time — only by the browser, at
+   runtime. A syntax error in the page therefore builds clean, reports 9
+   modules, passes all four suites (none of them parse index.html) and dies as
+   a blank screen: paid for on 2026-09-17, when one dropped `)` in a log line
+   cost a whole capture cycle. The wrapper below is character-for-character
+   the one the bootstrap runs, so anything it parses, the browser parses. */
+try {
+  new Function('return (async () => {\n' + app + '\n})();');
+} catch (err) {
+  rmSync(OUT, { force: true });
+  die(`index.html app body does not parse — ${err.message}\n  (no bundle written; fix and rebuild)`);
+}
+
 const bytes = statSync(OUT).size;
 console.log(`wrote ${OUT}`);
 console.log(`  bundle ${VERSION}   ${(bytes / 1024).toFixed(0)} KB   ${MODULES.length} modules inlined`);

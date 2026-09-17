@@ -30,7 +30,7 @@ writing anything. Neither is optional; both are short.
 cd ~/.zcode/workspace/default/industria
 git pull --ff-only          # main is the source of truth
 node kernel.test.mjs        # 76 expected
-node system.test.mjs        # 125 expected
+node system.test.mjs        # 137 expected
 node shop.test.mjs          # 69 expected
 node disposition.test.mjs   # 70 passed / 1 deliberate SCRAP failure
 ```
@@ -163,6 +163,53 @@ first. Plan it, do not build it.
 ### E. THE LADDER ABOVE (supplier, standard, the wider economy) — **GATED**
 
 Designed in `VISION.md` §1. Not from this loop.
+
+---
+
+### F. WHAT THE VIEWERS LEFT OPEN — 2026-09-17
+
+Two cold viewers (the first-impression pass) and one sighted reviewer (ten stills
+of one continuous session, `after-24`) agree on the same short list. None of it
+is a wrong fact. All of it is a viewer's first sentence about the object the game
+is about, which is why it is next. Taken in this order:
+
+- **F1 · THE PART IN HAND READS AS A FLAT WASHER** (M). The reviewer's worst item
+  across all ten frames, and the second time a viewer has said it: *"large silver
+  disc with center hole, black rectangular finger blocks clipping through it"* —
+  the payoff object of the session, and what §73's `Part` rung is about. The bore
+  is drawn at the diameter the customer will measure, which is right; what is
+  missing is the OD, the thickness and the datum face that make it a housing, and
+  the finger blocks intersect the metal.
+- **F2 · THE CALIPERS READ AS CRUDE BLOCKS** (S–M). *"Oversized crude blocks with
+  an unreadable scale, no jaws / thumbwheel / lock screw identifiable"* — the one
+  tool the game tells you to go and get cannot be read as itself.
+- **F3 · HUD-OVER-3D LEGIBILITY COLLISIONS** (S). Shot 03: the pendant's lit
+  display sits behind the job header, and the reviewer named the covered sentence
+  rather than the panel covering it. Shot 09: the same display behind the gauge
+  box, read as a cropped header — FALSE as diagnosed, nothing is clipped, two
+  surfaces overlap, but the frame is unreadable either way. Shot 02: the
+  drawing's small labels alias into "PSLEACNTION" — the source text is correct
+  (`materials.mjs:1273`, `1314`), so this is texture resolution, not a wrong
+  fact.
+- **F4 · SHOT 08 ADDS NOTHING TO SHOT 07** (S). *"Effectively a duplicate … the
+  same fact printed twice across two frames with zero change."* An apparatus
+  problem in the capture set rather than a page defect: a set must not spend a
+  frame on no new fact, which is the same rule the log lines are now held to.
+- **F5 · "they trust it" AFTER A 1.1 µm MISS** (S, copy). Read in place it means
+  the customer trusted a reading that was 1.1 µm out — the sting, not a
+  contradiction — but a cold reader stops on it. Copy, so it waits for a wave
+  that is not structural (COPY-STRUCTURE SEPARATION).
+- **F6 · THE CRATE ECONOMY — *GATED*** (decision). `BLANK_STOCK` is 3 and the
+  crate draws `cl(stock_on_hand, 0, 3)` castings, and ROADMAP:122 says a shift
+  can produce up to three parts. But the first casting is mounted at shift start
+  (`game.mjs:1096`) and mounting that one never decremented stock, so a shift
+  that ships it and then fetches three more has produced **four** parts from a
+  crate of three. Both readings are defensible — the crate holds three and the
+  part in the machine is a fourth the shop owned, or the mounted part is the
+  first of the three and the crate should show 2 at 05:55 — and they differ in
+  money, in the day ledger, and in what Earl means when he says *"there are three
+  in there. Do the arithmetic."* Product decision, not the loop's: recorded, not
+  touched.
 
 ---
 
@@ -321,6 +368,107 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-17** — THE FRAME'S PRINTED FACTS (`after-12` → `after-24`, loop run).
+  The class: **a fact printed on a surface that persists after the thing it
+  describes has moved on.** The header is re-derived every frame; the log is
+  not. A line stays exactly as written while the shop keeps working, so a count
+  in a line is true once and a claim afterwards. A cold viewer read the frame's
+  `rack 0 of 4`, a look-line's `Rack: 1 of 4 slots used` from four acts back and
+  a pickup line's `The rack is empty` as three versions of one number — two
+  stale, none wrong — and reported a shop that cannot count its own parts.
+  **The test that settled every site, recorded because it generalises: does the
+  line carry a fact that is in the log nowhere else?** The header owns the
+  counts. What is on the rack is in the log as EVENTS — every part that reached
+  it was put there by a settlement line that names it and says where it went —
+  so the rack look-line's count and names were a second derivation printed as a
+  state, and the line is gone (the panel still names every part with its
+  disposition, which is current at the moment it is read). The crate look prints
+  the material and the as-cast bore and nothing numeric; the bin look prints the
+  parts' names, and prints nothing at all when the bin is empty, because an
+  empty bin is the header's fact and a zero on a persisting surface is a
+  non-final zero. Two more in the same pass: the traveler line was typed once
+  for J1 (`Ø40 H6, 30 deep`, `Band is 16 µm`) and printed Ø40 beside the say
+  line's Ø80 on a Kestrel shift (now `GAME.job` and `W.bandUm`), and the pass
+  line printed the dial to 0 µm while the pendant dials in 2–6 µm nudges (now
+  1 µm on the dial, and the achieved radius in mm to 2 dp, per the
+  machine-mounted-readout rule above).
+  **The three settlement lines are records now, not statuses** — the hour of the
+  event plus a consequence clause that cannot be read as a claim about the shop
+  now. One shape for a bare-word verdict (`ACCEPTED at 05:58.`), one for a
+  phrase verdict, which takes a **dateline**: `05:59. UNDERSIZE — can still be
+  cut — …`. The evidence is a misread of my own first version, found by
+  reading the rendered log rather than the diff: `UNDERSIZE — can still be cut
+  at 05:59` reads as a deadline for the cutting — an hour that exists on no
+  other surface, in a shop whose one deadline is the van at 10:50 — so the hour
+  goes first, the way the log's own clock-on line carries it (`05:55. On the
+  floor.`). ACCEPTED keeps `at HH:MM` because a bare word cannot take a deadline
+  and its late-note already prints the hour once; prefixing it would print one
+  fact twice on one line.
+  **Two defects were found by the work rather than by a test.** (a) A capture
+  run died with no page and no error: a dropped `)` left the app body
+  unparseable. `tools/build-single-file.mjs` now runs the REWRITTEN app body
+  through `new Function` and refuses to emit — `REFUSING TO EMIT: index.html
+  app body does not parse` — proved to fire by breaking the construct itself
+  (removing a trailing `;` does NOT fire it; ASI absorbs it, so that first test
+  was invalid and was redone). The raw body is the wrong input for that guard
+  (`Cannot use import statement outside a module`); for the raw body the check
+  is `node --check <file>.mjs`. (b) A reviewer's WORST-2 from `after-22` — "the
+  crate says 3 and the table says J1-01, so the count is stale" — was FALSE, and
+  the code says why: the first part is mounted at shift start (`game.mjs:1096`
+  `mounted: true`) and `mountBlank` is the only decrementer (`game.mjs:1865`),
+  so in a capture session nothing decrements and `crate 3` is live-derived in
+  every frame. Re-confirmed against this wave's drive before shipping.
+  **The sighted reviewer passed the wave's target on `after-24`** (ten stills of
+  one session, build `be59b2f71b64`, the bytes on disk): *"crate stays 3, rack
+  stays 0 of 4, bin stays empty across all ten, so stock itself does not
+  contradict"*, and its BIGGEST STRENGTH is what the wave was for — *"Numerical
+  self-consistency across frames … every repeated equals computes: band 16 µm,
+  error sum 5.4 µm, 2008 µm / 38 µm stock-to-band, 0.4 µm
+  dial-vs-realised, 58.6 µm gauge-vs-nominal, 1.1 µm gauge-vs-CMM."* Its WORST
+  items are all pre-existing and carried into §2 as section F. Suites green
+  (76/137/69/70+1), bundle `b4bf73d77712`, 9 modules.
+
+- **2026-09-17** — THE REVIEW ROUNDS (`after-4` → `after-11`, loop runs). Eight
+  capture-and-look rounds — the checked-in driver is `acceptance/review-set.py`,
+  which serves the working tree over HTTP, refuses if the served bytes are not
+  the local bytes, drives the real verbs, and writes the manifest beside the
+  stills — fixing only what a viewer could see. The classes that recurred:
+  **type that could not be read against what was behind it** (the talk panel's
+  backdrop was `.82`, and a viewer read the shop through the printing; the HUD
+  and the one line of type that is not in a box had a 3 px drop shadow and were
+  re-given an 11 px halo for the pendant's lit screen — note one reviewer's
+  "clipped off the screen edge" was FALSE: nothing was clipped, the chip was
+  crossed by the screen behind it); **rows that were never laid out as rows**
+  (`#thermal .row` was an id against a class, so computed display was `flex`
+  while the label's two words ran straight into the value — the label is now a
+  wrapper with a gutter, the value takes the remainder right-aligned);
+  **a label that was cut, not wrapped** (`max-width:46%` + `nowrap` + ellipsis
+  measured as eleven rows sliced mid-word; the fix that stopped the cut then
+  overflowed 1280×720, so the width is now a measured type-size decision, and
+  11 px and 10 px were measured and rejected for a wall that is read standing
+  up); **the oldest log line sliced mid-sentence** (the window is four lines and
+  the oldest fades); **numbers that disagreed with each other** — the rack read
+  `1/4` four lines above the pickup line's `0 left` (now `N of 4 slots used`),
+  the error-budget total was summed from the unfiltered terms while every row
+  above it was filtered and rounded for print (the rows are now built once, as
+  the exact strings printed, and the total is their sum), and the job-board card
+  printed `Ø40` beside `36 mm` for the other diameter of the same part (every
+  diameter now wears Ø, every length its unit); **chips that were real and
+  still invisible** — a census had already proved 10/10 on the tabletop plane,
+  which is why the proof was numeric and the problem survived: at 8–18 mm they
+  were the smallest chips in the building and all sixteen sat inside the part's
+  own shadow (now 12–24 mm, thrown across ~20 cm); and **two objects that were
+  J1's on every shift** — the traveler and the casting crate were typed once as
+  constants, so on a Kestrel shift the panel named the same bore Ø80 and Ø40 in
+  two consecutive lines (both now read `GAME.job`, and `lookName` resolves an
+  entry's name whether it is a string or a function of live state, so the aim
+  prompt, the panel and the debug verb cannot resolve one entry to three names).
+  Also: `W.bandUm` now owns the printed band width in microns (four inline
+  copies of the subtraction were four chances to print four widths), with the
+  two arithmetic sites — the claim-error share and the shop record — left
+  deliberately unrounded, because a whole micron would change what the machine
+  does. Suites green (76/137/69/70+1), bundle `b4bf73d77712`, 9 modules.
 
 - **2026-09-17** — THE WORKING END AND THE SCREEN THAT FIT (loop run). Three
   defects a cold viewer could see and no test could: **the machine panel grew

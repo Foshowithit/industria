@@ -861,3 +861,11 @@ export function hhmm(min) {
   const m = ((Math.round(min) % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
+
+/** A job's tolerance zone, in microns, whole. Lives here beside hhmm because
+ *  the board card, the offer line and the traveler panel all print this width;
+ *  three inline copies of the subtraction was three chances to print three
+ *  different widths for one band. Rounded for the printed figure only —
+ *  arithmetic that divides by the band (the claim error share, the shop
+ *  record) keeps the raw difference, where a whole micron would matter. */
+export const bandUm = (job) => Math.round((job.band_high_mm - job.band_low_mm) * 1000);
