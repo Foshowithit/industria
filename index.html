@@ -2068,6 +2068,16 @@ function machinePanel() {
   const surplus = last ? (last.bite_realised_um - last.bite_cmd_um) : 0;
   $('pnCut').innerHTML =
     F('dial', `${biteCmd_um} µm radius`) +
+    /* THE SYSTEM'S OPEN CLAIM, ON THE MACHINE, WHERE YOU DECIDE. It sits beside
+       the player's own expectation because they are the same kind of thing — two
+       claims about a part that has not been cut — and because a player who
+       cannot see what the system said before the cut cannot catch it being
+       wrong after it. */
+    (() => {
+      const c = GAME.system.claims[GAME.system.claims.length - 1];
+      if (!c || c.actual_mm !== null) return '';
+      return F('system said', `Ø${c.predicted_mm.toFixed(4)} mm`);
+    })() +
     F('you expect', predicted_um === null
       /* THE INSTRUCTION NAMES THE WORLD, NOT A KEY. The pendant replaced the
          on-screen legend, so any text that still taught Shift+1-6 would be
@@ -2382,6 +2392,44 @@ function stepRoughFeed(dir) {
   refreshLoadMeter();
 }
 
+/* ══ THE SYSTEM'S CLAIM, SETTLED IN THE OPEN ══════════════════════════════
+   This is the moment the seat exists for and until now it happened in silence:
+   a claim was scored onto a record that lives behind a walk to the console, so
+   a player who never went back never learned whether the system had been right,
+   and its error reaches FIVE MICROMETRES against an eleven-micrometre band at
+   full wear.
+
+   IT IS REPORTED WITH NO CAUSE, deliberately. The numbers and nothing else. Why
+   it was wrong is the player's to find, and the console is where they find it —
+   the surveyed condition and the machine's own condition have been on that
+   screen side by side since it was built.
+
+   ONE FUNCTION, CALLED BY BOTH CUTTING PATHS. The first version of this was
+   pasted into `doRough` by a positional replace that hit the wrong one of two
+   identical anchors, and `doCut` then threw `claimBefore is not defined` on the
+   first cut — a runtime error in the page that no suite here covers, because no
+   suite here runs the page. */
+function claimBeforeCut(g) {
+  const c = g.system.claims[g.system.claims.length - 1];
+  return (c && c.actual_mm === null) ? c : null;
+}
+function reportSystemClaim(claimBefore) {
+  if (!claimBefore || claimBefore.actual_mm === null) return;
+  const err = claimBefore.error_um;
+  const band = (GAME.job.band_high_mm - GAME.job.band_low_mm) * 1000;
+  const share = Math.abs(err) / Math.max(band, 1);
+  logLine(`The system said <b>Ø${claimBefore.predicted_mm.toFixed(4)}</b>. It is ` +
+    `<b>Ø${claimBefore.actual_mm.toFixed(4)}</b> — <b>${Math.abs(err).toFixed(1)} µm out</b>` +
+    (share >= 0.15 ? `, which is <b>${(share * 100).toFixed(0)}% of the band</b>.` : '.'));
+  if (share >= 0.15) {
+    toast(`The system called it <b>Ø${claimBefore.predicted_mm.toFixed(4)}</b>.<br>` +
+      `The machine made <b>Ø${claimBefore.actual_mm.toFixed(4)}</b>.<br>` +
+      `<b>${Math.abs(err).toFixed(1)} µm out</b> — a ${(share * 100).toFixed(0)}% slice of the band.`, 7000);
+  }
+  if (REC) REC.action('system_claim_settled', { predicted_mm: claimBefore.predicted_mm,
+    actual_mm: claimBefore.actual_mm, error_um: err, band_um: band, share });
+}
+
 function doRough() {
   const g = GAME;
   if (!g.tool) { if (REC) REC.refusal('rough', 'NO_TOOL', { clock_min: g.clock_min }); return say('You', 'Load a bar first — they\u2019re on the board.'); }
@@ -2403,6 +2451,7 @@ function doRough() {
      same convention the dial uses, and it is deliberately larger than the
      thermal growth plus the surplus a typical finish pass carries — the part
      is left ROUGHED, which is what roughing is for. */
+  const claimBefore = claimBeforeCut(g);
   const diaBefore = g.part.holeDia_cold_mm;
   /* ── ROUND 2: ROUGHING IS NO LONGER A FIXED MOVE ─────────────────────────
    * On J1 this was hard-wired to 0.3 mm at 0.12 mm/rev and it was the right
@@ -2467,10 +2516,15 @@ function doRough() {
     refreshLoadMeter();
     return;
   }
+  /* Roughing cuts metal, so it settles the system's claim like any other pass.
+     The declaration above was left unused here for one revision — the call was
+     only in `doCut` — which is the same shape as the bug that produced it: one
+     thing declared and another used. */
+  reportSystemClaim(claimBefore);
   if (r.truncated) {
     /* Roughing that stops for want of passes must SAY so. A run that quietly
        quits early and reports success is the failure mode this project is
-       named after. */
+     named after. */
     toast(`Roughing hit the pass limit at Ø${g.part.holeDia_cold_mm.toFixed(3)} — ` +
       `not at the target. Take the rest off.`, 5200);
   }
@@ -2527,6 +2581,7 @@ function doCut() {
     return;
   }
   if (g.machine.edgeR_cold_mm === null) doTouchOff();
+  const claimBefore = claimBeforeCut(g);
   const diaBefore = g.part.holeDia_cold_mm;
   const res = kernelJob(G.cutOnce, { bite_mm: biteCmd_um / 1000, feed_mm_rev: 0.12, vc: GAME.machine.vc_m_min, label: 'bored' });
   if (!res.ok) {
@@ -2580,6 +2635,9 @@ function doCut() {
     `<b>${diff >= 0 ? '+' : ''}${diff.toFixed(1)} µm</b>.`);
   if (Math.abs(diff) >= 1) toast(`Expected <b>${predicted.toFixed(1)} µm</b> · removed ` +
     `<b>${rec.bite_realised_um.toFixed(1)} µm</b> · difference <b>${diff >= 0 ? '+' : ''}${diff.toFixed(1)} µm</b>`, 4200);
+
+  /* And the system's claim, settled in the same breath. See reportSystemClaim. */
+  reportSystemClaim(claimBefore);
   if (phase === 'ARRIVE' || phase === 'MEASURE') phase = 'CUTTING';
 }
 function doInspect() {
