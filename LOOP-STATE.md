@@ -56,7 +56,10 @@ marked **GATED** needs a decision that is not the loop's to make.
 ### A. THE MACHINE RUNG, FINISHED
 
 - ~~**A1 · SOUND**~~ ✅ 2026-09-17. Probe 13/13 at `tools/audio-probe.html`.
-- **A2 · THE RADIO** (S). Deliberately still silent because it needs music and
+- ~~**A2 · THE RADIO**~~ ✅ 2026-09-17. **Tuned between stations** — hiss, a
+  heterodyne whistle, a slow fade — which is a texture and not content. 2.0x the
+  room at 7 m. The original note, kept because it is why this took two passes:
+  Deliberately still silent because it needs music and
   music is content. **THE HONEST WAY OUT, decided here so it is not re-litigated:
   the radio is TUNED BETWEEN STATIONS.** At half five in the morning a shop radio
   is hiss, a heterodyne whistle, slow fading and the occasional burst of something
@@ -64,7 +67,10 @@ marked **GATED** needs a decision that is not the loop's to make.
   no content it does not have, and it is more honest than inventing music and
   calling it somebody's station. Band-limited noise + one drifting heterodyne +
   slow amplitude fade, from a fixed position, quiet.
-- **A3 · THE DRAWING** (L). **The single biggest credibility gap left.** The
+- ~~**A3 · THE DRAWING**~~ ✅ 2026-09-17. A real sheet: zone frame, plan view,
+  hatched section, stacked tolerance, datum flag, title block, third-angle symbol.
+  Data-first (`drawingFor(job)`) with 20 assertions that the sheet agrees with the
+  job on every job. **Original note:** The
   brief's §101 makes the drawing the centre of the trade and §17 makes it a
   teaching law ("a part is rejected, someone says you controlled the diameter but
   not where the hole is, and *then* the drawing opens"). Today `DRAWING` is a
@@ -240,7 +246,12 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
-- **2026-09-17** — Loop armed, then item 1 and item 2 the same day. Plan expanded
+- **2026-09-17** — A3 (the drawing) and A2 (the radio) shipped in one turn after
+  Adam asked for bigger turns, and the plan was expanded to eleven sized items.
+  The audio probe was found to have a tally that under-reported its own failures —
+  it printed "11 passed, 0 failed, 17 total — ALL PASS" — now counted adjacent to
+  the report and asserted self-consistent. **Next: A4, the part in your hand.**
+- **2026-09-17** — (earlier) Loop armed, then item 1 and item 2 the same day. Plan expanded
   from four items to a sized, ordered list after Adam asked for more planning and
   bigger turns. **Next: A3 the drawing** (the biggest credibility gap left), then
   A2 the radio, then A4 the part in your hand.
