@@ -1163,6 +1163,11 @@ coolantJet.position.set(-0.55, 1.45, 0.55); coolantJet.rotation.z = 0.5; cell.ad
 coolantJet.visible = false;
 const puddle = new THREE.Mesh(new THREE.CircleGeometry(0.34, 22), M.coolant);
 puddle.rotation.x = -Math.PI / 2; puddle.position.set(0.1, 0.012, -5.5); puddle.visible = false; scene.add(puddle);
+/* NAMED, SO IT CAN BE FOUND. A probe looking for it by geometry type found the
+   CLOCK FACE instead and reported the puddle as unscaled — the same mistake as
+   comparing two frequencies, in a different medium: a search that can match the
+   wrong thing will. */
+puddle.name = 'coolant-puddle';
 
 /* ── CHIPS — the ones on the floor are from cutting that already happened ─ */
 const chipPile = new THREE.Group(); scene.add(chipPile);
@@ -1322,9 +1327,12 @@ function chipsFromPass(rec, material) {
      * and `stepChips` applies gravity in the same units -- mixing a raw metric
      * constant into a scaled world is what made a correctly-placed chip
      * invisible. */
-    c.userData.v = new THREE.Vector3((Math.random() - .5) * 0.30,
+    /* A little wider than it was: ten chips per pass landing inside a 6 cm
+       circle built a spike rather than a scatter, and a spike is not what a
+       table looks like after a morning. */
+    c.userData.v = new THREE.Vector3((Math.random() - .5) * 0.55,
                                      -(0.06 + Math.random() * 0.10),
-                                     (Math.random() - .5) * 0.30);
+                                     (Math.random() - .5) * 0.55);
     c.userData.spin = 2.0 + Math.random() * 3.0;
     spindleGroup.add(c); NEW_CHIPS.push(c);
   }
@@ -1354,11 +1362,32 @@ function stepChips(dt) {
      * floor on the frame it spawned. Measured: 720 clamp hits, all at y around
      * -0.67, while the HUD described a chip that never drew a single visible
      * frame. Convert once, then compare. */
-    const worldFloor = 1.06;                       // cell-local floor height
+    /* ══ WHAT A CHIP LANDS ON ═══════════════════════════════════════════════
+       A FIXED FLOOR HEIGHT BURIED EVERY CHIP THE PLAYER EVER MADE. The cut
+       happens directly above the MACHINE TABLE, whose top is at cell-local 1.21,
+       and this test stopped chips at 1.06 — the enclosure floor, 15 cm below the
+       table surface and inside it. Measured after six passes: 176 chips in the
+       scene and not one of them visible, because the whole pile was inside the
+       table. The player's work left no trace on the machine and nothing said so.
+
+       So the landing SURFACE depends on WHERE the chip is, which is the honest
+       rule and one line: over the table it lands on the table, anywhere else it
+       lands on the enclosure floor. Convert to cell-local once, choose, convert
+       back — the same discipline that fixed the first version of this loop, which
+       compared a spindle-local y against a cell-local floor and slammed every
+       chip down on the frame it was born. */
+    const cellX = c.position.x;                    // spindle sits at cell x 0
+    const cellZ = 0.25 + c.position.z;             // and at cell z 0.25
+    const onTable = Math.abs(cellX) < 0.625 && Math.abs(cellZ - 0.25) < 0.475;
+    const landAt = onTable ? 1.215 : 1.065;        // table top · enclosure floor
     const spindleY = spindleGroup.position.y;      // cell-local y of the parent
-    if (spindleY + c.position.y <= worldFloor) {
+    if (spindleY + c.position.y <= landAt) {
       c.userData.v.set(0, 0, 0);
-      c.position.y = worldFloor - spindleY;
+      c.position.y = landAt - spindleY;
+      /* AND IT STAYS WHERE IT LANDED. A settled chip is taken off the falling
+         list, so the 260-chip budget is spent on chips that can still be seen
+         falling rather than on a pile nobody can look at. */
+      c.userData.settled = true;
     }
   }
   if (NEW_CHIPS.length > 260) {
@@ -3714,7 +3743,20 @@ function frame(now) {
     screw.rotation.x = mo.feed_mm_min * 0.02 * (now / 1000);
     const cutting = !!(GAME.part.cutting || GAME.history.slice(-1)[0]?.cut_min);
     coolantJet.visible = GAME.machine.spindle_on;
-    puddle.visible = GAME.history.length > 2;
+    /* ══ THE PUDDLE IS A RECORD OF USE ══════════════════════════════════════
+       It was a fixed circle that appeared once and never changed — a boolean
+       wearing a puddle's clothes. Coolant accumulates, and the honest quantity is
+       the MACHINE's own cutting minutes, which now belong to the shop and survive
+       the morning: the floor in front of a machine tells you how much work it has
+       done, and it should still be there tomorrow.
+
+       It is capped, because a puddle that grew without limit would swallow the
+       shop, and it is scaled from the radius rather than rebuilt so nothing is
+       allocated per frame. */
+    const wet_min = GAME.machine.cut_min_total || 0;
+    puddle.visible = wet_min > 0.4;
+    const grow = Math.min(1.9, 1 + wet_min / 45);
+    puddle.scale.setScalar(grow);
     /* light follows the clock — §49, and it is the clock you can SEE */
     const dl = W.daylight(clocks.world_min);
     sun.intensity = 0.25 + 0.55 * (1 - dl.dawn) * (1 - dl.dusk);
