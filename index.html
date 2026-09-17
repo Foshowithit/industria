@@ -267,6 +267,13 @@ document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.04, 220);
+/* ══ THE CAMERA IS IN THE SCENE GRAPH BECAUSE THE PART IS A CHILD OF IT ════
+   Anything parented to a camera is only rendered if the camera is itself part of
+   the scene — three.js traverses the scene, and an orphan camera is never
+   traversed. Without this line the held part is added, positioned, rotated by the
+   mouse and NEVER DRAWN, which looks exactly like a part that failed to load and
+   says nothing anywhere. Found by picking one up and looking. */
+scene.add(camera);
 const eye = new THREE.Vector3(-7.5, 1.68, 8.4);
 let yaw = -0.30, pitch = -0.06;
 
@@ -1127,6 +1134,71 @@ function scatterFloorChips(n) {
   }
 }
 scatterFloorChips(90);
+/* ══ THE PART IN YOUR HAND — §73's Part rung ══════════════════════════════
+   The brief asks for "the housing in your hand, rotatable, with the bore
+   visible", and until now the part existed in exactly two places: clamped in the
+   machine and sitting on a shelf. Both are places you look AT it. Neither is
+   holding it.
+
+   IT IS THE SAME SCENE AND THE SAME CAMERA, with the part parented to the camera
+   at arm's length. A second render pass and an inset viewport would be a picture
+   OF a part; this is the part, at the size the kernel says it is, in front of
+   the eye that is already there.
+
+   AND HOLDING IT COSTS YOU YOUR HANDS, which is the honest consequence and also
+   the reason the mode is legible: while you are holding a part the mouse turns
+   the PART instead of the world, and you cannot operate the machine. A machinist
+   holding a housing does not walk around looking at things.
+
+   THE BORE IS DRAWN AT ITS REAL DIAMETER — the cold diameter the kernel holds, at
+   the diameter it actually is — because a bore rendered at a plausible size would
+   be this build telling a lie with geometry. */
+let HELD = null;                  // the part id in your hands, or null
+let HELD_MESH = null, heldSpin = 0, heldTilt = 0.35;
+const HELD_SCALE_TO_VIEW = 0.0016;   // mm -> world units at arm's length
+
+function buildHeldMesh(dia_mm, depth_mm) {
+  const rO = 62 * HELD_SCALE_TO_VIEW, rI = (dia_mm / 2) * HELD_SCALE_TO_VIEW;
+  const dep = depth_mm * HELD_SCALE_TO_VIEW;
+  const shape = new THREE.Shape(); shape.absarc(0, 0, rO, 0, Math.PI * 2, false);
+  const hole = new THREE.Path(); hole.absarc(0, 0, rI, 0, Math.PI * 2, true); shape.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: dep, bevelEnabled: false, curveSegments: 48 });
+  geo.rotateX(-Math.PI / 2); geo.translate(0, dep, 0); geo.center();
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    color: 0x8a929a, roughness: 0.34, metalness: 0.86 }));
+  m.castShadow = false; m.receiveShadow = false;
+  return m;
+}
+/** Take the part off the rack and put it in your hands. */
+function takeInHand(partId) {
+  const p = GAME.part_register.find((x) => x.id === partId);
+  if (!p) return false;
+  HELD = partId;
+  if (HELD_MESH) { camera.remove(HELD_MESH); HELD_MESH.geometry.dispose(); }
+  /* THE SIZE IT ACTUALLY IS. `position_in_band_um` records where the part landed
+     against nominal, so the bore drawn here is the bore the CUSTOMER will measure
+     — not the dial, not the gauge, and not a plausible-looking number. */
+  const dia = GAME.job.nominal_mm + ((p.position_in_band_um ?? 0) / 1000);
+  HELD_MESH = buildHeldMesh(dia, GAME.job.bore_depth_mm);
+  HELD_MESH.rotation.set(heldTilt, heldSpin, 0);
+  camera.add(HELD_MESH);
+  HELD_MESH.position.set(0, -0.03, -0.42);
+  say('You', `<b>${partId}</b> — a Ø${GAME.job.nominal_mm} bearing housing, ` +
+    `Ø${dia.toFixed(4)} mm through the bore. Turn your hand to look at it; ` +
+    `<b>E</b> again to put it back on the rack.`);
+  logLine(`Picked up <b>${partId}</b>. The bore is Ø${dia.toFixed(4)} mm. ` +
+    `The rack has <b>${G.rackParts(GAME).filter((x) => x.id !== partId).length}</b> left on it.`);
+  return true;
+}
+function putDown() {
+  if (!HELD) return;
+  const id = HELD; HELD = null;
+  if (HELD_MESH) { camera.remove(HELD_MESH); HELD_MESH.geometry.dispose(); HELD_MESH = null; }
+  syncFloor();
+  say('You', `<b>${id}</b> back on the rack.`);
+  logLine(`Put <b>${id}</b> back on the rack.`);
+}
+
 /* ══ THE CHIP TRAY — §73's bottom rung, made readable ═════════════════════
    The ladder in the brief runs Planet → ... → Machine → Fixture → Part →
    Feature → Tool → **Chip**, and it calls that "the visual and conceptual
@@ -1406,6 +1478,15 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => { keys[e.code] = false; });
 addEventListener('mousemove', (e) => {
   if (document.pointerLockElement !== renderer.domElement) return;
+  /* YOUR HANDS ARE FULL. While a part is in them the mouse turns the PART, not
+     the world — which is both the control scheme and the consequence of holding
+     something. */
+  if (HELD && HELD_MESH) {
+    heldSpin += e.movementX * 0.006;
+    heldTilt = cl(heldTilt + e.movementY * 0.006, -1.2, 1.2);
+    HELD_MESH.rotation.set(heldTilt, heldSpin, 0);
+    return;
+  }
   yaw -= e.movementX * 0.0021; pitch = cl(pitch - e.movementY * 0.0021, -1.45, 1.45);
 });
 addEventListener('resize', () => {
@@ -1937,14 +2018,21 @@ add(CRATE, 'Casting crate — Ø40 housings, as-cast', 'count them', () => {
 }, () => true);
 
 add(RACK, 'Finished-part rack — by the roll-up door', 'check it', () => {
+  if (HELD) { putDown(); return; }
   const rack = G.rackParts(GAME);
   const send = rack.filter((p) => p.disposition === 'SEND');
   const rework = rack.filter((p) => p.disposition === 'REWORK');
+  /* §73'S Part RUNG HAS A VERB. Reading a shelf is not holding the part, and the
+     brief asks for it in your hand — so the rack offers it up. Each part is an
+     option rather than "take the top one", because which part you pick up is the
+     whole question when one of them is undersize. */
+  const opts = rack.map((p) => [`Pick up ${p.id} — ${p.disposition}`, () => takeInHand(p.id)]);
   say('You', rack.length === 0
     ? 'Empty. Four slots, nothing on them.'
     : rack.map((p) => `${p.id} — ${p.disposition === 'SEND'
         ? 'in spec, traveller signed, waiting for the van'
-        : 'under the bottom of the band, flagged to finish at the customer'}`).join('<br>'));
+        : 'under the bottom of the band, flagged to finish at the customer'}`).join('<br>'),
+    opts.length ? opts : undefined);
   logLine(`Rack: <b>${rack.length}</b>/${GAME.rack_slots} slots — ` +
     (rack.length ? rack.map((p) => `${p.id} (${p.disposition})`).join(', ')
                  : 'empty') + '.');
@@ -3094,7 +3182,11 @@ function syncFloor() {
   const { shown } = crateMeta();
   crateParts.forEach((o, i) => { o.visible = i < shown; });
   /* (3) the rack: presence only, slot by slot */
-  const rack = G.rackParts(GAME);
+  /* A PART IN YOUR HANDS IS NOT ON THE SHELF. One fact, one place: the rack
+     renders what is on the rack, and what is held is excluded here rather than
+     hidden with a visibility flag that something else would have to remember to
+     undo. */
+  const rack = G.rackParts(GAME).filter((p) => p.id !== HELD);
   rackObjects.forEach((o, i) => {
     const r = rack[i];
     o.visible = !!r;
@@ -3169,6 +3261,9 @@ function noteSecondPart(verbatim) {
 /* ── THE LOOK-AT PROMPT ─────────────────────────────────────────────────── */
 let lookingAt = null, lookUV = null, pendHover = null;
 function doLook() {
+  /* A PART IN YOUR HANDS ANSWERS FIRST. The verb "use" means put it down while
+     you are holding something, because you cannot use anything else. */
+  if (HELD) { putDown(); return; }
   /* Starting a SECOND bar after the first one is done and gone is the single
      fact Round 1 turns on: "Give me another part" without being asked. */
   if (lookingAt && /boring bar/i.test(lookingAt.name)) noteSecondPart('loaded another bar');
@@ -3609,7 +3704,9 @@ function frame(now) {
        standing number is deliberately not on screen. */
     if (SHOP && GAME.job.client_id) {
       const o = offersFor(SHOP, [GAME.job])[0];
-      $('hShop').textContent = o.offered ? (o.reason || '') : o.reason;
+      $('hShop').textContent = HELD
+      ? `${HELD} in your hands — turn it with the mouse, E to put it down`
+      : (o.offered ? (o.reason || '') : o.reason);
       $('hShop').style.color = o.offered ? '' : 'var(--bad)';
     }
     /* ══ ONE CLOCK, AND IT IS THE ONE THE DEADLINE WAS SET AGAINST ═════════
