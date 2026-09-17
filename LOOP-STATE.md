@@ -82,13 +82,19 @@ marked **GATED** needs a decision that is not the loop's to make.
   `materials.mjs` renders that data to a canvas. The data is what a test asserts
   against the job spec — a drawing whose tolerance text disagrees with the band
   the part is judged against is the worst possible defect in this build.
-- **A4 · THE PART IN YOUR HAND** (M). §73's `Part` rung: "the housing in your
+- ~~**A4 · THE PART IN YOUR HAND**~~ ✅ 2026-09-17. Off the rack, parented to the
+  camera, turned with the mouse, the bore drawn at the diameter the customer will
+  measure. Holding it costs you your hands, which is both the control scheme and
+  the consequence. **Original note:** §73's `Part` rung: "the housing in your
   hand, rotatable, with the bore visible". Today the part exists only inside the
   machine. It needs to be liftable off the parallels and lookable — the bore at
   the size the kernel says, the surface the last pass left.
-- **A5 · THE TOOL RUNG** (S). §73's `Tool`. The bar is loadable and readable; what
-  is missing is that a bar is an object with a life — see B3.
-- **A6 · DAYLIGHT AND LIFE IN THE BUILDING** (S). `daylight()` drives the lamps
+- ~~**A5 · THE TOOL RUNG**~~ ✅ folded into B2 — the bar now has an edge with a life
+  and a wear fraction the kernel reads.
+- ~~**A6 · DAYLIGHT AND LIFE IN THE BUILDING**~~ ✅ partly: the three machines that
+  are not yours now turn, at their own speeds, with a work light in each window.
+  **Still open:** chips accumulating, the coolant puddle growing, and anything else
+  that moves on its own. **Original note:** `daylight()` drives the lamps
   and there is a wall clock, but nothing else in the shop moves on its own. The
   machines cycle (`machineMotion`), chips should accumulate, the coolant puddle
   should grow. Verify what already exists before adding anything: a model that is
@@ -96,7 +102,13 @@ marked **GATED** needs a decision that is not the loop's to make.
 
 ### B. THE MACHINE AS A THING THAT WEARS
 
-- **B1 · CALIBRATION** (M). Wear is in (B1 landed: condition → TIR). Calibration
+- ~~**B1 · CALIBRATION**~~ ✅ / ~~**B2 · TOOL LIFE**~~ ✅ / ~~**B3 · DOWNTIME**~~ ✅
+  2026-09-17, and they forced an architectural correction: **THE MACHINE BELONGS TO
+  THE SHOP, NOT TO THE JOB** — condition, scale and edge life now survive the
+  morning instead of resetting to new at 05:55. Inserts wear by Taylor (0.9 minutes
+  of edge at 320 m/min against 30 at 120), the scale drifts so the machine cuts
+  wrong the same way every time, and a machine stops after a number of cutting
+  minutes set by its condition. **Original note:** Wear is in (B1 landed: condition → TIR). Calibration
   is a *different* failure: the datum itself drifts, so the machine is
   repeatable and wrong. That is the one that produces parts that all measure the
   same and are all outside the band.
@@ -106,7 +118,9 @@ marked **GATED** needs a decision that is not the loop's to make.
 - **B3 · DOWNTIME** (S). A machine that stops and eats the deadline. Ported
   hazard shape from the second build's `machines.ts`: failures per 100k hours
   rising as condition falls.
-- **B4 · THE DAY LEDGER** (S). The shop's own record, readable — what went out,
+- ~~**B4 · THE DAY LEDGER**~~ ✅ 2026-09-17. Readable off the board, offered first.
+  Deliberately not a scoreboard: no rate, no percentage, no trend line.
+  **Original note:** The shop's own record, readable — what went out,
   what it was worth, what came back. `describeShop()` and `shop.shipper` exist and
   only the board shows them.
 
@@ -119,7 +133,9 @@ marked **GATED** needs a decision that is not the loop's to make.
   every rung. At the shop rung that means it should have an opinion about *which
   job to take* and *what to quote* — and it should be wrong in a way that is
   checkable, the same way. It must never hold the answer.
-- **C4 · THE ADAPTER, WRITTEN DOWN** (S). A documented seam at `forecastPass` so
+- ~~**C4 · THE ADAPTER, WRITTEN DOWN**~~ ✅ 2026-09-17. `makeAdvisor()` enforces the
+  three conditions rather than describing them, and declining is a legal answer.
+  **Original note:** A documented seam at `forecastPass` so
   a real model can be wired in: returns a number AND its assumptions, is never
   told the outcome, the shop keeps the record. The three conditions are already in
   the code comment; they need to be an interface rather than a paragraph.
@@ -246,7 +262,12 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
-- **2026-09-17** — A3 (the drawing) and A2 (the radio) shipped in one turn after
+- **2026-09-17** — B1/B2/B3 (the wear package, and the machine became the shop's),
+  A4 (the part in your hand), B4 (the day book), C4 (the advisor seam) and A6 partly,
+  all in one turn. Three defects found by looking, including a game with NO error
+  surface — a thrown handler was completely silent. **Next: C3, the system at the
+  shop rung** — and then the only items left are the gated ones.
+- **2026-09-17** — (earlier) A3 (the drawing) and A2 (the radio) shipped in one turn after
   Adam asked for bigger turns, and the plan was expanded to eleven sized items.
   The audio probe was found to have a tally that under-reported its own failures —
   it printed "11 passed, 0 failed, 17 total — ALL PASS" — now counted adjacent to
