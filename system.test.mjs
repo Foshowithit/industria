@@ -25,6 +25,7 @@ import {
   WEAR, runout_um_for, maintain, bookCut,
 } from './game.mjs';
 import { MACHINES, MATERIALS, assessBoring } from './kernel.mjs';
+import { chipFromPass, CHIP_HEAT } from './world.mjs';
 
 let pass = 0, fail = 0;
 const rows = [];
@@ -187,6 +188,38 @@ function rigged({ condition = WEAR.condition_open } = {}) {
   ok('BOOK-UNKNOWN', 'an unknown bar gets no recommendation', bookCut('bar99', 'steel_4140') === null);
 }
 
+/* ── CHIP-*  WHAT A CHIP MAY CLAIM ───────────────────────────────────────
+   The chip read quotes three numbers at a player and all three must be exact.
+   The first version of `chipFromPass` got all three wrong: the mass came from a
+   chip cross-section instead of the annulus that was actually removed (a
+   thousand times too light), and the thickness was the radial BITE instead of
+   the feed, so a 4 mm roughing cut produced a "4.2 mm thick chip". Both were
+   player-visible and neither threw. */
+{
+  const mat = MATERIALS.steel_4140;
+  const rec = { bite_realised_um: 400, bite_cmd_um: 400, feed_mm_rev: 0.12,
+    power_kW: 0.33, cut_min: 0.531, feed_mm_min: 229, travel_mm: 30,
+    prevCold: 36, coldDia: 36.8 };
+  const c = chipFromPass(rec, mat);
+
+  const annulus_mm3 = (Math.PI / 4) * (36.8 ** 2 - 36 ** 2) * 30;
+  near('CHIP-1', 'the chip mass is the annulus that was removed',
+    c.mass_g, annulus_mm3 * 7.85e-3, 0.01);
+  ok('CHIP-2', 'and that is grams, not milligrams', c.mass_g > 5);
+  near('CHIP-3', 'the thickness is the FEED times the thickening ratio',
+    c.t2_um, 0.12 * c.r_chip * 1000, 1e-6);
+  ok('CHIP-4', 'the thickness is not the bite', Math.abs(c.t2_um - 400) > 100);
+  near('CHIP-5', 'the width is the bite the bar actually took', c.width_um, 400, 1e-6);
+  near('CHIP-6', 'the surplus is measured on the width', c.surplus_um, 0, 1e-6);
+  /* The read may not quote a temperature until the model can defend one. */
+  ok('CHIP-7', 'this build does not treat the chip temperature as a diagnosis',
+    CHIP_HEAT.temperature_is_diagnostic === false);
+  /* And the energy must be the CUTTING time, not the pass time — a pass carries
+     0.4 minutes of retract and reset that never touched the part. */
+  const slow = chipFromPass({ ...rec, cut_min: 5.0 }, mat);
+  near('CHIP-8', 'retract and reset time do not heat the chip', slow.temp_C, c.temp_C, 1e-9);
+}
+
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);
 if (failed.length) {
@@ -198,3 +231,4 @@ if (failed.length) {
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'}  ${pass} passed, ${fail} failed, ${rows.length} total`);
 if (fail === 0) console.log('the system forecasts the machine it surveyed, and is wrong exactly when that is not the machine');
 process.exit(fail === 0 ? 0 : 1);
+

@@ -190,29 +190,122 @@ export function chipFromPass(rec, material) {
   const bite_um = rec.bite_realised_um ?? 0;
   const feed = rec.feed_mm_rev ?? 0.1;
   const r_chip = Math.min(1.35, Math.max(0.9, 0.9 + 0.6 * (material?.mc ?? 0.25)));
-  const t2_mm = (bite_um / 1000) * r_chip;
 
-  const cut_J = (rec.power_kW ?? 0) * 1000 * (rec.cut_min ?? 0) * 60;
-  /* Kernel convention: 8% of cutting energy enters the workpiece, flood coolant
-     takes half of the remainder, and the rest rides out on the chip. */
-  const to_chip_J = cut_J * (1 - 0.08) * 0.5;
-  const V_mm3 = Math.max(bite_um / 1000, 0) * Math.max(feed, 0) * Math.max(rec.travel_mm ?? 0, 0);
+  /* ── TWO DIMENSIONS, AND THE FIRST VERSION OF THIS FILE CONFUSED THEM ────
+     A single-point chip has a WIDTH and a THICKNESS and they are different
+     quantities from different settings:
+
+       width      the radial depth of cut — the dial. It is what the surplus
+                  shows up in, and it is what the "it took more than you asked
+                  for" lesson is about.
+       thickness  the feed per revolution, times the chip-thickening ratio.
+                  This is the dimension that governs heat, breaking and the
+                  chip-thinning the kernel's own `kc` law is written around.
+
+     This file used the BITE for both, so a 0.12 mm/rev finishing feed produced
+     a "420 µm thick" chip and a 4 mm roughing bite produced a 4.2 MILLIMETRE
+     one — a chip 4 mm thick is not a chip, it is a bar. */
+  const t2_mm = Math.max(feed, 0) * r_chip;
+  const width_um = bite_um;
+
+  /* ── THE MASS, WHICH WAS WRONG BY A FACTOR OF A THOUSAND ────────────────
+     The old volume was `bite × feed × travel`, which is the chip's
+     CROSS-SECTION times its length — but a boring pass does not remove one
+     cross-section, it removes an ANNULUS: the tool goes round, and the material
+     it takes off over one length of travel is the ring between the bore it
+     started with and the bore it left. Measured on a J1 finishing pass:
+     1.4 mm³ by the old formula against 1,372 mm³ in reality.
+
+     It mattered because the temperature is energy over mass, so a chip a
+     thousand times too light came out at 899,719 °C — and because ΔT is really
+     just the specific cutting energy, which barely varies between cuts, EVERY
+     CHIP IN THE GAME LANDED IN THE SAME COLOUR BAND. The colour carried no
+     information at all, on every cut, which is the one thing a chip read is
+     for. */
+  const d1 = Math.min(rec.prevCold ?? 0, rec.coldDia ?? 0);
+  const d2 = Math.max(rec.prevCold ?? 0, rec.coldDia ?? 0);
+  const V_mm3 = Math.max(0, (Math.PI / 4) * (d2 * d2 - d1 * d1) * Math.max(rec.travel_mm ?? 0, 0));
   const m_kg = V_mm3 * ((material?.rho_kg_m3 ?? 7850) / 1e9);
-  const dT = m_kg > 0 ? to_chip_J / (m_kg * (material?.cp_J_per_kgK ?? 470)) : 0;
-  const temp_C = 20 + dT;
+
+  /* CUTTING TIME, NOT THE WHOLE PASSTIME. `cut_min` is the cut plus the retract,
+     the reset and the approach — measured at 0.4 minutes of handling on top of
+     a 0.13-minute finishing cut. Multiplying the CUTTING power by that total
+     charged three quarters of a minute of cutting that never happened to the
+     chip, and charged it unevenly: a short cut got a proportionally bigger
+     phantom boost than a long one, which is how a 0.4 mm pass at 0.50 mm/rev
+     came out hotter than a 4 mm pass at 0.12. The record carries the travel and
+     the feed, so the cutting time is computed rather than inferred. */
+  const cut_s = Math.max(0.001, (rec.travel_mm ?? 0) / Math.max(rec.feed_mm_min ?? 0, 0.001)) * 60;
+  const cut_J = (rec.power_kW ?? 0) * 1000 * cut_s;
+  const cp = material?.cp_J_per_kgK ?? 470;
+  const dT_adiabatic = m_kg > 0 ? (cut_J * CHIP_HEAT.into_chip_frac) / (m_kg * cp) : 0;
+
+  /* ── WHY A THICK CHIP READS HOTTER, WHICH IS THE ONLY REASON THE COLOUR
+     CARRIES ANYTHING. ────────────────────────────────────────────────────
+     Temperature rise on its own is specific cutting energy over heat capacity,
+     and that is nearly the SAME for every cut in steel — so it cannot tell you
+     which cut you just took. What differs is how long the chip stays hot: a
+     0.5 mm chip holds its heat past the moment you look at it, and a 0.12 mm
+     finishing chip gives it up to the air and the coolant almost immediately.
+     That is why a heavy rough leaves blue chips and a light finish leaves
+     silver ones at the same cutting speed, and it is what this term models. */
+  const retention = t2_mm / (t2_mm + CHIP_HEAT.keep_hot_mm);
+  const temp_C = CHIP_HEAT.ambient_C + dT_adiabatic * retention;
   const band = CHIP_COLOURS.find((c) => temp_C <= c.max_C);
 
   return {
     bite_realised_um: bite_um,
     bite_cmd_um: rec.bite_cmd_um ?? 0,
-    /* THE LESSON, CARRIED BY THE CHIP ITSELF: it is thicker than the dial said. */
+    /* THE LESSON, CARRIED BY THE CHIP ITSELF: it is WIDER than the dial said. */
     surplus_um: bite_um - (rec.bite_cmd_um ?? 0),
-    r_chip, t2_mm, mass_g: m_kg * 1000,
+    width_um,
+    r_chip, t2_mm, t2_um: t2_mm * 1000, mass_g: m_kg * 1000, volume_mm3: V_mm3,
     temp_C, colour_hex: band.hex, colour_name: band.name, colour_note: band.note,
     breaks: feed >= (material?.mc ?? 0.25) * 0.4,
     label: `${band.name} chip, ${(t2_mm * 1000).toFixed(0)} µm thick`,
   };
 }
+
+/* ══ THE CHIP'S COLOUR, AND AN HONEST ACCOUNT OF WHAT IT CANNOT DO ═════════
+   The colour is real and worth drawing: a chip does come off silver or straw or
+   blue, and the falling chips in this game are coloured from this number.
+
+   WHAT THE MODEL CANNOT DO IS TELL YOU WHICH CUT YOU JUST TOOK, and that is
+   written down here rather than discovered later by somebody who trusted it.
+
+   The temperature rise is (heat into the chip) ÷ (its heat capacity), and with
+   the energy measured correctly that is just the SPECIFIC CUTTING ENERGY over
+   the material's specific heat — about 500 K at full conversion for 4140. Two
+   things follow, and both were measured rather than reasoned:
+
+     · at full conversion the rise is under 520 K at every feed this machine
+       offers, which is not hot enough to reach the straw/blue bands;
+     · the specific energy FALLS with feed (kc ∝ h^-0.25 — the kernel's own chip
+       thinning) while a thicker chip RETAINS more of what it has, so the two
+       effects very nearly cancel. Measured across this game's cuts at the four
+       settings J1 and J2 actually use, the corrected model separates them by
+       under 15 K.
+
+   THE MISSING VARIABLE IS CUTTING SPEED, and it is missing because the game
+   does not have it: `doCut` and `doRough` both pass a fixed `vc` of 120 m/min,
+   and speed is the thing that changes a chip's colour in a real shop. So this
+   file does not get to fake the one variable it lacks. The colour is drawn, the
+   bands are real, and NOTHING player-facing states a temperature or claims a
+   diagnosis from one.
+
+   THE NEXT HONEST PIECE OF WORK, recorded here so it is not re-derived: give
+   the player a spindle-speed override. Then vc varies, `removalStep` already
+   takes it, the chip colour becomes a genuine readout of a decision, and
+   `CHIP_HEAT` below can be calibrated against something real. */
+export const CHIP_HEAT = {
+  into_chip_frac: 0.65,   // of the cutting energy, the share leaving on the chip
+  keep_hot_mm: 0.11,      // thickness at which half the temperature rise survives
+  ambient_C: 20,
+  /* Set to false when the spindle override lands and the bands start meaning
+     something. Until then it is the flag that says "do not quote a temperature
+     to a player". */
+  temperature_is_diagnostic: false,
+};
 
 /* ══════════════════════════════════════════════════════════════════════════
    THE PART — §73's Part / Feature rungs

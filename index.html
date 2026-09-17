@@ -1088,6 +1088,40 @@ function scatterFloorChips(n) {
   }
 }
 scatterFloorChips(90);
+/* ══ THE CHIP TRAY — §73's bottom rung, made readable ═════════════════════
+   The ladder in the brief runs Planet → ... → Machine → Fixture → Part →
+   Feature → Tool → **Chip**, and it calls that "the visual and conceptual
+   signature of the entire platform". Everything above the chip was walkable.
+   The chip was ten tetrahedra thrown under the tool and then a scatter of
+   specks on the floor nine metres wide — nothing a crosshair can be aimed at
+   and nothing you could read.
+
+   So the chips get a TRAY, which is what a shop has and what a person would
+   actually look at. It sits on the floor at the front of the cell, where the
+   chips land and where you walk past it, and looking into it tells you what
+   the last pass did — from the same `chipFromPass` calculation the falling
+   chips are coloured from, so the tray and the spray cannot disagree. */
+const CHIP_TRAY = new THREE.Group();
+CHIP_TRAY.position.set(2.35, 0, -4.75);
+CHIP_TRAY.rotation.y = -0.18;
+scene.add(CHIP_TRAY);
+box(1.24, 0.035, 0.66, M.rust, 0, 0.018, 0, CHIP_TRAY);              // the tray floor
+box(1.24, 0.09, 0.03, M.rust, 0, 0.045, -0.315, CHIP_TRAY);
+box(1.24, 0.09, 0.03, M.rust, 0, 0.045,  0.315, CHIP_TRAY);
+box(0.03, 0.09, 0.66, M.rust, -0.605, 0.045, 0, CHIP_TRAY);
+box(0.03, 0.09, 0.66, M.rust,  0.605, 0.045, 0, CHIP_TRAY);
+for (let i = 0; i < 26; i++) {
+  const c = new THREE.Mesh(new THREE.TetrahedronGeometry(0.010 + Math.random() * 0.013), M.chip);
+  c.position.set((Math.random() - 0.5) * 1.05, 0.045 + Math.random() * 0.02,
+                 (Math.random() - 0.5) * 0.52);
+  c.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+  CHIP_TRAY.add(c);
+}
+/** THE LAST CHIP, as the tray would show it. Kept as a fact about the pass
+ *  rather than as a mesh, because the thing that matters about a chip is its
+ *  thickness and its colour and neither of those is geometry. */
+let LAST_CHIP = null;
+
 const NEW_CHIPS = [];
 /* ONE shared material, deliberately.
  *
@@ -1103,7 +1137,14 @@ const CHIP_MAT = new THREE.MeshStandardMaterial({ color: 0xc8ccd0, roughness: 0.
 const CHIP_GEO = new THREE.TetrahedronGeometry(1.0);
 function chipsFromPass(rec, material) {
   const info = W.chipFromPass(rec, material);
-  if (info && info.colour_hex) { try { CHIP_MAT.color.set(info.colour_hex); } catch (e) {} }
+  /* THE TRAY AGREES WITH THE SPRAY. Both take their colour from the same
+     `chipFromPass` return, so there is no way for the chips on the floor and
+     the chips you can read to describe two different cuts. */
+  if (info && info.colour_hex) {
+    try { CHIP_MAT.color.set(info.colour_hex); } catch (e) {}
+    try { M.chip.color.set(info.colour_hex); } catch (e) {}
+  }
+  LAST_CHIP = info;
   /* Emitted at the TOOL NOSE, in the cell's own space.
    *
    * The old emitter did `scene.add` at a hand-picked WORLD position of
@@ -1510,6 +1551,56 @@ add(pendPad, 'Machine control — pendant', 'press a key', () => {
   pressKey(pendHover.id);
 }, () => eye.distanceTo(MACHINE_NEAR) < 4.2);
 
+/* ── THE CHIP'S VERB — the bottom rung ────────────────────────────────────
+   A chip is the physical evidence of the cut and a machinist reads it before
+   they read anything else: its colour says how hot the cut ran, its thickness
+   says what the bar actually took, and both of those are already computed by
+   `W.chipFromPass` from the real cutting energy and the real bite. Nothing
+   here asserts a number the kernel did not produce.
+
+   AND IT CARRIES THE LESSON WITHOUT STATING IT. The chip is thicker than the
+   dial said — every time, because that is what the surplus IS — and the read
+   puts those two numbers on one line and stops. */
+add(CHIP_TRAY, 'Chip tray — what came off the last pass', 'look in it', () => {
+  if (!LAST_CHIP) {
+    say('You', 'Turnings from somebody else\u2019s shift. Blue and straw, mostly — ' +
+      'whatever ran in here before you got to it. Nothing of yours in the tray yet.');
+    return;
+  }
+  const c = LAST_CHIP;
+  const surplus = c.surplus_um;
+  /* WHAT A CHIP CAN HONESTLY TELL YOU, and every figure here is exact: its
+     WIDTH is the bite the bar actually took, which is where the surplus lives;
+     its THICKNESS is the feed times the chip-thickening ratio, the dimension
+     that decides whether it breaks; its MASS is the annulus it came out of.
+     NO TEMPERATURE AND NO DIAGNOSIS — see the note on CHIP_HEAT in world.mjs
+     for why this build does not quote one. A number you cannot defend is the
+     one thing a machinist will not forgive, and the brief fails the whole build
+     for a single one of them. */
+  say('Chip tray',
+    `<b>${c.colour_name}</b> chip · <b>${c.t2_um.toFixed(0)} µm</b> thick · ` +
+    `<b>${c.width_um.toFixed(0)} µm</b> wide · ${c.mass_g.toFixed(1)} g<br>` +
+    `the dial said <b>${c.bite_cmd_um.toFixed(0)} µm</b> and the bar took ` +
+    `<b>${c.bite_realised_um.toFixed(1)} µm</b>` +
+    (Math.abs(surplus) >= 0.05
+      ? surplus > 0
+        ? ` — <b>+${surplus.toFixed(1)} µm</b> wider than you asked for`
+        : ` — <b>${Math.abs(surplus).toFixed(1)} µm</b> short of what you asked for`
+      : '') +
+    `<br><br>` +
+    (c.breaks
+      ? `<i>It broke up rather than stringing. That is the feed being right for the material.</i>`
+      : `<i>It came off in a string rather than breaking up. That is the feed, not the bar.</i>`) +
+    `<br><i>${c.mass_g.toFixed(1)} g of ${GAME.mat.label} that is now swarf.</i>`);
+  logLine(`Chip: <b>${c.colour_name}</b>, <b>${c.t2_um.toFixed(0)} µm</b> thick, ` +
+    `<b>${c.width_um.toFixed(0)} µm</b> wide (` +
+    (surplus >= 0 ? `+${surplus.toFixed(1)}` : `${Math.abs(surplus).toFixed(1)} short of`) +
+    ` the dial), ${c.mass_g.toFixed(1)} g.`);
+  if (REC) REC.action('read_chip', { colour: c.colour_name,
+    t2_um: c.t2_um, width_um: c.width_um, mass_g: c.mass_g,
+    surplus_um: surplus, breaks: c.breaks });
+}, () => true);
+
 /* ══ ASKING THE SYSTEM ════════════════════════════════════════════════════
    Walk to the console, press E, and it tells you what it makes of the bore at
    the dial you have set. Then the books close on it when metal comes off.
@@ -1720,11 +1811,27 @@ add(SCRAPBIN, 'Scrap bin — rust, dents, dead parts', 'look in it', () => {
 add(FIXTURE, 'Holding fixture — parallels and two strap clamps', 'look at the setup', () => {
   const p = GAME.part.mounted ? G.currentPart(GAME) : null;
   const on = GAME.part.mounted;
-  say('You', on
+  /* ══ §53, ON THE SCREEN AT LAST ═════════════════════════════════════════
+     `describeBore` and `perceptionOf` have been in world.mjs since they were
+     written and NEITHER WAS EVER CALLED. The whole layered model — you see "a
+     hole in a block" until you have measured something; then it is 4140 with a
+     36 mm hole; then it is an H6 bore with so many µm of radius left; and only
+     after you have been corrected does it become a band, a lobing figure and a
+     feed-mark pitch — was modelled, tested by construction, and invisible.
+
+     This is the Part and Feature rungs of the ladder the brief calls the
+     signature of the platform, and the layering is the point: the same object
+     says four different things depending on what you have done, and none of it
+     is a tutorial box. §53 asks for exactly this and it was one call away. */
+  const bore = W.describeBore(GAME, SEEN);
+  const look = W.perceptionOf(bore, SEEN);
+  say('You', (on
     ? `A casting is clamped on the parallels — ${p ? p.id : 'the current part'}. ` +
       `Your dial is zeroed to THIS face and THIS bore.`
     : 'Nothing on the parallels. The clamps are thrown back clear of the table, ' +
-      'and the dial reference died with the last part.');
+      'and the dial reference died with the last part.') +
+    `<br><br>${look.text}` +
+    (look.layer < 3 ? `<br><i>There is more here than you can read yet.</i>` : ''));
   logLine(on
     ? `Fixture: <b>${p ? p.id : 'part'}</b> clamped. Dial reference is this bore.`
     : 'Fixture: <b>empty</b>. Clamps thrown back. Touch off again — the old datum is gone.');
@@ -1869,7 +1976,12 @@ function machinePanel() {
   $('pnCut').innerHTML =
     F('dial', `${biteCmd_um} µm radius`) +
     F('you expect', predicted_um === null
-      ? '<i>not stated — <kbd>Shift</kbd>+<kbd>1\u20136</kbd></i>'
+      /* THE INSTRUCTION NAMES THE WORLD, NOT A KEY. The pendant replaced the
+         on-screen legend, so any text that still taught Shift+1-6 would be
+         teaching a control scheme the game no longer shows. The keys still
+         work — a machinist who knows them should not be slowed down — but the
+         thing the game POINTS AT is the machine in front of you. */
+      ? '<i>not stated — the pendant\u2019s <b>PRED</b> keys</i>'
       : `${predicted_um} µm`) +
     (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm <i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} vs dial)</i>`) : '') +
     /* THE LEGEND IS GONE. It was three rows of `kbd` tags teaching a control
@@ -2317,7 +2429,8 @@ function doCut() {
   /* THE PREDICTION GATE. Refused, not defaulted — see the PREDICTION block above. */
   if (predicted_um === null) {
     if (REC) REC.refusal('cut', 'NO_PREDICTION', { clock_min: g.clock_min, dial_um: biteCmd_um });
-    toast('<b>How much will it take off?</b> Press <kbd>Shift</kbd>+<kbd>1\u20136</kbd> to say what you expect, then cut.', 5200);
+    toast('<b>How much will it take off?</b> Say what you expect first — ' +
+      'the pendant\u2019s <b>PRED \u2212 / PRED +</b> keys — then cut.', 5200);
     return;
   }
   if (g.machine.edgeR_cold_mm === null) doTouchOff();
