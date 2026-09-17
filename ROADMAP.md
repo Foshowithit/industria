@@ -240,11 +240,52 @@ does not have it: `doCut` and `doRough` both pass a fixed `vc` of 120 m/min.
 So the build does not fake it. `CHIP_HEAT.temperature_is_diagnostic` is `false`,
 a test asserts it, and nothing player-facing quotes a temperature.
 
-**The next honest piece of work here is a spindle-speed override.** Then `vc`
-varies, `removalStep` already accepts it, the chip colour becomes a readout of a
-decision the player made, and `CHIP_HEAT` can be calibrated against something
-real. Until then, do not add a chip-temperature claim — that is the one kind of
-error the brief fails the whole build for.
+**THE SPINDLE-SPEED OVERRIDE LANDED 2026-09-17, and the colour is live.** The
+player sets surface speed (60-320 m/min on the pendant's SPD keys), the machine
+works out the rpm for the bore, and the partition of cutting heat that leaves on
+the chip is now speed-dependent — so the colour is a readout of a decision the
+operator made. Measured in 4140 on a Ø20 bar: 60 and 90 m/min read **straw**,
+120 through 240 read **bronze**, 320 reads **blue**. It moves on speed and not on
+depth (a 0.30 mm pass reads within ten degrees of a 1.00 mm one), which is
+exactly what a machinist reads a chip for.
+
+Still true and still worth knowing: **grey-black is unreachable** — it needs the
+temperature at the tool-chip interface rather than the chip's bulk average, and
+that is a thermal gradient this build does not model. One unreachable band,
+named.
+
+And still true: **insert life is not modelled.** Nothing punishes running at 320
+except the power and torque limits the kernel already enforces. Stated in the
+README rather than hidden.
+
+### THE KERNEL CORRECTION THAT MADE THE OVERRIDE HONEST — 2026-09-17
+
+An override that sets a speed is worthless if the speed is computed on the wrong
+circle, and it was: `boringStep` took the cutting speed from the **bar's**
+diameter instead of the **bore's**. On a machining centre the bar is held and the
+edge orbits the bore, so `vc = pi·D_bore·n/1000`. Measured on this build's own
+numbers — Ø80 bore, Ø20 bar — the kernel saw 80 m/min where the edge travelled
+320. Four times, in the direction that makes the machine look more capable than
+it is.
+
+What it moved: **rpm** (a Ø80 bore "at 120 m/min" ran at 1910 rpm, honestly 477)
+and **torque**, which is `Pc·9550/n` and was therefore reported at a quarter of
+its real value on J2. What it did **not** move: the cutting force, because
+`F = 60000·Pc/vc` and `Pc` is proportional to `vc`, so the speed cancels
+identically — the deflection and error budgets were always right.
+
+`bore_D_mm` defaults to the bar, so every pre-existing caller and every kernel
+reference case keeps the behaviour it had; BORE-1 and BORE-8 pin that default.
+**And it made a measured claim in the code false:** J2's design comment asserted
+"4.0 mm at 0.12 mm/rev cuts at 43 % of spindle power". That table is re-measured
+and the old numbers are gone.
+
+**THE LESSON ON J2 CHANGED WITH THE TRUTH.** It used to be "the lever is FEED",
+read off a table where power bound first. The wall is TORQUE, and torque at a
+fixed cutting speed is proportional to the chip AREA times the bore — so on a big
+bore the machine caps the PRODUCT, not either lever, and the answer is more
+passes. Four 1.00 mm passes clear J2. Verified across the board: J1 and J3 cut at
+every setting, J4 runs to 2.00 mm, J2 caps at 1.00 mm.
 
 ### L4 — DEPTH (the ladder §73)
 Walk up to a machine and its HMI is what you read; the part in your hand;
