@@ -192,6 +192,31 @@ implementation follows: it returns a NUMBER AND THE ASSUMPTIONS it was computed
 under; it is never told the outcome; and the shop keeps its record, not the
 system. Anything that satisfies those can take the seat.
 
+### THE MORNING — done 2026-09-17
+
+A new day used to happen instantly: the clock reset, the log cleared, the
+overhead was charged, and nothing was waiting for you.
+
+- **Every delivery is `reported: false` until it is read.** `unreported(shop)` is
+  computed from the record rather than pushed into a queue, so a shop cannot lose
+  a letter it has not read — whether it has been read is a property of the entry.
+- **The letter is the build's thesis arriving late.** Nowhere else do the number
+  the player read off a gauge and the number the customer's CMM produced sit on
+  one line. Arriving a day after the van took the part is not a delay mechanic;
+  it is what the pair is FOR. A run that never picked up the calipers gets a
+  letter that says *"you gave us no figure"* — in the customer's voice.
+- **It lands on the console**, which is where a shop's information lives and
+  where the Shop OS seat already is. Reading it is a walk, which makes it a
+  decision. The day's arrival is one log line and one toast; the terminal's own
+  screen shows the unread count in the world.
+
+**Two of my own bugs here, both the build's recurring species:** the first
+letterhead printed the client's internal id because I put an identity where a
+display name belonged (`client_id` and `client` are separate fields on the job
+spec for exactly this reason), and `startShift` used ONE flag for two different
+questions — carrying the money and starting a new day — so the `job()` hook a
+gate drives aged the shop and left post waiting. Now `carry` and `newDay`.
+
 ### THE LADDER DOWN TO THE CHIP — done 2026-09-17
 
 The brief calls Planet → … → Part → Feature → Tool → **Chip** "the visual and
