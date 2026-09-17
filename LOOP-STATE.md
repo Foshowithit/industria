@@ -129,10 +129,12 @@ marked **GATED** needs a decision that is not the loop's to make.
 - ~~**C1 · the seat**~~ ✅ forecast by running the machine's own physics, with the
   survey as its single assumption.
 - ~~**C2 · visibly wrong**~~ ✅ settled in the open, 36% of the band at full wear.
-- **C3 · THE SYSTEM AT THE NEXT RUNG** (M). VISION §3: the system advises at
-  every rung. At the shop rung that means it should have an opinion about *which
-  job to take* and *what to quote* — and it should be wrong in a way that is
-  checkable, the same way. It must never hold the answer.
+- ~~**C3 · THE SYSTEM AT THE NEXT RUNG**~~ ✅ 2026-09-17. `adviseJob` picks the best
+  rate on the board and prints the objective it used AND what it did not consider —
+  the relationship. It is not wrong about the money and it is not a trap: taken one
+  job at a time the advice always pays best today, and a player who follows it for
+  a season runs out of clients. That is the failure mode of optimising a stated
+  objective, which is what the project exists to teach people to notice.
 - ~~**C4 · THE ADAPTER, WRITTEN DOWN**~~ ✅ 2026-09-17. `makeAdvisor()` enforces the
   three conditions rather than describing them, and declining is a legal answer.
   **Original note:** A documented seam at `forecastPass` so
