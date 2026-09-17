@@ -824,3 +824,92 @@ export function keyRectUV(i) {
   const col = i % KEYPAD.cols, row = Math.floor(i / KEYPAD.cols);
   return { u0: pad + col * (cw + gap), v0: 1 - (pad + row * (ch + gap) + ch), w: cw, h: ch };
 }
+
+/* ══ NOTICES AND SIGNS ════════════════════════════════════════════════════
+   A shop wall is mostly paper: method sheets, a safety notice, an inspection
+   stamp, a hand-written warning. §49 asks for a place that has been used, and
+   used places have notices on the walls that somebody put up for a reason and
+   nobody has taken down.
+
+   These are drawn, like everything else here — no files, no fetch. The text is
+   passed in by the page because what a notice SAYS is the page's business;
+   this module only knows how to draw a piece of paper with writing on it. */
+export function noticePanel({ heading = '', lines = [], accent = '#c8452f',
+                             size = 512, paperColour = '#e8e4d8', seed = 83 } = {}) {
+  const rnd = mulberry32(seed);
+  const W = size, H = Math.round(size * 1.35);
+  const c = canvas(W); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = paperColour; ctx.fillRect(0, 0, W, H);
+  // a slight curve in the paper and a shadow along one edge
+  const sh = ctx.createLinearGradient(0, 0, W, H);
+  sh.addColorStop(0, 'rgba(255,255,255,.10)');
+  sh.addColorStop(0.6, 'rgba(0,0,0,.02)');
+  sh.addColorStop(1, 'rgba(0,0,0,.16)');
+  ctx.fillStyle = sh; ctx.fillRect(0, 0, W, H);
+
+  const pad = W * 0.085;
+  if (heading) {
+    ctx.fillStyle = accent;
+    ctx.fillRect(pad, pad * 0.8, W - pad * 2, H * 0.012);
+    ctx.fillStyle = '#20242a';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.font = `700 ${(W * 0.078).toFixed(1)}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+    const words = heading.split(' ');
+    let line = '', y = pad * 1.5;
+    for (const w of words) {
+      const t = line ? line + ' ' + w : w;
+      if (ctx.measureText(t).width > W - pad * 2 && line) { ctx.fillText(line, pad, y); y += W * 0.095; line = w; }
+      else line = t;
+    }
+    ctx.fillText(line, pad, y);
+    y += W * 0.115;
+    ctx.font = `400 ${(W * 0.042).toFixed(1)}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+    ctx.fillStyle = '#3a4046';
+    for (const l of lines) {
+      if (!l) { y += W * 0.055; continue; }
+      ctx.fillText(l, pad, y);
+      y += W * 0.068;
+    }
+  }
+  // a strip of old tape at the top corners, and grime
+  ctx.fillStyle = 'rgba(190,180,150,.45)';
+  ctx.fillRect(W * 0.06, 0, W * 0.16, H * 0.035);
+  ctx.fillRect(W * 0.78, 0, W * 0.16, H * 0.035);
+  for (let i = 0; i < 60; i++) {
+    ctx.globalAlpha = 0.04 + rnd() * 0.08;
+    ctx.fillStyle = '#5a5344';
+    ctx.beginPath(); ctx.arc(rnd() * W, rnd() * H, 0.6 + rnd() * 2.0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return { texture: tex, aspect: W / H };
+}
+
+/** A shop clock face. The hands are NOT drawn here — they are meshes the page
+ *  rotates from `clocks.world_min`, so the clock on the wall and the clock in
+ *  the corner of the screen cannot disagree. A face with printed hands would be
+ *  a second copy of the time, and there is already one too many clocks here. */
+export function clockFace(size = 256) {
+  const c = canvas(size); const ctx = c.getContext('2d');
+  const r = size / 2;
+  ctx.fillStyle = '#e6e3da'; ctx.beginPath(); ctx.arc(r, r, r * 0.94, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#22262b'; ctx.lineWidth = size * 0.045;
+  ctx.beginPath(); ctx.arc(r, r, r * 0.90, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
+    const inner = i % 3 === 0 ? 0.66 : 0.76, outer = 0.84;
+    ctx.strokeStyle = '#22262b'; ctx.lineWidth = i % 3 === 0 ? size * 0.035 : size * 0.018;
+    ctx.beginPath();
+    ctx.moveTo(r + Math.cos(a) * r * inner, r + Math.sin(a) * r * inner);
+    ctx.lineTo(r + Math.cos(a) * r * outer, r + Math.sin(a) * r * outer);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}

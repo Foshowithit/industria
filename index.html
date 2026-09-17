@@ -166,7 +166,8 @@ import * as P from './people.mjs';
 import { createAudio } from './audio.mjs';
 /* The shop's surfaces. Drawn in the page, deterministic, no assets — see the
    header of materials.mjs for why they are not files. */
-import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD } from './materials.mjs';
+import { shopMaterials, shopEnvironment, tint, keypadPanel, keyAtUV, keyRectUV, KEYPAD,
+         noticePanel, clockFace } from './materials.mjs';
 /* Playtest instrumentation. Dark unless the URL asks for it (`?rec=1`), so the
    public build behaves exactly as before — see recorder.mjs and PLAYTEST-KIT.md.
    Every call below is a no-op returning early when `REC` is null. */
@@ -474,6 +475,25 @@ box(0.16, 0.06, 0.10, M.brass, 0.55, 1.60, 1.36, cell);     // latch
    the build's earlier attempt at an on-screen control surface could not work.
    Aiming at a thing in the world and pressing the same key you press for
    everything else in this shop does work, and needs no legend. */
+/* YOUR MACHINE WEARS THE SAME DRESSING AS THE OTHER THREE — feet, the chip
+   conveyor crawling out of the base, the belt line, a nameplate and a warning
+   sticker — MINUS the control box, because its controls are the pendant below
+   and a machine with two control surfaces has a problem. Four machines that
+   look like each other is also what a shop looks like: a cell is usually bought
+   as a batch. */
+for (const fx of [-1.32, 1.32]) for (const fz of [-1.18, 1.18]) {
+  const foot = cyl(0.075, 0.10, 0.14, M.steel, 12);
+  foot.position.set(fx, 0.07, fz); cell.add(foot);
+}
+box(3.2, 0.12, 2.6, M.dark, 0, 0.44, 0, cell);              // belt line
+const myConv = box(0.62, 0.46, 1.5, M.dark, -1.98, 0.68, -0.1, cell);
+myConv.rotation.z = 0.30;
+box(0.56, 0.30, 0.5, M.dark, -2.28, 0.98, 0.45, cell);
+const myPile = new THREE.Mesh(new THREE.ConeGeometry(0.30, 0.16, 12), M.chip);
+myPile.position.set(-2.28, 1.16, 0.45); cell.add(myPile);
+box(0.34, 0.10, 0.02, M.bright, -0.70, 2.62, 1.36, cell);   // nameplate
+box(0.16, 0.20, 0.02, M.warn,  0.95, 1.12, 1.36, cell);     // warning sticker
+
 const pend = new THREE.Group(); pend.position.set(1.72, 1.66, 0.92); cell.add(pend);
 box(0.80, 1.10, 0.16, M.dark, 0, 0, 0, pend);
 /* the machine's own readout — still the HTML panel, which is the one place on
@@ -687,18 +707,207 @@ function syncBoard() {
   BOARD_CARDS.forEach(({ job, band }) => { band.material = GAME.job.id === job.id ? M.warn : M.ink; });
 }
 
-/* ── THE REST OF THE SHOP — inhabited (§49), and not all of it about you ── */
-/* a second machine running someone else's job, cooling tower, blower */
+/* ── THE REST OF THE SHOP — inhabited (§49), and not all of it about you ──
+   THREE OF THESE EXIST because the arrival text has promised "three spindles
+   already running" since it was written and the floor had two. A shop is three
+   spindles you did not start; the sentence was right and the floor was short.
+
+   WHAT MAKES A BOX READ AS A MACHINE TOOL. The first version was a grey cuboid
+   with a flat window in it, which is a shipping container. A vertical machining
+   centre is recognisable from its SILHOUETTE long before its detail: a tall
+   back that houses the column, a lower front with the door in it, a control box
+   hanging off one side, and a chip conveyor crawling out of the base on the
+   other. Get those four and it reads at a glance from across the shop, which is
+   the only distance that matters for the other three. */
+function vmcDressing(g, { w = 2.4, d = 2.0, front = 1.0 } = {}) {
+  /* (a) leveling feet. Machines are never flat on the slab. */
+  for (const fx of [-w / 2 + 0.28, w / 2 - 0.28]) {
+    for (const fz of [-d / 2 + 0.28, d / 2 - 0.28]) {
+      const foot = cyl(0.075, 0.10, 0.14, M.steel, 12);
+      foot.position.set(fx, 0.07, fz); g.add(foot);
+    }
+  }
+  /* (b) the chip conveyor, crawling out of the base to one side — the single
+     most machine-tool-shaped object in the building. */
+  const conv = box(0.62, 0.46, 1.5, M.dark, -w / 2 - 0.22, 0.68, -0.1, g);
+  conv.rotation.z = 0.30;
+  box(0.56, 0.30, 0.5, M.dark, -w / 2 - 0.52, 0.98, 0.45, g);
+  const chipPile = new THREE.Mesh(new THREE.ConeGeometry(0.30, 0.16, 12), M.chip);
+  chipPile.position.set(-w / 2 - 0.52, 1.16, 0.45); g.add(chipPile);
+  /* (c) the control box on an arm, on the other side, angled toward whoever is
+     standing at the door — which is where a pendant always is. */
+  const cb = new THREE.Group(); cb.position.set(w / 2 + 0.30, 1.55, front * 0.55);
+  cb.rotation.y = -0.34; g.add(cb);
+  box(0.10, 0.10, 0.10, M.dark, -0.14, 0.0, 0, cb);          // arm joint
+  box(0.06, 0.06, 0.34, M.dark, -0.24, 0.0, -0.16, cb);      // arm
+  box(0.46, 0.60, 0.16, M.dark, 0, 0, 0, cb);                // the box
+  box(0.34, 0.24, 0.02, new THREE.MeshStandardMaterial({ color: 0x1b3a2a, emissive: 0x2f7a4a, emissiveIntensity: 0.55 }),
+      0, 0.13, 0.09, cb);
+  for (let k = 0; k < 6; k++) {
+    box(0.055, 0.035, 0.02, k === 2 ? M.warn : M.slot, -0.11 + (k % 3) * 0.11, -0.10 - Math.floor(k / 3) * 0.08, 0.09, cb);
+  }
+  /* (d) the door, framed, with a real gasket line and a handle — and the
+     nameplate and warning sticker that every machine in every shop carries. */
+  box(w * 0.98, 0.07, 0.07, M.dark, 0, 2.42, front + 0.02, g);
+  box(w * 0.98, 0.07, 0.07, M.dark, 0, 0.90, front + 0.02, g);
+  box(0.07, 1.55, 0.07, M.dark, -w * 0.46, 1.66, front + 0.02, g);
+  box(0.07, 1.55, 0.07, M.dark,  w * 0.46, 1.66, front + 0.02, g);
+  box(0.52, 0.045, 0.045, M.steel, w * 0.30, 1.12, front + 0.06, g);
+  box(0.34, 0.10, 0.02, M.bright, -w * 0.22, 2.60, front + 0.06, g);   // nameplate
+  box(0.16, 0.20, 0.02, M.warn,   w * 0.30, 1.08, front + 0.06, g);    // warning
+  return g;
+}
 function otherMachine(x, z, ry, colorHex, noise) {
   const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
-  box(2.4, 0.5, 2.0, M.dark, 0, 0.25, 0, g);
-  box(2.4, 2.8, 2.0, new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.8, metalness: 0.2 }), 0, 1.8, 0, g);
-  const w2 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.0), M.glass); w2.position.set(0, 1.7, 1.04); g.add(w2);
-  const chipPile = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.22, 14), M.chip); chipPile.position.set(0, 0.62, 0.8); g.add(chipPile);
+  const paint = tint(MATS.paint, colorHex);
+  box(2.6, 0.40, 2.2, M.dark, 0, 0.20, 0, g);                 // plinth
+  /* the tall back that houses the column, and the lower front that holds the
+     door — the two masses that make the silhouette */
+  box(2.4, 3.10, 1.05, paint, 0, 1.95, -0.58, g);
+  box(2.4, 1.65, 1.05, paint, 0, 1.22, 0.52, g);
+  box(2.52, 0.16, 2.2, paint, 0, 3.58, 0, g);                 // top cap
+  box(2.4, 0.12, 2.2, M.dark, 0, 0.44, 0, g);                 // belt line
+  const w2 = new THREE.Mesh(new THREE.PlaneGeometry(1.62, 1.10), M.glass);
+  w2.position.set(0, 1.55, 1.06); g.add(w2);
+  vmcDressing(g, { w: 2.4, d: 2.2, front: 1.06 });
   return { g, noise };
 }
 const OTHER1 = otherMachine(-11, -4, 0.5, 0x7d8890, 0.62);
 const OTHER2 = otherMachine(9.5, 2, -0.7, 0x6f7a72, 0.44);
+
+/* ══ THE REST OF THE FLOOR ════════════════════════════════════════════════
+   THE ARRIVAL TEXT WAS ALREADY PROMISING THESE. The gate screen has said since
+   it was written: "Through it: three spindles already running, a compressor,
+   and somebody's radio." The floor had two other machines, no compressor and
+   no radio. The text is right about what a shop is — a shop is three spindles
+   you did not start and a compressor you cannot turn off — so the floor is what
+   gets built, not the sentence that gets cut. This is the last mismatch of that
+   kind in the build as far as I have been able to look for them.
+
+   Everything below is a prop with a job: it either makes a sound, tells the
+   time, or puts paper on a wall where a real shop has paper on a wall. */
+
+/* (1) THE THIRD SPINDLE. Somebody else's job, like the other two. */
+const OTHER3 = otherMachine(14.2, -9.4, -0.42, 0x76807a, 0.53);
+
+/* (2) THE COMPRESSOR. A horizontal receiver, a motor on top, a belt guard —
+   and it is the one machine in the building that runs all day and belongs to
+   nobody, which is why the arrival text names it. */
+const COMP = new THREE.Group(); COMP.position.set(-18.6, 0, 8.4); COMP.rotation.y = Math.PI / 2; scene.add(COMP);
+{
+  const tank = cyl(0.36, 0.36, 1.85, M.rust, 20);
+  tank.rotation.z = Math.PI / 2; tank.position.y = 0.52; tank.castShadow = true; COMP.add(tank);
+  for (const sx of [-0.72, 0.72]) {                       // saddle feet
+    box(0.16, 0.34, 0.5, M.dark, sx, 0.17, 0, COMP);
+  }
+  box(0.5, 0.30, 0.36, M.dark, 0.18, 0.95, 0, COMP);      // motor
+  box(0.54, 0.05, 0.40, M.steel, 0.18, 1.11, 0, COMP);    // motor cap
+  const guard = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.06, 18), M.steel);
+  guard.rotation.x = Math.PI / 2; guard.position.set(-0.42, 0.95, 0); COMP.add(guard);
+  box(0.10, 0.10, 0.9, M.brass, -0.42, 0.95, 0.30, COMP); // discharge line
+  const gauge = cyl(0.05, 0.05, 0.03, M.brass, 14);
+  gauge.rotation.x = Math.PI / 2; gauge.position.set(-0.42, 1.20, 0); COMP.add(gauge);
+}
+
+/* (3) THE RADIO. On a shelf, dial lit, which is exactly what the text says
+   somebody has left on. */
+const RADIO = new THREE.Group(); RADIO.position.set(-9.5, 1.34, -2.4); scene.add(RADIO);
+box(0.62, 0.05, 0.30, M.dark, 0, -0.03, 0, RADIO);        // shelf
+box(0.34, 0.20, 0.16, M.dark, 0, 0.10, 0, RADIO);
+box(0.13, 0.09, 0.01, new THREE.MeshStandardMaterial({ color: 0x2a2418, emissive: 0xd8b24a, emissiveIntensity: 1.5 }),
+    0.07, 0.11, 0.085, RADIO);                            // the lit dial
+const dial = cyl(0.022, 0.022, 0.012, M.steel, 12);
+dial.rotation.x = Math.PI / 2; dial.position.set(-0.11, 0.11, 0.085); RADIO.add(dial);
+box(0.05, 0.05, 0.05, M.steel, 0, -0.005, -0.09, RADIO);  // speaker grille
+
+/* (4) PALLET RACKING along the far wall. The strongest silhouette in any
+   warehouse, and cheap: uprights and beams. */
+function racking(x, z, ry, bays) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
+  const W = 2.7, H = 4.2, D = 1.1;
+  for (let b = 0; b <= bays; b++) {
+    const bx = (b - bays / 2) * W;
+    for (const dz of [-D / 2, D / 2]) {
+      box(0.10, H, 0.10, M.rust, bx, H / 2, dz, g);
+      box(0.10, H, 0.10, M.rust, bx + 0.14, H / 2, dz, g);   // the twin upright
+    }
+  }
+  for (const lvl of [1.15, 2.55, 3.75]) {
+    box(W * bays, 0.12, 0.09, M.rust, 0, lvl, -D / 2, g);
+    box(W * bays, 0.12, 0.09, M.rust, 0, lvl, D / 2, g);
+    for (let b = 0; b < bays; b++) {
+      box(W * 0.92, 0.04, D * 0.86, M.steel, (b - bays / 2 + 0.5) * W, lvl + 0.08, 0, g);
+    }
+  }
+  return g;
+}
+racking(11.5, 15.2, Math.PI, 2);
+racking(16.4, 6.2, Math.PI / 2, 2);
+/* what is ON the racking: part boxes, one leaning pallet, a drum */
+{
+  const boxAt = (x, y, z, w, h, d, m) => box(w, h, d, m, x, y, z, scene);
+  boxAt(10.2, 1.42, 15.2, 0.9, 0.5, 0.8, M.wood);
+  boxAt(12.8, 1.45, 15.2, 1.1, 0.56, 0.9, M.wood);
+  boxAt(15.0, 2.85, 6.2, 1.0, 0.5, 0.85, M.rust);
+  boxAt(17.6, 2.82, 6.2, 0.9, 0.44, 0.8, M.wood);
+}
+
+/* (5) DRUMS. Three, one on its side, one on a spill pallet. */
+const drums = [[-17.9, -3.6, 0], [-17.0, -2.2, 0], [-16.4, -4.6, 1]];
+for (const [dx, dz, onSide] of drums) {
+  const d = cyl(0.30, 0.30, 0.88, onSide ? M.dark : M.rust, 20);
+  if (onSide) { d.rotation.z = Math.PI / 2; d.position.set(dx, 0.30, dz); }
+  else { d.position.set(dx, 0.44, dz); }
+  d.castShadow = d.receiveShadow = true; scene.add(d);
+  for (const ry of onSide ? [dx - 0.2, dx + 0.2] : [0]) {
+    const rib = cyl(0.315, 0.315, 0.04, M.dark, 20);
+    if (onSide) { rib.rotation.z = Math.PI / 2; rib.position.set(ry, 0.30, dz); }
+    else { rib.position.set(dx, 0.44 + ry, dz); }
+    scene.add(rib);
+  }
+}
+box(1.5, 0.10, 1.1, M.dark, -17.0, 0.05, -3.4, scene);    // the spill pallet
+
+/* (6) THE CLOCK. Hands are meshes driven from the SAME clock the HUD reads —
+   `clocks.world_min` — so the wall and the corner of the screen cannot
+   disagree about what time it is. */
+const CLOCK = new THREE.Group(); CLOCK.position.set(3.6, 3.1, -16.6); scene.add(CLOCK);
+const clockBack = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.06, 28), M.dark);
+clockBack.rotation.x = Math.PI / 2; CLOCK.add(clockBack);
+const clockFaceMesh = new THREE.Mesh(new THREE.CircleGeometry(0.33, 32),
+  new THREE.MeshStandardMaterial({ map: clockFace(256), roughness: 0.85 }));
+clockFaceMesh.position.z = 0.035; CLOCK.add(clockFaceMesh);
+const hourHand = box(0.028, 0.18, 0.012, M.dark, 0, 0, 0.05, CLOCK);
+const minHand  = box(0.020, 0.26, 0.012, M.dark, 0, 0, 0.05, CLOCK);
+/* the hands grow UP from the pin, so the geometry is shifted by half its own
+   length and the mesh sits at the centre. Rotating z then sweeps the hand
+   about the pin instead of about a point half a hand away. */
+hourHand.geometry.translate(0, 0.09, 0);
+minHand.geometry.translate(0, 0.13, 0);
+const clockPin = cyl(0.022, 0.022, 0.02, M.brass, 10);
+clockPin.rotation.x = Math.PI / 2; clockPin.position.z = 0.055; CLOCK.add(clockPin);
+
+/* (7) PAPER ON THE WALLS. A method sheet by the machine, a safety notice by
+   the door, a hand-written warning over the compressor. */
+function notice(x, y, z, ry, cfg, w = 0.42) {
+  const p = noticePanel(cfg);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * p.aspect),
+    new THREE.MeshStandardMaterial({ map: p.texture, roughness: 0.94 }));
+  m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = false; scene.add(m);
+  return m;
+}
+notice(-2.6, 1.72, -16.62, 0, { heading: 'HOUSEKEEPING', accent: '#c8452f',
+  lines: ['A place for everything.', 'Clear down before you clock off.', '', 'E. ROWNTREE — CELL LEAD'] });
+notice(16.1, 1.60, -16.62, 0, { heading: 'COOLANT', accent: '#2f6f8a', seed: 91,
+  lines: ['Do not top up with neat.', 'Mix 6-8 % and check it', 'with the refractometer.', '', 'Refractometer is on the bench.'] });
+notice(-20.6, 1.62, 8.4, Math.PI / 2, { heading: 'COMPRESSOR', accent: '#8a6a2f', seed: 97, paperColour: '#ded6c2',
+  lines: ['Stays on. Do NOT stop it', 'to hear yourself think.', '', 'Drain the receiver Friday.'] });
+/* the fire point, and the board that says where it is */
+box(0.34, 0.46, 0.12, new THREE.MeshStandardMaterial({ color: 0x9b2f24, roughness: 0.7 }),
+    -20.6, 1.45, 2.2, scene);
+box(0.30, 0.16, 0.03, M.bright, -20.6, 1.55, 2.28, scene);
+box(0.22, 0.22, 0.03, new THREE.MeshStandardMaterial({ color: 0x2f6f3a, roughness: 0.6 }),
+    -20.6, 3.4, 2.2, scene);
 
 /* chip conveyor + bins + pallets */
 const bin = (x, z, mat) => { const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
@@ -895,7 +1104,7 @@ function stepChips(dt) {
    turns that into gain. The page only says WHERE it is. */
 let AUD = null;
 try { AUD = createAudio({ busy: true }); } catch (e) { console.warn('audio unavailable', e); }
-const AUD_MACHINES = { mine: 'vmc1', OTHER1: 'vmc2', OTHER2: 'vmc3' };
+const AUD_MACHINES = { mine: 'vmc1', OTHER1: 'vmc2', OTHER2: 'vmc3', OTHER3: 'vmc4' };
 let audioReady = false;
 function audioGo() {
   if (!AUD || audioReady) return;
@@ -2524,6 +2733,12 @@ function frame(now) {
     const dl = W.daylight(clocks.world_min);
     sun.intensity = 0.25 + 0.55 * (1 - dl.dawn) * (1 - dl.dusk);
     for (const l of LAMPS) l.material.emissiveIntensity = dl.shop_lights ? 2.4 : 0.06;
+    /* The wall clock and the corner of the screen read the SAME minute. */
+    if (CLOCK) {
+      const mins = ((clocks.world_min % 720) + 720) % 720;
+      minHand.rotation.z = -(mins % 60) / 60 * Math.PI * 2;
+      hourHand.rotation.z = -(mins / 60) / 12 * Math.PI * 2;
+    }
     for (const pl of scene.children.filter((c) => c.isPointLight)) pl.intensity = dl.shop_lights ? 2.1 : 0.10;
     for (const b of PRACTICALS) b.intensity = dl.shop_lights ? 1.5 : 0.0;
 
