@@ -137,6 +137,29 @@ it is why the earlier attempt at one did not.
 a screen modelled on the machine. That is the next honest step and it is not
 urgent — the controls are diegetic now, which was the §48 debt.
 
+### THE ECONOMY — merged from the second build (2026-09-17)
+
+`shop.mjs`. The business the machine sits in: cash, a standing with each client,
+a day book, and a board that is DERIVED from them rather than a fixed list of
+work. Ported from `~/industria` `packages/sim-core/src/economy/` — see that
+file's header for exactly what came across, what was re-scaled and why.
+
+- **The board is a consequence.** A job is on the wall because a client put it
+  there. J3 is gated at 640 standing; a client burned past 520 stops calling and
+  the board says so; J4 is always offered to anybody, because a board with
+  nothing on it is a stopped game rather than a hard one.
+- **The order of the penalties is the design:** scrap costs more than late,
+  which costs more than undersize, which costs more than nothing. The worst
+  thing a shop can do is not ship a slightly wrong part; it is not ship one.
+  `shop.test.mjs` asserts this as an ORDERING so it survives re-scaling.
+- **The claim term is not a port.** The shop keeps the running error of its own
+  claims, and a claim that matches what the customer measures is worth standing.
+  This is the build's thesis — the gap between the gauge and the part — priced.
+- **J3 is the thermal job.** Ø40 IT5, eleven micrometres, gated at 640. The part
+  grows 0.492 µm/K, so a ten-degree part eats half the band. The gate report said
+  warm-up "carries no penalty"; that was true, and this is the job that stops it
+  being true.
+
 ### L4 — DEPTH (the ladder §73)
 Walk up to a machine and its HMI is what you read; the part in your hand;
 the feature, its tolerance and its history; the chip you just made and what it
@@ -144,12 +167,18 @@ says about the cut. Second machine. Inspection as its own act with its own
 uncertainty.
 
 ### NOT IN SCOPE, and let us not pretend otherwise
-Companies, RFQs, hiring, cash flow, the regional economy, the
-Planet→Chip scale ladder. A full Phase 0–1 economy architecture for exactly
-this exists at `~/industria` on the build machine — `packages/sim-core`,
-`world-io`, `net-seam`, with soak tests — and it has **never been merged into
-this repository**. That work is real and it is the missing half of the vision,
-but merging it is a decision, not a task, and this file does not schedule it.
+Companies hiring and firing, the labour market, machine fleet aging, supply and
+logistics, the regional economy, the Planet→Chip scale ladder, multiplayer,
+verified competency. The Phase 0–1 architecture that models all of this is at
+`~/industria` — `packages/sim-core`, `world-io`, `net-seam`, with soak tests —
+and what was needed here has been **ported from it, not merged with it**: the
+toolchain is deliberately not in this repository, because one page with no
+bundler is what makes this build shippable.
+
+The distinction matters for anyone tempted to do the literal merge: the second
+build's VALUE is its model and its tests, and both survive the port intact. Its
+Vite + TypeScript + npm workspace is the part that cannot cross, and losing it
+costs nothing here.
 
 ---
 
