@@ -270,6 +270,59 @@ function rigged({ condition = WEAR.condition_open } = {}) {
     typeof K.MACHINE_EXECUTION === 'boolean' && typeof K.PRODUCTION_AUTHORIZATION === 'boolean');
 }
 
+/* ── SPD-*  THE SPINDLE SPEED, AND WHAT IT DOES AND DOES NOT BUY ─────────
+   The last fixed constant in the cut path. `doCut` and `doRough` both passed a
+   literal `vc: 120` and nothing could change it, which took a real decision
+   away from the player AND left the chip colour with nothing to report. */
+{
+  const { SPEEDS } = await import('./game.mjs');
+  const K = await import('./kernel.mjs');
+
+  eq('SPD-1', 'a machine opens at the default speed', newGame().machine.vc_m_min, SPEEDS.default);
+  ok('SPD-2', 'the steps are ordered slow to fast',
+    SPEEDS.steps.every((v, i, a) => i === 0 || v > a[i - 1]));
+  ok('SPD-3', 'the default is one of the steps', SPEEDS.steps.includes(SPEEDS.default));
+
+  /* POWER RISES WITH SPEED at a fixed chip area — P is proportional to vc. */
+  const env = async (vc) => {
+    const G = await import('./game.mjs');
+    const g = newGame();
+    g.tool = 'bar20'; g.stickout_L = 45;
+    g.toolSpec = G.TOOLING.find((t) => t.id === 'bar20');
+    g.machine.vc_m_min = vc;
+    return G.envelope(g, { bite_mm: 0.4, feed_mm_rev: 0.12, vc });
+  };
+  const slow = await env(60), fast = await env(320);
+  ok('SPD-4', 'power rises with cutting speed at a fixed chip area', fast.pkW > slow.pkW * 3);
+  /* TORQUE DOES NOT, and this is the physical fact worth learning: torque is
+     Pc·9550/n and both scale with vc, so it is set by the CHIP AREA and the
+     bore and by nothing else. On a torque-limited job, going faster buys you
+     nothing — you have to take a smaller chip. */
+  near('SPD-5', 'but torque does not move with speed at all',
+    fast.torque_frac, slow.torque_frac, 1e-9);
+
+  /* AND THE CHIP COLOUR MOVES WITH IT, which is the reason the setting exists. */
+  const { chipFromPass } = await import('./world.mjs');
+  const chipAt = async (vc) => {
+    const tool = K.makeTool({ D: 20, z: 1, stickout_L: 45 });
+    const as = K.assessBoring({ b: 1.0, feed: 0.12, vc, bore_D_mm: 40 },
+      { tool, material: K.MATERIALS.steel_4140 }, K.MACHINES.vmc_40taper_7k5, { runout_um: 5 });
+    return chipFromPass({ bite_realised_um: 1000, bite_cmd_um: 1000, feed_mm_rev: 0.12,
+      vc_m_min: vc, power_kW: as.step.Pc_kW, cut_min: 30 / as.step.f + 0.4,
+      feed_mm_min: as.step.f, travel_mm: 30, prevCold: 36, coldDia: 38 },
+      K.MATERIALS.steel_4140);
+  };
+  const c60 = await chipAt(60), c320 = await chipAt(320);
+  ok('SPD-6', 'a slow cut leaves a cooler chip than a fast one', c320.temp_C > c60.temp_C + 100);
+  ok('SPD-7', 'and the colour actually changes across the range',
+    c60.colour_name !== c320.colour_name);
+  /* The partition is capped at a defensible share rather than running to 100 %:
+     some of the cutting heat always goes into the tool and the workpiece. */
+  const { CHIP_HEAT } = await import('./world.mjs');
+  ok('SPD-8', 'the chip never carries all of the cutting heat',
+    CHIP_HEAT.frac_at_vc(9999) <= 0.80 && CHIP_HEAT.frac_at_vc(-99) >= 0.30);
+}
+
 /* ── report ───────────────────────────────────────────────────────────── */
 const failed = rows.filter((r) => !r.ok);
 if (failed.length) {
@@ -281,5 +334,6 @@ if (failed.length) {
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'}  ${pass} passed, ${fail} failed, ${rows.length} total`);
 if (fail === 0) console.log('the system forecasts the machine it surveyed, and is wrong exactly when that is not the machine');
 process.exit(fail === 0 ? 0 : 1);
+
 
 

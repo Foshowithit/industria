@@ -238,7 +238,10 @@ export function chipFromPass(rec, material) {
   const cut_s = Math.max(0.001, (rec.travel_mm ?? 0) / Math.max(rec.feed_mm_min ?? 0, 0.001)) * 60;
   const cut_J = (rec.power_kW ?? 0) * 1000 * cut_s;
   const cp = material?.cp_J_per_kgK ?? 470;
-  const dT_adiabatic = m_kg > 0 ? (cut_J * CHIP_HEAT.into_chip_frac) / (m_kg * cp) : 0;
+  /* The speed the cut actually ran at, off the record. Defaulted rather than
+     required so an old caller cannot silently get a zero share. */
+  const frac = CHIP_HEAT.frac_at_vc(rec.vc_m_min ?? 120);
+  const dT_adiabatic = m_kg > 0 ? (cut_J * frac) / (m_kg * cp) : 0;
 
   /* ── WHY A THICK CHIP READS HOTTER, WHICH IS THE ONLY REASON THE COLOUR
      CARRIES ANYTHING. ────────────────────────────────────────────────────
@@ -298,7 +301,48 @@ export function chipFromPass(rec, material) {
    takes it, the chip colour becomes a genuine readout of a decision, and
    `CHIP_HEAT` below can be calibrated against something real. */
 export const CHIP_HEAT = {
-  into_chip_frac: 0.65,   // of the cutting energy, the share leaving on the chip
+  /* THE PARTITION IS SPEED-DEPENDENT, and that is the whole reason the colour
+     can now say anything. At low cutting speed most of the cutting heat goes
+     into the tool and the workpiece; as the edge moves faster the chip is past
+     the rake face sooner and carries a larger share away with it. That is the
+     standard account of why the same steel comes off silver at 60 m/min and
+     straw at 300, and it is the term that makes the chip a readout of the
+     speed the operator set rather than a constant.
+
+     CALIBRATED, NOT DERIVED, like the retention below it: the slope is chosen so
+     that the bands separate across the range of speeds this machine offers.
+     What is physical, and what the tests assert, is the ORDER — faster runs
+     hotter, thicker stays hot longer.
+
+     THE RANGE IS 0.30 TO 0.80 AND IT IS CAPPED, which the first version of this
+     line was not: it ran to 1.00, meaning every joule of cutting energy leaving
+     on the chip. That is not a thing that happens — some always goes into the
+     tool and the workpiece — and a cap that cannot be reached is a cap that is
+     not doing its job. The published accounts of heat partitioning put the
+     chip's share at roughly a third at low speed and three quarters or more at
+     high speed, and the ends of this range are those two numbers.
+
+     WHAT THE MODEL CAN AND CANNOT REACH, measured rather than asserted, because
+     the previous version of this comment claimed blue was unreachable and that
+     stopped being true the moment the partition became speed-dependent. Across
+     the six speeds this machine offers, in 4140 on a Ø20 bar:
+
+        60 m/min   straw   240 C        180 m/min  bronze  361 C
+        90 m/min   straw   270 C        240 m/min  bronze  422 C
+       120 m/min   bronze  301 C        320 m/min  blue    445 C
+
+     AND IT MOVES ON SPEED, NOT ON DEPTH, which is the honest and useful
+     property: measured across the same six speeds a 0.30 mm pass reads within
+     ten degrees of a 1.00 mm one, because the specific cutting energy barely
+     changes and the retention term is the same at the same feed. A chip reports
+     the speed you set. That is exactly what a machinist reads it for.
+
+     So silver, straw, bronze and blue are reachable, and GREY-BLACK IS NOT — it
+     needs the temperature at the tool-chip interface rather than the chip's
+     bulk average, and that is a thermal gradient this build does not model. One
+     unreachable band, named, rather than four claimed and three delivered. */
+  frac_at_vc: (vc) => Math.min(0.80, Math.max(0.30, 0.30 + 0.0019 * (vc ?? 120))),
+  into_chip_frac: 0.65,   // retained for the old callers; frac_at_vc is the live one
   keep_hot_mm: 0.11,      // thickness at which half the temperature rise survives
   ambient_C: 20,
   /* Set to false when the spindle override lands and the bands start meaning

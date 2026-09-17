@@ -182,7 +182,7 @@ export function bookCut(barId, materialKey, machineKey = 'vmc_40taper_7k5') {
   /* Step down until the assumed machine runs it. 0.02 mm is finer than any
      catalogue prints and this loop is bounded, so it cannot spin. */
   for (let i = 0; i < 200; i++) {
-    const as = assessBoring({ b: bite, feed, vc: 120 }, { tool, material: mat }, mach, assumed);
+    const as = assessBoring({ b: bite, feed, vc: SPEEDS.default }, { tool, material: mat }, mach, assumed);
     if (as.verdict === 'CUTS CLEAN') break;
     bite = +(bite - 0.02).toFixed(2);
     if (bite <= 0.02) return null;
@@ -437,6 +437,48 @@ export const jobById = (id) => JOBS.find((j) => j.id === id) || JOBS[0];
    than buried. They have NOT been measured against a real machine. The spec's
    honest-weak-list says so and this is where that promise is kept.
    ------------------------------------------------------------------------ */
+/* ══ SPINDLE SPEED — THE VARIABLE THE BUILD WAS MISSING ═══════════════════
+   Every cut this game has ever made ran at 120 m/min, because `doCut` and
+   `doRough` both passed a literal `vc: 120` and nothing could change it. Two
+   things were wrong with that and both are worth stating, because this is the
+   last of the fixed constants in the cut path:
+
+     · IT MADE THE CHIP COLOUR UNINFORMATIVE. A chip's colour in a real shop is
+       read mostly against SPEED — the same 4140 comes off silver at 60 m/min
+       and straw or bronze at 300 — and with the speed pinned there was nothing
+       for the colour to report. `chipFromPass` says so at length.
+
+     · IT TOOK A REAL DECISION AWAY. Surface speed is the first thing a machinist
+       sets and the first thing they are careful about, and it trades against
+       everything else in the cut at once: faster means more power AND more
+       torque for the same chip area, a shorter cycle, less heat soaked into the
+       machine, and a hotter chip. A player who cannot set it is playing with
+       one hand.
+
+   THE PLAYER SETS THE SURFACE SPEED, NOT THE RPM, and that is deliberate rather
+   than convenient: the same rpm is a different cutting speed on a different
+   bore, which is the fact `boringStep` was getting wrong until the bore was
+   passed in. Setting the surface speed means the machine works out the rpm for
+   the bore it is actually cutting — which is what a machinist does in their
+   head, and what this game can now show them doing.
+
+   THE STEPS ARE A REAL RANGE FOR 4140 ON CARBIDE. Below about 60 the edge rubs
+   and work-hardens the skin; 120 is the conservative middle; past roughly 250
+   the insert life starts to go, and this build does not model insert life, so
+   nothing here punishes the top of the range except the power and torque limits
+   the kernel already enforces. That is an honest limit and it is stated in the
+   README rather than hidden. */
+export const SPEEDS = {
+  /* m/min of surface speed at the cutting edge. */
+  steps: [60, 90, 120, 180, 240, 320],
+  default: 120,
+  label: (vc) => `${vc} m/min`,
+  note: (vc) => vc <= 60 ? 'rubbing — the edge skates and the skin work-hardens'
+    : vc <= 120 ? 'the conservative middle for 4140 on carbide'
+    : vc <= 240 ? 'moving — insert life is being spent'
+    : 'hard on the tool; this build does not model insert life',
+};
+
 /* ══ MACHINE CONDITION — THE WEAR TERM THE KERNEL HAS ALWAYS HAD ═══════════
    `errorBudget()` has taken a `runout_um` argument since it was written, with a
    default of 5 µm of TIR, and NOTHING IN THIS GAME HAS EVER PASSED IT. Every
@@ -707,6 +749,8 @@ export function newGame(job = JOBS[0], thermal = THERMAL, money = 0) {
          one. `cut_min_total` is what drives the fall. */
       condition: WEAR.condition_open,
       cut_min_total: 0,
+      /* Surface speed at the edge, set by the operator and held for the job. */
+      vc_m_min: SPEEDS.default,
     },
 
     /* THE SYSTEM'S OWN STATE. `surveyed_condition` is what it believes the

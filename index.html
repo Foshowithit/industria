@@ -525,26 +525,31 @@ myPile.position.set(-2.28, 1.16, 0.45); cell.add(myPile);
 box(0.34, 0.10, 0.02, M.bright, -0.70, 2.62, 1.36, cell);   // nameplate
 box(0.16, 0.20, 0.02, M.warn,  0.95, 1.12, 1.36, cell);     // warning sticker
 
-const pend = new THREE.Group(); pend.position.set(1.72, 1.66, 0.92); cell.add(pend);
-box(0.80, 1.10, 0.16, M.dark, 0, 0, 0, pend);
+/* MOVED FORWARD AND CLEAR OF THE SIDE WALL. The housing is 0.80 wide at x 1.72
+   and the enclosure's side wall is a plane at x = 1.55 spanning z -1.3 to 1.3 —
+   so the pendant was intersecting it. At z = 1.50 the housing sits just in front
+   of the door frame and clear of the wall it was buried in. */
+const pend = new THREE.Group(); pend.position.set(1.75, 1.58, 1.50); cell.add(pend);
+box(0.80, 1.26, 0.16, M.dark, 0, 0, 0, pend);
 /* the machine's own readout — still the HTML panel, which is the one place on
    this floor that is allowed to be a screen */
-box(0.62, 0.30, 0.03, new THREE.MeshStandardMaterial({ color: 0x1b3a2a, emissive: 0x2f7a4a, emissiveIntensity: 0.7 }), 0, 0.33, 0.10, pend);
-/* SQUARE, because the grid is 4 x 4. A keypad drawn 4:3 and mapped onto a
-   square plate is a keypad whose hit-map is right and whose picture is wrong —
-   the two derive from KEYPAD and the aspect is the one thing they cannot. */
-const PEND_W = 0.66, PEND_H = 0.66;
+box(0.62, 0.26, 0.03, new THREE.MeshStandardMaterial({ color: 0x1b3a2a, emissive: 0x2f7a4a, emissiveIntensity: 0.7 }), 0, 0.40, 0.10, pend);
+/* THE PLATE'S ASPECT IS THE GRID'S ASPECT, taken from KEYPAD rather than typed.
+   It was 4:3 when the grid was 4 x 4 and a literal square when it became 4 x 4
+   again; either would have stretched every key the moment the grid changed, and
+   it just changed to 4 x 5. */
+const PEND_W = 0.62, PEND_H = PEND_W * (KEYPAD.rows / KEYPAD.cols);
 const padTex = keypadPanel(640, 71);
 const pendPad = new THREE.Mesh(new THREE.PlaneGeometry(PEND_W, PEND_H),
   new THREE.MeshStandardMaterial({ map: padTex.texture, roughness: 0.62, metalness: 0.05 }));
-pendPad.position.set(0, -0.20, 0.086); pend.add(pendPad);
+pendPad.position.set(0, -0.22, 0.086); pend.add(pendPad);
 /* the hover cursor. One quad that moves, rather than twelve materials that
    light up — the panel is a single printed sheet and the picture on it does
    not change when you point at it. */
 const pendCursor = new THREE.Mesh(
   new THREE.PlaneGeometry(1, 1),
   new THREE.MeshBasicMaterial({ color: 0xffd489, transparent: true, opacity: 0.34, depthWrite: false }));
-pendCursor.position.set(0, -0.20, 0.090); pendCursor.visible = false; pend.add(pendCursor);
+pendCursor.position.set(0, -0.22, 0.090); pendCursor.visible = false; pend.add(pendCursor);
 /* The cursor is a highlight, not a surface. It sits 4 mm in front of the panel
    so it does not z-fight with it, which is exactly close enough for the
    raycaster to hit IT instead of the panel — measured: it came back at 1.090
@@ -1545,6 +1550,21 @@ function pressKey(id) {
     }
     case 'feed_down': stepRoughFeed(-1); return;
     case 'feed_up':   stepRoughFeed(1);  return;
+    case 'spd_down':
+    case 'spd_up': {
+      const up = id === 'spd_up';
+      const v = stepIn(G.SPEEDS.steps, GAME.machine.vc_m_min, up ? 1 : -1);
+      if (v === GAME.machine.vc_m_min) {
+        toast(`Spindle is already at its ${up ? 'fastest' : 'slowest'}: <b>${v} m/min</b>.`, 1800);
+        return;
+      }
+      GAME.machine.vc_m_min = v;
+      refreshLoadMeter();
+      if (REC) REC.action('set_speed', { vc_m_min: v, clock_min: GAME.clock_min });
+      toast(`<b>${v} m/min</b> at the edge — ${G.SPEEDS.note(v)}.`, 2600);
+      logLine(`Spindle set to <b>${v} m/min</b>. ${G.SPEEDS.note(v)}.`);
+      return;
+    }
     case 'bite_down': stepRoughBite(-1); return;
     case 'bite_up':   stepRoughBite(1);  return;
     case 'book':      readBook();  return;
@@ -1991,7 +2011,13 @@ function machinePanel() {
        the tooling book below either right or wrong, so it has to be somewhere a
        player can see it without opening anything. */
     F('machine', `${GAME.machine.condition.toFixed(0)} of 1000 · ` +
-      `TIR ${G.runout_um_for(GAME.machine.condition).toFixed(1)} µm`);
+      `TIR ${G.runout_um_for(GAME.machine.condition).toFixed(1)} µm`) +
+    /* WHAT THE SPINDLE IS SET TO, which is a decision the operator makes and
+       not a reading of what the last cut did. The row above reports the rpm and
+       surface speed the last pass actually ran at; this one is the setting. */
+    F('speed set', `${GAME.machine.vc_m_min} m/min <i>(pendant SPD \u2212 / +)</i>`) +
+    F('stock', `${((GAME.part.holeDia_cold_mm - 0) / 2).toFixed(2)} mm radius · ` +
+      `to band top ${bore.stock_to_band_um.toFixed(0)} µm`);
   const surplus = last ? (last.bite_realised_um - last.bite_cmd_um) : 0;
   $('pnCut').innerHTML =
     F('dial', `${biteCmd_um} µm radius`) +
@@ -2344,10 +2370,10 @@ function doRough() {
   /* Preview first, so a refusal can be answered with the number that caused it
      rather than a bare "no". `envelope` uses assessBoring — the same function
      the cut refuses on — so the preview and the refusal cannot disagree. */
-  const env = G.envelope(g, { bite_mm: bite, feed_mm_rev: feed, vc: 120 });
+  const env = G.envelope(g, { bite_mm: bite, feed_mm_rev: feed, vc: g.machine.vc_m_min });
   const roughTarget = g.job.band_high_mm - 2 * (FINISH_ALLOWANCE_UM / 1000);
   const r = kernelJob(G.roughTo, { target_dia_mm: roughTarget,
-    bite_mm: bite, feed_mm_rev: feed, vc: 120 });
+    bite_mm: bite, feed_mm_rev: feed, vc: g.machine.vc_m_min });
   if (!r || !r.ok || !r.passes.length) {
     /* THE PUSHBACK. A refused roughing pass now says which limit stopped it and
        how far past it the command was, because "the machine said no" teaches
@@ -2455,7 +2481,7 @@ function doCut() {
   }
   if (g.machine.edgeR_cold_mm === null) doTouchOff();
   const diaBefore = g.part.holeDia_cold_mm;
-  const res = kernelJob(G.cutOnce, { bite_mm: biteCmd_um / 1000, feed_mm_rev: 0.12, vc: 120, label: 'bored' });
+  const res = kernelJob(G.cutOnce, { bite_mm: biteCmd_um / 1000, feed_mm_rev: 0.12, vc: GAME.machine.vc_m_min, label: 'bored' });
   if (!res.ok) {
     if (REC) REC.cutRefused(res.why, { dial_um: biteCmd_um, clock_min: g.clock_min,
       detail: res.detail || null });
@@ -2972,7 +2998,7 @@ function updateLook() {
       pendCursor.visible = true;
       pendCursor.scale.set(r.w * PEND_W * 1.02, r.h * PEND_H * 1.02, 1);
       pendCursor.position.set((r.u0 + r.w / 2 - 0.5) * PEND_W,
-                              -0.20 + (r.v0 + r.h / 2 - 0.5) * PEND_H, 0.090);
+                              -0.22 + (r.v0 + r.h / 2 - 0.5) * PEND_H, 0.090);
     } else { pendCursor.visible = false; }
   } else { pendHover = null; pendCursor.visible = false; }
   $('look').style.opacity = hit ? '1' : '0';
@@ -3443,7 +3469,12 @@ window.INDUSTRIA = {
   envelope: (bite_mm, feed_mm_rev) => G.envelope(GAME,
     { bite_mm: bite_mm === undefined || bite_mm === null ? roughBite_mm : bite_mm,
       feed_mm_rev: feed_mm_rev === undefined || feed_mm_rev === null ? roughFeed_mm_rev : feed_mm_rev,
-      vc: 120 }),
+      vc: GAME.machine.vc_m_min }),
+  /* The spindle setting, on the same surface as everything else a probe drives. */
+  speed: (set) => {
+    if (set !== undefined && set !== null) GAME.machine.vc_m_min = set;
+    return GAME.machine.vc_m_min;
+  },
   setRough: (bite_mm, feed_mm_rev) => {
     if (bite_mm !== undefined && bite_mm !== null) roughBite_mm = bite_mm;
     if (feed_mm_rev !== undefined && feed_mm_rev !== null) roughFeed_mm_rev = feed_mm_rev;

@@ -679,7 +679,7 @@ export function shopEnvironment(renderer, { size = 256 } = {}) {
    only place that knows what a verification is. */
 export const KEYPAD = {
   cols: 4,
-  rows: 4,
+  rows: 5,
   /* Reading order, left to right, top to bottom. The layout is a working
      pendant's: what you SET on top, what you ASK for in the middle, what
      REMOVES METAL and what you READ on the bottom.
@@ -692,10 +692,17 @@ export const KEYPAD = {
     { id: 'pred_down', label: 'PRED -',   tone: 'warn' },
     { id: 'pred_up',   label: 'PRED +',   tone: 'warn' },
 
+    /* SPD is the surface speed at the edge — the first thing a machinist sets
+       and the decision this build was missing. See SPEEDS in game.mjs. */
+    { id: 'spd_down',  label: 'SPD -',    tone: 'cool' },
+    { id: 'spd_up',    label: 'SPD +',    tone: 'cool' },
     { id: 'bite_down', label: 'BITE -',   tone: 'warn' },
     { id: 'bite_up',   label: 'BITE +',   tone: 'warn' },
+
     { id: 'feed_down', label: 'FEED -',   tone: 'warn' },
     { id: 'feed_up',   label: 'FEED +',   tone: 'warn' },
+    { id: 'touch',     label: 'TOUCH OFF', tone: 'plain' },
+    { id: 'warm',      label: 'WARM UP',  tone: 'plain' },
 
     /* BOOK and MAINT are the two keys this build did not have and the two a
        shop cannot do without. BOOK reads the tooling supplier's cutting data —
@@ -703,13 +710,16 @@ export const KEYPAD = {
        that puts the machine's condition back, and it is not free. */
     { id: 'book',      label: 'BOOK',     tone: 'cool' },
     { id: 'maint',     label: 'MAINT',    tone: 'cool' },
-    { id: 'touch',     label: 'TOUCH OFF', tone: 'plain' },
-    { id: 'warm',      label: 'WARM UP',  tone: 'plain' },
-
     { id: 'rough',     label: 'ROUGH',    tone: 'warn' },
     { id: 'cut',       label: 'CUT',      tone: 'hot' },
+
     { id: 'measure',   label: 'MEASURE',  tone: 'cool' },
     { id: 'inspect',   label: 'UNLOAD',   tone: 'cool' },
+    /* Two blank positions, because a real pendant has them and because a grid
+       padded to a rectangle with invented functions is worse than one that
+       admits it has room. */
+    { id: null,        label: '',         tone: 'plain' },
+    { id: null,        label: '',         tone: 'plain' },
   ],
 };
 
@@ -717,7 +727,11 @@ export const KEYPAD = {
  *  SQUARE for a 4 x 4 grid and the mesh must be built at the same aspect or the
  *  keys stretch. */
 export function keypadPanel(size = 640, seed = 71) {
-  const W = size, H = size;
+  /* THE PLATE'S ASPECT IS THE GRID'S ASPECT, derived rather than typed. It was
+     a literal 4:3, then a literal 1:1; both were correct for the grid they were
+     written for and both would have silently stretched every key the moment the
+     grid changed — which it now has. */
+  const W = size, H = Math.round(size * KEYPAD.rows / KEYPAD.cols);
   const c = canvas(W);
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
@@ -756,6 +770,7 @@ export function keypadPanel(size = 640, seed = 71) {
   };
 
   KEYPAD.keys.forEach((k, i) => {
+    if (!k.id) return;                       // a blank position is not drawn
     const col = i % KEYPAD.cols, row = Math.floor(i / KEYPAD.cols);
     const x = pad + col * (cw + gap), y = pad + row * (ch + gap);
     const t = TONE[k.tone] || TONE.plain;
@@ -825,7 +840,11 @@ export function keyAtUV(u, v) {
   const col = Math.round((u - pad - cw / 2) / (cw + gap));
   const row = Math.round(((1 - v) - pad - ch / 2) / (ch + gap));   // UV v is bottom-up
   if (col < 0 || col >= KEYPAD.cols || row < 0 || row >= KEYPAD.rows) return null;
-  return KEYPAD.keys[row * KEYPAD.cols + col] || null;
+  const k = KEYPAD.keys[row * KEYPAD.cols + col];
+  /* A BLANK POSITION IS NOT A KEY. Returning the blank object would give the
+     crosshair an empty name and a cursor with nothing under it, which reads as
+     a bug rather than as a panel with room on it. */
+  return (k && k.id) ? k : null;
 }
 
 /** The same layout as normalised rects, for anything that has to draw ON the
