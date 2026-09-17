@@ -29,10 +29,14 @@ writing anything. Neither is optional; both are short.
 ```sh
 cd ~/.zcode/workspace/default/industria
 git pull --ff-only          # main is the source of truth
-node kernel.test.mjs        # 68 expected
-node system.test.mjs        # 67 expected
-node shop.test.mjs          # 62 expected
+node kernel.test.mjs        # 76 expected
+node system.test.mjs        # 125 expected
+node shop.test.mjs          # 69 expected
+node disposition.test.mjs   # 70 passed / 1 deliberate SCRAP failure
 ```
+
+The counts only ever go UP; a suite that passes with FEWER than the number
+written here is a suite that lost cases, and that is the regression to chase.
 
 If a suite is red at the START of a run, that is the run's work: fix it before
 starting anything new, or if it cannot be fixed, leave the tree clean and say so.
@@ -287,6 +291,13 @@ Then bring the tab up with `agent.browsers` and `markDeliverable`, and report.
 - **`INDUSTRIA-single-file.html` is generated.** Edit `index.html`, then rebuild.
 - **The IAB `goto()` refuses `file:` URLs** — serve the repo over HTTP
   (`python3 -m http.server`) to look at it, the single-file bundle included.
+- **The entry gate ignores synthetic clicks from the IAB** — both a `cua` click
+  and a Playwright locator click time out or do nothing on `#gate`. Drive it
+  with `document.getElementById('gate').click()` inside `evaluate`, then take a
+  screenshot to force a paint; if the game getter is still null, the exposed
+  `job()` hook runs the same `startShift` the click does. The `eye` hook is a
+  plain `Vector3`, so `eye.set(x,y,z)` + `look(yaw,pitch)` teleports for close
+  inspection — a verification privilege, not a player path.
 - **The repo has a `vendor/` copy of three.js pinned by SHA-256.** Do not
   upgrade it casually.
 
@@ -311,6 +322,28 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-17** — THE WORKING END AND THE SCREEN THAT FIT (loop run). Three
+  defects a cold viewer could see and no test could: **the machine panel grew
+  upward off a bottom anchor until it printed through the status block** (now a
+  two-panel column hung from the top-right free space, the error budget its own
+  left-hand column under the job header, and below 680 px of window height the
+  thermal context row drops ON PURPOSE instead of the total clipping silently);
+  **the "tool" was a stack of cones hanging 580 mm above the part** — a
+  lampshade, not a boring bar (now the real chain: quill, nose, 40-taper
+  holder, boring head, radial slide, and a bar whose offset IS
+  `edgeR_cold_mm`, so the cutting edge sits on the radius being cut and moves
+  outward as you dial); and **the coolant nozzle was a brass rod attached to
+  nothing** (now a traced line — riser, run, drop, elbow, nozzle — with the
+  nozzle and the spray both placed from the same two points, so the spray
+  cannot point where the pipe does not). The work and its fixture were also
+  100 mm off the cut axis; both now sit under the tool. Verified by looking,
+  this run: bar loads, the pass cuts (stock 18.00 → 19.97, dial at 19.957),
+  the repeat-refusal charges its minute, measure refuses without the
+  calipers — and a chip census off the live scene put **10/10 chips at exactly
+  the tabletop plane**, none buried, none behind the part. Chips still read as
+  dark specks at player distance, though — sizing/colour is the next visual
+  debt. Suites green (76/125/69/70+1), bundle 9 modules. **Still open from
+  before: a cold viewer on the `after-3` stills — still not done by anyone.**
 - **2026-09-17** — THE PRESENTATION WAVE (loop run). Every item the cold viewers
   named, closed, and two defects found by looking that no test could see:
   **the casting was buried inside a vise body** (a Ø124 part at the same place as

@@ -41,14 +41,54 @@
   #look .verb{color:var(--warn)}
 
   /* machine panel: appears only when you are at the machine */
-  #panel{right:16px;bottom:16px;width:266px;background:var(--panel);
-    border:1px solid #2a333d;border-radius:3px;padding:11px 12px;pointer-events:none;display:none}
-  #panel.on{display:block}
+  /* TWO PANELS, ANCHORED TO OPPOSITE EDGES, BECAUSE ONE OF THEM OUTGREW THE
+     SCREEN. The machine panel was anchored to the bottom and grew upward with
+     nothing above it to stop it, and a cold viewer caught the result: "the
+     panel does not fit any more" — its top printing type through the top-right
+     status block, and its own header pushed off the top of the viewport once
+     the error budget filled up. The budget now lives on the left (see #budget),
+     the machine's own state hangs BELOW the status block from a fixed top edge,
+     and the numbers you dial with sit at the bottom. Two columns from two edges
+     cannot collide, whatever is added to either. */
+  #rightcol{right:16px;top:152px;bottom:16px;width:266px;display:flex;
+    flex-direction:column;justify-content:space-between;gap:10px}
+  #panel,#cutpanel{background:var(--panel);border:1px solid #2a333d;border-radius:3px;
+    padding:11px 12px;display:none}
+  #panel.on,#cutpanel.on{display:block}
+  #cutpanel .row{display:flex;justify-content:space-between;font-size:12px;padding:1px 0}
+  #cutpanel .row i{color:var(--dim);font-style:normal}
+  #cutpanel kbd{background:#1b2229;border:1px solid #333d47;border-radius:2px;padding:0 4px;font-size:11px;color:var(--ink)}
   #panel h4{margin:0 0 8px;font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;font-weight:500}
   #panel .row{display:flex;justify-content:space-between;font-size:12px;padding:1px 0}
   #panel .row i{color:var(--dim);font-style:normal}
-  #panel .cut{margin-top:8px;padding-top:8px;border-top:1px solid #2a333d}
+  #panel .cut,#cutpanel .cut{margin-top:8px;padding-top:8px;border-top:1px solid #2a333d}
   #panel kbd{background:#1b2229;border:1px solid #333d47;border-radius:2px;padding:0 4px;font-size:11px;color:var(--ink)}
+  /* the attribution column — left of the work, under the job header, above the
+     log. Anchored to the TOP: it is a printout on the wall, and a printout that
+     grows downward off a fixed top edge cannot walk into anything. */
+  /* BOUNDED ON BOTH SIDES. On the top by the job header, on the bottom by the
+     log's own cap — measured: at 1280x720 the column wants 358 px, has 328, and
+     the three thermometers on one row is what bought the difference. If rows are
+     added here and it starts clipping, that is the signal to move something,
+     because the alternative is what the viewer saw: this column printing
+     through the pass lines of the log below it. */
+  #budget{left:16px;top:150px;bottom:calc(16px + 26vh + 10px);width:252px;background:var(--panel);
+    border:1px solid #2a333d;border-radius:3px;padding:11px 12px;overflow:hidden;display:none}
+  #budget.on{display:block}
+  #budget .row{display:flex;justify-content:space-between;font-size:12px;padding:1px 0}
+  #budget .row i{color:var(--dim);font-style:normal}
+  #budget b{color:var(--ink);font-weight:500}
+  /* A SHORT WINDOW DEGRADES ON PURPOSE, OR IT CLIPS THE TOTAL. Measured at
+     1280x620: the column wants 358 px and has 283, and `overflow:hidden` would
+     take it out of the last row — which is the total, the one number the column
+     exists for. So below 680 px the thermal triple goes (its three values are
+     the CONTEXT for the terms, not the terms) and the rows tighten by a point.
+     A deliberate drop beats a silent clip: one is a decision, the other is a
+     readout that is lying about its own contents. */
+  @media (max-height:680px){
+    #budget .thermal{display:none}
+    #budget .row{font-size:11.5px;padding:0}
+  }
   /* the load meter — a machine instrument, not a part measurement */
   #pnLoad{margin-top:8px;padding-top:8px;border-top:1px solid #2a333d}
   #pnLoad .lm{display:flex;align-items:center;gap:6px;font-size:10px;padding:1px 0}
@@ -91,7 +131,7 @@
      Cap the log's width just short of the dialogue's left edge so the two
      columns can never meet. 50vw = half the #talk max-width (min(620px,86vw));
      the 24px is the gutter. Verified 0 overlap at 1280/1366/1440/1920. */
-  #log{left:16px;bottom:16px;max-width:calc(50vw - min(310px,43vw) - 24px);max-height:30vh;overflow:hidden;
+  #log{left:16px;bottom:16px;max-width:calc(50vw - min(310px,43vw) - 24px);max-height:26vh;overflow:hidden;
     display:flex;flex-direction:column-reverse;gap:2px;font-size:12px}
   #log div{color:var(--dim)}
   #log div b{color:var(--ink);font-weight:500}
@@ -146,16 +186,41 @@
 <div class="hud" id="talk"></div>
 <div class="hud" id="log"></div>
 
-<div class="hud" id="panel">
-  <h4 id="pnTitle">Machine</h4>
-  <div id="pnRows"></div>
-  <div class="cut" id="pnCut"></div>
-  <div data-lmhost="1" id="pnLoad"></div>
-  <!-- WHY THE PART IS WRONG, ATTRIBUTED. The kernel's signed terms, from the
-       last pass that actually cut metal. No score, no verdict — the arithmetic,
-       the way this build's own reference cases show it. -->
-  <div id="pnBudget"></div>
+<!-- ── ONE COLUMN, TWO PANELS, AND THEY CANNOT OVERLAP EACH OTHER ───────────
+     A flex column anchored to the top of the free space and the bottom of the
+     screen: the machine's own state hangs under the status block, the numbers
+     you dial with sit at the bottom, and `space-between` keeps them apart no
+     matter how many rows either of them grows. Two panels positioned
+     independently from opposite edges CAN and did collide in the middle — the
+     machine panel's stock row was printing through the cut panel's dial row in
+     exactly the layout that was supposed to have fixed this. -->
+<div class="hud" id="rightcol">
+  <div id="panel">
+    <h4 id="pnTitle">Machine</h4>
+    <div id="pnRows"></div>
+  </div>
+  <!-- THE NUMBERS YOU DIAL WITH. Separate from the machine's condition on
+       purpose: this is the pass being decided, not the state of the machine. -->
+  <div id="cutpanel">
+    <div class="cut" id="pnCut"></div>
+    <div data-lmhost="1" id="pnLoad"></div>
+  </div>
 </div>
+
+<!-- ── WHY THE PART IS WRONG, ATTRIBUTED — ITS OWN SURFACE ───────────────────
+     The kernel's signed terms from the last pass that cut metal. No score, no
+     verdict — the arithmetic, the way this build's own reference cases show it.
+
+     IT USED TO BE THE TAIL OF #panel, AND THAT BROKE THE SCREEN. A cold viewer,
+     given only stills: "the panel does not fit any more" — by the time the
+     error budget had eight terms in it the machine panel's top was printing
+     type through the top-right status block and its own header had gone off the
+     top of the viewport. The panel is anchored to the BOTTOM, so it grows
+     upward, and there was nothing above it to stop it. Six to twelve rows of
+     attribution is a column of its own; it belongs where a machinist would put
+     a printout, up on the wall to the left of the work, not stapled to the
+     machine's own readout. -->
+<div class="hud" id="budget"><div id="pnBudget"></div></div>
 
 <div id="hint">WASD move · mouse look · <b>E</b> use · <b>shift</b> run</div>
 
@@ -570,14 +635,61 @@ function paintDRO() {
   ctx.fillText(g.machine.spindle_on ? 'RUNNING' : 'STOPPED', 492, 220);
   droTex.needsUpdate = true;
 }
-/* spindle head, hung from the top of the cavity, nose pointing down */
-const headBlock = box(0.66, 0.52, 0.66, M.paint, 0, 3.28, 0.25, cell);
-const spindle = cyl(0.15, 0.20, 0.52, M.steel); spindle.position.set(0, 2.78, 0.25); cell.add(spindle);
-const spindleGroup = new THREE.Group(); spindleGroup.position.set(0, 2.52, 0.25); cell.add(spindleGroup);
-const taper = new THREE.Mesh(new THREE.ConeGeometry(0.115, 0.30, 20), M.steel);
-taper.position.y = -0.16; taper.rotation.x = Math.PI; spindleGroup.add(taper);
-const holder = cyl(0.055, 0.075, 0.22, M.steel); holder.position.y = -0.40; spindleGroup.add(holder);
-const barMesh = cyl(0.011, 0.011, 0.16, M.steel); barMesh.position.y = -0.55; spindleGroup.add(barMesh);
+/* ══ THE WORKING END ═══════════════════════════════════════════════════════
+   A cold viewer, shown the cavity close up: "the spindle head is a giant
+   angular block entering from the top-left that connects to nothing, and the
+   'tool' beneath it is two nesting cones — a bell with a smaller cone under it.
+   That's a lampshade, not a boring bar."
+
+   They were describing a real defect that no test could see. The old stack was
+   a box, a fat cone, a cylinder and a stub, hung so high that the tip of the
+   "bar" sat at cell y 1.88 while the work sits at 1.30 — THE TOOL WAS 580 mm
+   ABOVE THE PART, pointing at nothing, and the machine had been drawn that way
+   since it was built. A tool that does not reach the work is not a drawn tool.
+
+   So this is the real chain, from the gauge line down, at its real size:
+   quill, nose, 40-taper holder with its flange, boring head, the radial slide
+   the dial moves, and the bar held sideways in the head so that its cutting
+   edge sits at the RADIUS the kernel is cutting at. The bar offset is not
+   decoration: it is `edgeR_cold_mm`, the same number the cut is computed from,
+   which is why a bar at 18 mm is boring a Ø36 as-cast hole and a bar at 20.00
+   is boring the finished one. */
+const headBlock = box(0.66, 0.52, 0.66, M.paint, 0, 3.28, 0.35, cell);
+const quill = cyl(0.105, 0.105, 1.10, M.steel); quill.position.set(0, 2.50, 0.35); cell.add(quill);
+const nose = cyl(0.125, 0.108, 0.07, M.steel); nose.position.set(0, 1.925, 0.35); cell.add(nose);
+const spindleGroup = new THREE.Group(); spindleGroup.position.set(0, 1.885, 0.35); cell.add(spindleGroup);
+const taper = cyl(0.045, 0.078, 0.15, M.steel); taper.position.y = -0.095; spindleGroup.add(taper);
+const flange = cyl(0.065, 0.065, 0.024, M.steel); flange.position.y = -0.185; spindleGroup.add(flange);
+const holder = cyl(0.040, 0.050, 0.09, M.steel); holder.position.y = -0.245; spindleGroup.add(holder);
+const boreHead = cyl(0.062, 0.062, 0.105, M.dark); boreHead.position.y = -0.345; spindleGroup.add(boreHead);
+const barSlide = box(0.105, 0.028, 0.050, M.steel, 0.010, -0.345, 0, spindleGroup);
+const barScrew = cyl(0.010, 0.010, 0.036, M.brass, 8);
+barScrew.rotation.z = Math.PI / 2; barScrew.position.set(0.010, -0.312, 0.044); spindleGroup.add(barScrew);
+const barMesh = cyl(0.008, 0.008, 0.23, M.steel); barMesh.position.set(0.010, -0.500, 0);
+spindleGroup.add(barMesh);
+const insertTip = box(0.012, 0.012, 0.008, M.brass, 0.018, -0.585, 0.006, spindleGroup);
+/* THE BAR'S OFFSET AND ITS DIAMETER ARE STATE, so they are written from it
+   rather than set once: `edgeR_cold_mm` puts the cutting edge on the radius the
+   kernel is cutting, and the loaded bar's own D decides how fat the bar is.
+   Repainted on change only, like every other live surface in this build. */
+let toolGeomKey = '';
+function updateToolGeometry() {
+  if (!GAME) return;
+  const r_cut = GAME.machine.edgeR_cold_mm;
+  const D = GAME.toolSpec ? GAME.toolSpec.D : 16;      // mm, the bar in the spindle
+  const key = `${r_cut === null || r_cut === undefined ? 'n' : r_cut.toFixed(2)}|${D}`;
+  if (key === toolGeomKey) return;
+  toolGeomKey = key;
+  const r_m = (D / 2) / 1000;
+  const edge = (r_cut === null || r_cut === undefined ? 18 : r_cut) / 1000;
+  /* the bar is held so its OUTER edge is on the cutting radius — that is what a
+     boring head does, and it is why the bar moves outward as you dial in */
+  const cx = Math.max(0.002, edge - r_m);
+  barMesh.position.x = cx;
+  barMesh.scale.set(D / 16, 1, D / 16);
+  barSlide.position.x = cx; barScrew.position.x = cx;
+  insertTip.position.x = cx + r_m - 0.004;
+}
 /* table, and the vise standing on parallels.
    A machine table is a T-slot table and it has to LOOK like one: three real
    grooves cut into a cast surface, with the lands between them standing proud.
@@ -611,8 +723,8 @@ for (const gz of [0.07, 0.25, 0.43]) {
 for (let i = 0; i < 4; i++) {
   box(1.28 - i * 0.02, 0.035 - i * 0.002, 0.10, M.cover, 0, 1.19 + i * 0.028, -0.30 - i * 0.10, cell);
 }
-box(0.60, 0.05, 0.36, M.ground, -0.05, 1.235, 0.25, cell);   // parallel
-contactShadow(cell, 1.25, 0.66, -0.05, 1.2125, 0.25, 0.45);  // the parallel on the table
+box(0.60, 0.05, 0.36, M.ground, 0, 1.235, 0.25, cell);      // parallel
+contactShadow(cell, 1.25, 0.66, 0, 1.2125, 0.25, 0.45);     // the parallel on the table
 /* ── NO VISE ON THIS TABLE, AND THE PART IS THE REASON ─────────────────────
    There was one: a 0.70 × 0.26 × 0.46 casting at (0, 1.39, 0.25) with two jaws
    and a brass screw. The casting this game is about is a Ø124 × 30 housing at
@@ -635,10 +747,38 @@ const screw = cyl(0.032, 0.032, 0.34, M.brass); screw.rotation.z = Math.PI / 2;
 screw.position.set(0.78, 1.14, 0.25); cell.add(screw);
 box(0.18, 0.18, 0.26, M.dark, 1.06, 1.14, 0.25, cell);      // X servo
 box(0.10, 0.10, 0.10, M.brass, 0.93, 1.14, 0.25, cell);     // coupling
-/* coolant: nozzle aimed at the cut, line down the wall, tray, and the pump */
-const nozzleP = new THREE.Group(); nozzleP.position.set(-0.42, 2.05, 0.52); cell.add(nozzleP);
-const nozzleR = cyl(0.013, 0.013, 0.40, M.brass); nozzleR.rotation.z = 0.75; nozzleP.add(nozzleR);
-box(0.05, 0.05, 1.4, M.steel, 1.48, 2.95, -0.1, cell);      // pipe run down the wall
+/* ══ COOLANT — A LINE WITH A BEGINNING ════════════════════════════════════
+   A cold viewer, on the cavity: "a tapered brass rod hangs diagonally in
+   mid-air, in front of the back wall; it obeys no gravity and attaches to
+   nothing." That rod was the nozzle — a 400 mm cylinder at 43 degrees, drawn
+   with neither a supply pipe nor a bracket, hanging beside the cut since the
+   machine was built. A coolant line is a pipe you can trace: up the back wall
+   from the pump, out along the roof, down past the spindle, elbow, nozzle.
+
+   ONE DERIVATION: the two points below are the nozzle's mouth and the cut, and
+   BOTH the nozzle and the spray cone are placed from them. A spray drawn at a
+   hand-picked spot is a spray that drifts away from the pipe it comes out of. */
+const COOLANT_NOZ = new THREE.Vector3(-0.40, 1.90, 0.47);
+const CUT_POINT = new THREE.Vector3(0, 1.36, 0.35);          // cell-local, the work
+const COOLANT_DIR = CUT_POINT.clone().sub(COOLANT_NOZ).normalize();
+box(0.05, 0.05, 1.4, M.steel, 1.48, 2.95, -0.1, cell);       // pipe run down the side wall
+{
+  const riser = cyl(0.019, 0.019, 2.44, M.brass); riser.position.set(-0.42, 2.28, -0.26); cell.add(riser);
+  const runOut = cyl(0.019, 0.019, 0.80, M.brass); runOut.rotation.x = Math.PI / 2;
+  runOut.position.set(-0.42, 3.48, 0.10); cell.add(runOut);
+  const drop = cyl(0.016, 0.016, 1.55, M.brass);
+  drop.position.set(-0.40, 2.70, 0.47); cell.add(drop);
+  const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 8), M.brass);
+  elbow.position.copy(COOLANT_NOZ); elbow.position.y += 0.02; cell.add(elbow);
+  /* the nozzle: aimed at the cut, which is the one thing about this object that
+     has to be true. It stops short of the work because a nozzle sprays. */
+  const jg = new THREE.CylinderGeometry(0.011, 0.017, 0.30, 12); jg.rotateX(Math.PI / 2);
+  const jet = new THREE.Mesh(jg, M.brass);
+  jet.position.copy(COOLANT_NOZ).addScaledVector(COOLANT_DIR, 0.15);
+  cell.add(jet);
+  cell.updateMatrixWorld(true);
+  jet.lookAt(cell.localToWorld(CUT_POINT.clone()));
+}
 box(1.6, 0.20, 1.15, M.dark, 0, 0.58, 0.25, cell);          // chip tray
 box(0.34, 0.26, 0.34, M.dark, -1.15, 0.60, 0.95, cell);     // coolant pump
 /* the door: a real frame, clear glass, a handle you would grab */
@@ -780,7 +920,7 @@ function buildPartMesh(dia_mm, depth_mm) {
   geo.rotateX(-Math.PI / 2); geo.translate(0, dep, 0);
   PART.mesh = new THREE.Mesh(geo, PART.mat);
   PART.mesh.castShadow = PART.mesh.receiveShadow = true;
-  PART.mesh.position.set(-0.1, 1.30, 0.35);
+  PART.mesh.position.set(0, 1.30, 0.35);
   cell.add(PART.mesh);
   return PART.mesh;
 }
@@ -790,7 +930,7 @@ buildPartMesh(36, 30);
    met the table with a hard edge and no darkening — the same defect the whole
    shop had. This quad is parented to the CELL, not to the fixture, because it
    has to disappear with the part and the fixture retracts on its own schedule. */
-const PART_SHADOW = contactShadow(cell, 0.165, 0.165, -0.1, 1.2965, 0.35, 0.62);
+const PART_SHADOW = contactShadow(cell, 0.165, 0.165, 0, 1.2965, 0.35, 0.62);
 
 /* ══════════════════════════════════════════════════════════════════════════
    ROUND 9 — THE FLOOR THE PART MOVES ACROSS
@@ -835,7 +975,7 @@ function partObject(parent, x, y, z, dead = false) {
 /* ── (1) THE HOLDING FIXTURE — the parallels the part sits on, and the one
    object in the shop that answers "is there a part on the table?" ───────── */
 const FIXTURE = new THREE.Group();
-FIXTURE.position.set(-0.1, 1.30, 0.35); cell.add(FIXTURE);
+FIXTURE.position.set(0, 1.30, 0.35); cell.add(FIXTURE);
 const fixtureParallels = new THREE.Group(); FIXTURE.add(fixtureParallels);
 for (const sx of [-0.075, 0.075]) box(0.05, 0.014, 0.09, M.ground, sx, -0.012, 0, fixtureParallels);
 /* THE TWO STEP CLAMPS, and they now have to carry the whole holding story,
@@ -1362,7 +1502,13 @@ pipe2.rotation.z = Math.PI / 2; pipe2.position.set(-18.5, 4.6, 6); scene.add(pip
 
 /* ── FLUID SIMULATION — coolant runs during a cut, leaves a puddle ──────── */
 const coolantJet = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.3, 10), M.coolant);
-coolantJet.position.set(-0.55, 1.45, 0.55); coolantJet.rotation.z = 0.5; cell.add(coolantJet);
+/* PLACED AND POINTED FROM THE NOZZLE, not from a hand-picked spot: the mouth of
+   the nozzle and the cut are the same two points the pipe itself was built
+   from, so the spray cannot point somewhere the pipe does not. The cone's apex
+   is at the mouth and it opens toward the work, which is what a spray does. */
+coolantJet.position.copy(COOLANT_NOZ).addScaledVector(COOLANT_DIR, 0.45);
+coolantJet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), COOLANT_DIR.clone().negate());
+cell.add(coolantJet);
 coolantJet.visible = false;
 const puddle = new THREE.Mesh(new THREE.CircleGeometry(0.34, 22), M.coolant);
 puddle.rotation.x = -Math.PI / 2; puddle.position.set(0.1, 0.012, -5.5); puddle.visible = false; scene.add(puddle);
@@ -1578,8 +1724,9 @@ function chipsFromPass(rec, material) {
     const c = new THREE.Mesh(CHIP_GEO, CHIP_MAT);
     const s = 0.008 + Math.random() * 0.01;
     c.scale.setScalar(s);
-    c.position.set((Math.random() - 0.5) * 0.06, -0.64 - Math.random() * 0.04,
-                   0.25 + (Math.random() - 0.5) * 0.06);
+    c.position.set(barMesh.position.x + (Math.random() - 0.5) * 0.06,
+                   -0.63 - Math.random() * 0.04,
+                   (Math.random() - 0.5) * 0.06);
     /* Thrown DOWN and out, under the tool — the old velocity launched them
        upward at 0.7+, which is why the spray spread across the shop instead of
        falling past the vise.
@@ -1639,9 +1786,9 @@ function stepChips(dt) {
        compared a spindle-local y against a cell-local floor and slammed every
        chip down on the frame it was born. */
     const cellX = c.position.x;                    // spindle sits at cell x 0
-    const cellZ = 0.25 + c.position.z;             // and at cell z 0.25
+    const cellZ = 0.35 + c.position.z;             // and at cell z 0.35
     const onTable = Math.abs(cellX) < 0.625 && Math.abs(cellZ - 0.25) < 0.475;
-    const landAt = onTable ? 1.215 : 1.065;        // table top · enclosure floor
+    const landAt = onTable ? TABLE_TOP : 1.065;    // table top · enclosure floor
     const spindleY = spindleGroup.position.y;      // cell-local y of the parent
     if (spindleY + c.position.y <= landAt) {
       c.userData.v.set(0, 0, 0);
@@ -2586,7 +2733,10 @@ function machinePanel() {
   const atMachine = eye.distanceTo(MACHINE_NEAR) < 4.2;
   const pn = $('panel');
   pn.classList.toggle('on', atMachine);
-  if (!atMachine) return;
+  const bg = $('budget');
+  const cp = $('cutpanel');
+  if (cp) cp.classList.toggle('on', atMachine);
+  if (!atMachine) { if (bg) bg.classList.remove('on'); return; }
   const m = GAME.machine, last = GAME.history[GAME.history.length - 1];
   const bore = W.boreGeometry(GAME, G.partGrowth_um);
   $('pnTitle').textContent = GAME.mach.label;
@@ -2600,9 +2750,6 @@ function machinePanel() {
       ? (last ? `${last.n_rpm.toFixed(0)} rpm · ${last.vc_m_min.toFixed(0)} m/min` : 'running')
       : 'stopped') +
     F('load', m.spindle_on && last ? `${(last.power_kW / GAME.mach.power_max_kW * 100).toFixed(0)}% of 7.5 kW` : '—') +
-    F('spindle °C', `${m.spindleC.toFixed(1)} (ref ${m.refSpindleC.toFixed(1)})`) +
-    F('screw °C', `${m.screwC.toFixed(1)}`) +
-    F('part °C', `${GAME.part.partC.toFixed(1)}`) +
     F('tool', GAME.toolSpec ? `${GAME.toolSpec.label} · ${stickout} mm out` : '<i>none loaded</i>') +
     F('passes', `${bore.passes}`) +
     /* THE MACHINE'S OWN CONDITION, on the machine. It is the number that makes
@@ -2624,9 +2771,7 @@ function machinePanel() {
     /* WHAT THE SPINDLE IS SET TO, which is a decision the operator makes and
        not a reading of what the last cut did. The row above reports the rpm and
        surface speed the last pass actually ran at; this one is the setting. */
-    F('speed set', `${GAME.machine.vc_m_min} m/min <i>(pendant SPD \u2212 / +)</i>`) +
-    F('stock', `${((GAME.part.holeDia_cold_mm - 0) / 2).toFixed(2)} mm radius · ` +
-      `to band top ${bore.stock_to_band_um.toFixed(0)} µm`);
+    F('speed set', `${GAME.machine.vc_m_min} m/min <i>(pendant SPD \u2212 / +)</i>`);
   const surplus = last ? (last.bite_realised_um - last.bite_cmd_um) : 0;
   $('pnCut').innerHTML =
     F('dial', `${biteCmd_um} µm radius`) +
@@ -2646,7 +2791,7 @@ function machinePanel() {
          teaching a control scheme the game no longer shows. The keys still
          work — a machinist who knows them should not be slowed down — but the
          thing the game POINTS AT is the machine in front of you. */
-      ? '<i>not stated — the pendant\u2019s <b>PRED</b> keys</i>'
+      ? '<i>not stated — aim at <b>PRED −</b> or <b>PRED +</b> on the pendant and press <kbd>E</kbd></i>'
       : `${predicted_um} µm`) +
     (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm <i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} vs dial)</i>`) : '') +
     /* THE LEGEND IS GONE. It was three rows of `kbd` tags teaching a control
@@ -2660,22 +2805,43 @@ function machinePanel() {
      cut rather than after the refusal. */
   const lm = $('pnLoad');
   if (lm) lm.innerHTML = loadMeterHTML();
-  /* ── THE BUDGET ────────────────────────────────────────────────────────
-     Signed micrometres by cause, from the last pass that cut metal. This is
-     the build's own headline claim — "the interesting number is why the part
-     is wrong" — and it belongs on the machine, not in a report. Terms under a
-     twentieth of a micron are dropped because the panel is a readout and not a
-     transcript, and the reader needs the ones that matter. */
+  /* ══ THE COLUMN ON THE LEFT: THE PART AND ITS ERROR ═════════════════════
+     Signed micrometres by cause, from the last pass that cut metal — the
+     build's own headline claim, "the interesting number is why the part is
+     wrong". It is a printout on the wall, not part of the machine's readout.
+
+     THE STOCK LINE AND THE THREE TEMPERATURES MOVED HERE TOO, and not because
+     the right column ran out of room (though it did). They belong to this
+     question: the stock is what the part has left, and the three temperatures
+     ARE the thermal terms of the budget a few rows below — the numbers that
+     produced the numbers. A readout that lists +1.2 µm of workpiece growth and
+     keeps the workpiece's actual temperature on a different panel is asking the
+     reader to hold two screens in their head. */
   const pb = $('pnBudget');
   if (pb) {
     const lastCut = GAME.history[GAME.history.length - 1];
-    if (lastCut && lastCut.err_terms) {
-      const terms = lastCut.err_terms.filter((t) => Math.abs(t.um) >= 0.05);
-      pb.innerHTML = `<div class="row" style="margin-top:6px"><i>why the bore is wrong</i><span></span></div>` +
-        terms.map((t) => `<div class="row"><i>${String(t.name).replace(/\s*\(.*\)$/, '')}</i>` +
-          `<span>${t.um >= 0 ? '+' : ''}${t.um.toFixed(1)} µm</span></div>`).join('') +
-        `<div class="row"><i><b>total</b></i><span><b>${lastCut.err_terms.reduce((a, t) => a + t.um, 0).toFixed(1)} µm</b></span></div>`;
-    } else { pb.innerHTML = ''; }
+    pb.innerHTML =
+      `<div class="row" style="margin-top:6px"><i>the part</i><span></span></div>` +
+      `<div class="row"><i>stock</i><span>${(GAME.part.holeDia_cold_mm / 2).toFixed(2)} mm radius · ` +
+        `to band top ${bore.stock_to_band_um.toFixed(0)} µm</span></div>` +
+      /* three thermometers, one row: a machine's thermal state is read as a
+         set, and the three rows it took were the difference between this
+         column fitting above the log and printing through it */
+      `<div class="row thermal"><i>spindle/screw/part °C</i><span>${m.spindleC.toFixed(1)} / ` +
+        `${m.screwC.toFixed(1)} / ${GAME.part.partC.toFixed(1)}</span></div>` +
+      (lastCut && lastCut.err_terms
+        ? (() => {
+            const terms = lastCut.err_terms.filter((t) => Math.abs(t.um) >= 0.05);
+            return `<div class="row" style="margin-top:6px"><i>why the bore is wrong</i><span></span></div>` +
+              terms.map((t) => `<div class="row"><i>${String(t.name).replace(/\s*\(.*\)$/, '')}</i>` +
+                `<span>${t.um >= 0 ? '+' : ''}${t.um.toFixed(1)} µm</span></div>`).join('') +
+              `<div class="row"><i><b>total</b></i><span><b>${lastCut.err_terms.reduce((a, t) => a + t.um, 0).toFixed(1)} µm</b></span></div>`;
+          })()
+        : '');
+    /* AN EMPTY PANEL IS A DARK RECTANGLE ON THE WALL. It appears when the
+       machine has something to say and not before. */
+    const bg = $('budget');
+    if (bg) bg.classList.toggle('on', pb.innerHTML.trim().length > 0);
   }
 }
 
@@ -4024,6 +4190,7 @@ function frame(now) {
     /* machine motion, from the kernel's own commanded rpm */
     const mo = W.machineMotion(GAME);
     spindleGroup.rotation.y = mo.spindleRev * Math.PI * 2;
+    updateToolGeometry();
     screw.rotation.x = mo.feed_mm_min * 0.02 * (now / 1000);
     const cutting = !!(GAME.part.cutting || GAME.history.slice(-1)[0]?.cut_min);
     coolantJet.visible = GAME.machine.spindle_on;
