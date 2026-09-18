@@ -321,6 +321,22 @@ is about, which is why it is next. Taken in this order:
   PASS on `after-43`; the white mark on the reveal line is the capture pointer,
   not page content. Residual ruling in the run log: F7 closes at copy level per
   its brief — copy carried it, so nothing touches disposition or economy.
+- ~~**F8 · THE FEE LANDS WITH NO RATE ON SCREEN**~~ ✅ 2026-09-18 (`index.html`
+  + bundle; `after-45`). F7's residual ruling named it: "£647.50 wants a rate
+  card the game never prints." What was wrong before: the rework charge
+  −£647.50 landed in a frame with nothing to derive it from — the rate appeared
+  only in the board/take verbs, and the header's reason was words-only
+  ("paying the going rate"). Shipped, copy-first, three edits: the fee toast
+  prints its own parent — "(£1,850.00 job × 35%)" — `r.fee` printed with its
+  root `GAME.job.rate`, one derivation never computed twice; the morning toast,
+  the last money surface left over from before `money()` existed, dresses its
+  rate through the helper like the rest of the shop; and `money()` renders
+  en-GB — thousands comma, two pence, sign before symbol — so the shop cannot
+  write money two ways. No suite pins any money string (grepped all four suites
+  + the driver). Sighted reviewer (MODEL, full frames) SHIP on `after-45`:
+  rate-card legible with the arithmetic holding on its face, one money dress
+  across six frames, regression frames clean, no collateral vs `after-44/10`
+  beyond the intended line; verdict in `after-45/VERDICT.md`.
 - **F6 · THE CRATE ECONOMY — *GATED*** (decision). `BLANK_STOCK` is 3 and the
   crate draws `cl(stock_on_hand, 0, 3)` castings, and ROADMAP:122 says a shift
   can produce up to three parts. But the first casting is mounted at shift start
@@ -490,6 +506,33 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-18** — F8 SHIPS: THE FEE WEARS ITS PARENT (`after-45`;
+  `index.html`, `INDUSTRIA-single-file.html`, this file). What was wrong
+  before: the rework charge −£647.50 landed in a frame with no rate anywhere on
+  it to derive it from, and the one money surface older than `money()` still
+  wrote £1850.00 — the shop writing money two ways on its own morning screen.
+  Shipped, copy-only, three edits: the fee toast prints its parent
+  "(£1,850.00 job × 35%)" from the same roots the model reads (`r.fee` beside
+  `GAME.job.rate`, one derivation, never computed twice); the morning toast
+  dresses its rate through `money()`; and `money()` renders en-GB — thousands
+  comma, two pence, sign before symbol — so no surface can write money a second
+  way. No suite pins money strings (grepped all four suites + the driver).
+  Gates: 76 / 137 / 69 / 70+1 (the one SCRAP failure is the model), bundle
+  7bd4329fd659 · 9 modules (index-only edits leave the module-blob hash
+  unchanged by design). Sighted reviewer (MODEL, full frames) SHIP — rate-card,
+  one-money-dress, regression, and no-collateral legs all PASS
+  (`after-45/VERDICT.md`). Cold re-run: FINDINGS on frames 8 + 10, but the
+  frame-10 stop — "£1,050.00 job × 35% is broken arithmetic" — MISREADS the
+  still at pixel zoom: it prints £1,850.00, and "UNDERIZE" is likewise intact;
+  the white capture pointer sits beside the rate-card line and likely drew the
+  8→0 (another cold round whose loudest shot-10 stop dissolves under
+  measurement). Frame 8's banner-vs-readout note is the 200 µm prediction
+  ladder already on the open list. F7's residual list loses its first item;
+  crate/rack/bin logging-vs-header and jobs-vs-castings (F6's sibling) remain.
+  Next: those two, or the viewers' still-open list (radius-vs-diameter,
+  PRED/EXPECT/DIAL, due-vs-van, Earl never visible, calipers-vs-gauge, 200 µm
+  ladder); F6 stays GATED.
 
 - **2026-09-18** — F7 SHIPS (`after-43`/`after-44`; `game.mjs`, `shop.mjs`,
   `index.html`, `INDUSTRIA-single-file.html`, this file). What was wrong before:

@@ -433,8 +433,11 @@ const $ = (id) => document.getElementById(id);
 const cl = (v, a, b) => Math.min(b, Math.max(a, v));
 /** Money on screen. `£-647.5` is not a number a shop writes on anything: the
  *  sign belongs before the symbol and the pence are part of the figure. The
- *  arithmetic stays exact; only the rendering is rounded. */
-const money = (v) => `${v < 0 ? '-' : ''}\u00a3${Math.abs(v).toFixed(2)}`;
+ *  thousands wear their comma too (`£1850.00` is how a spreadsheet talks, not
+ *  a shop). The arithmetic stays exact; only the rendering is rounded. Every
+ *  figure on screen flows through this one function, so the shop cannot write
+ *  money two ways. */
+const money = (v) => `${v < 0 ? '-' : ''}\u00a3${Math.abs(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /** How many castings the crate DRAWS, which is not the same as how many it
  *  holds once one is on the table. The crate object is the shop's, so the
@@ -4119,9 +4122,16 @@ function doInspect() {
        as a contradiction beside the verdict. The second pass names the charge
        as priced rework work, the way the SCRAP banner names its own money
        ("out the casting and the morning") — "for it" could still read as a
-       fine, "for the rework" cannot. */
+       fine, "for the rework" cannot.
+       THE FEE WEARS ITS PARENT. A cold viewer stopped on −£647.50 with no
+       rate on screen to derive it from: the number is 35% of this job's rate,
+       but the rate never appears in the frame where the fee lands. So the
+       line prints both, from the same roots the model reads — `GAME.job.rate`
+       for the parent, `r.fee` for the charge — one derivation, printed twice,
+       never computed twice. */
     toast(`<b>${v.verdict}</b> — band Ø${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)} mm.` +
-      `<br>They take the rest out at their end and charge you for the rework: ${money(-r.fee)} off the day.` +
+      `<br>They take the rest out at their end and charge you for the rework: ${money(-r.fee)} off the day ` +
+      `(${money(GAME.job.rate)} job × 35%).` +
       `<br>` + revealLine(), 10000);
     /* AND THE HOUR IT HAPPENED — as a DATELINE, not as `at HH:MM` after the
        verdict. This verdict is a PHRASE (`UNDERSIZE — can still be cut`), so
@@ -4758,7 +4768,10 @@ function startShift(jobId, { announce = true, carry = true, newDay = null } = {}
   logLine(`<b>${W.hhmm(START_SHIFT_MIN)}.</b> Clocked on. ` +
     `<b>${spec.client}</b> on the bench — Ø${spec.nominal_mm} ${spec.grade}.`);
   if (announce) {
-    toast(`<b>${spec.title}</b><br>${spec.client} · £${spec.rate} · ` +
+    /* THE RATE WEARS ITS POUNDS AND PENCE. This was the one toast left over
+       from before `money()` existed: `£1850` beside a log that writes
+       £1,850.00 is one shop writing money two ways on its first screen. */
+    toast(`<b>${spec.title}</b><br>${spec.client} · ${money(spec.rate)} · ` +
       `band Ø${spec.band_low_mm.toFixed(3)}–${spec.band_high_mm.toFixed(3)} mm · ` +
       `van ${W.hhmm(G.departsMin(spec))}`, 7000);
   }
