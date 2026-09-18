@@ -469,6 +469,18 @@ Newest first. One or two lines: what was built, what was found, what is next.
   face, so it overlaps the scale instead of hanging below the silhouette. My
   own read at 1:1 and 4x is a digit at the left of the row; the disagreement
   is over what the digit must do. Full verdict in `after-36/VERDICT.md`.
+  SHIPPED AND LIVE-VERIFIED: `main` at 77d897c, and
+  `curl -s https://foshowithit.github.io/industria/ | shasum -a 256` returns
+  `f13336ab…` — byte-identical to the reviewed build, cache-busted and plain
+  (323481 bytes both sides). One thing to know for next time: the deploy
+  reported success at 05:11:49Z, but the CDN served GitHub Pages' 9115-byte
+  "Site not found" page for the WHOLE ACCOUNT — this site, the sibling
+  hog-crankers, and the account root — until ~05:19Z. That was a Pages
+  propagation window and not a defect in this push: the Pages build's commit
+  was exactly 77d897c, raw.githubusercontent.com held the shipped bytes
+  throughout, a control account's github.io project page answered 200 while
+  ours 404'd, and Pages status said built with the deployment success. Both
+  sites returned 200 afterwards. Do not mutate repo settings for this; poll.
 
 - **2026-09-17** — THE HAND FAILS A FIFTH ROUND; STOPPED ON THE TWO-FAILURES
   RULE (`after-32` → `after-33`; nothing pushed but this file). What changed
