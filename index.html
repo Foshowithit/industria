@@ -1165,13 +1165,21 @@ box(0.86, 0.30, 0.06, M_CRATE, 0, 0.66, -0.29, CRATE);
 /* 0.545 is the deck's top face (`0.52 + 0.05/2`) and 0.02 is where a deck load
    sits when it was set down by hand. The group used to stand at 0.86 — the rim —
    with two castings stacked 31 mm apart and the third buried behind the front
-   one, so the crate read as two castings and a float. Three across the deck is
-   the same count on one surface, all three countable from the shop floor. */
+   one, so the crate read as two castings and a float. Three on one surface is
+   the same count. The row's SHAPE is measured against the aim label, which is
+   bolted to the screen just under the crosshair: at the count stance that band
+   sits across the crate's middle, and a straight row across the deck recedes
+   into it — the far end's disc rode up under the band and lost its bore, and a
+   reviewer counting at a glance got two. So the row runs as a shallow diagonal
+   down-toward-the-open-lip (z 0.16 at the back-left to 0.28 at the front-right,
+   the right disc resting against the lip's inner edge), which keeps all three
+   bores below the band in the same frame you aim in. */
 const CRATE_STACK = new THREE.Group(); CRATE_STACK.position.set(0, 0.545, 0.02); CRATE.add(CRATE_STACK);
 /* Up to three castings are drawn in the crate. Their count is the only thing
    that changes about this object; nothing re-sizes. */
 const crateParts = [];
-[-0.25, 0, 0.25].forEach((x) => crateParts.push(partObject(CRATE_STACK, x, 0, 0)));
+[[-0.22, 0.16], [0, 0.22], [0.22, 0.28]].forEach(
+  ([x, z]) => crateParts.push(partObject(CRATE_STACK, x, 0, z)));
 
 /* ── (3) THE FINISHED RACK — where an accepted part waits for the van ─────
    Next to the roll-up door, because that is where a rack goes. */
@@ -5098,9 +5106,17 @@ function frame(now) {
                never had. One word removes the reading. */
             : `<span class="${until < 10 ? 'vanout' : ''}">van ${G.hhmm(G.departsMin(GAME.job))}` +
               ` — in ${until.toFixed(0)} min</span>`);
+      /* EVERY VALUE WEARS ITS NOUN. Two cold viewers, independently, read the
+         bare census as something else: `crate 3` was "count, or crate number
+         three?", `table J1-01` was "the part, or the table's name?", `rack 0
+         of 4` was "slots used, or four still needed?", and `bin` was "which
+         bin?". A number that could be a name reads as a name; a verb
+         (`holds`) cannot be read as one; and the bin is named because the
+         shop has more than one. The counts are the same derivations as
+         before — only the words around them moved. */
       $('hFloor').innerHTML =
-        `<div><s>crate</s> <b>${GAME.stock_on_hand}</b> · <s>table</s> ` +
-        `<b>${GAME.part.mounted ? (G.currentPart(GAME) || {}).id || 'part' : 'empty'}</b></div>` +
+        `<div><s>crate</s> <b>${GAME.stock_on_hand} casting${GAME.stock_on_hand === 1 ? '' : 's'}</b> · ` +
+        `<s>table</s> <b>${GAME.part.mounted ? 'holds ' + ((G.currentPart(GAME) || {}).id || 'a part') : 'holds nothing'}</b></div>` +
         /* "N of 4", and the bin says what it is when it is nothing. `3/4` beside
            a bin count read as one fraction with two halves, and a cold viewer
            took the `0` downstairs against the `N of 4` upstairs as the same slot
@@ -5109,8 +5125,8 @@ function frame(now) {
            the ONLY place the count is printed: the log printed its own copy, and
            a cold viewer read the stale copy against this line as the shop
            disagreeing with itself. */
-        `<div><s>rack</s> <b>${rack.length}</b> of ${GAME.rack_slots}` +
-        ` · <s>bin</s> <b>${bin.length || 'empty'}</b></div>` +
+        `<div><s>rack</s> <b>${rack.length} of ${GAME.rack_slots} slots</b>` +
+        ` · <s>scrap bin</s> <b>${bin.length ? `${bin.length} part${bin.length === 1 ? '' : 's'}` : 'empty'}</b></div>` +
         `<div>${van}</div>`;
     }
 

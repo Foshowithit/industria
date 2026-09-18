@@ -337,6 +337,26 @@ is about, which is why it is next. Taken in this order:
   rate-card legible with the arithmetic holding on its face, one money dress
   across six frames, regression frames clean, no collateral vs `after-44/10`
   beyond the intended line; verdict in `after-45/VERDICT.md`.
+- ~~**F9 · THE CENSUS SPOKE IN SHORTHAND, AND THE CRATE COUNTED TWO**~~ ✅
+  2026-09-18 (`index.html` + bundle; `after-46` NO-SHIP → `after-47` SHIP).
+  What was wrong before, two ways: the floor census printed bare values cold
+  viewers read two ways each — `crate 3` was "count, or crate number three?",
+  `table J1-01` was "the part, or the table's name?", `rack 0 of 4` was "slots
+  used, or four still needed?", and bare `bin` was "which bin?"; and at the
+  count stance the aim label — bolted to the screen just under the crosshair —
+  sheared the third casting's bore, so a first read counted two castings under
+  a say-line that said three. Shipped, copy + measured geometry: every census
+  value wears its noun (`3 castings`, `holds J1-01`, `0 of 4 slots`,
+  `scrap bin empty`) — the counts are the same derivations, only the words
+  moved; and the crate row runs as a shallow diagonal down toward the open lip
+  (z 0.16 at back-left to 0.28 at front-right), so all three bores sit below
+  the label band at the standing stance. THE FIRST CUT FAILED REVIEW: a
+  straight row at z 0.20 still let the far casting ride under the band —
+  sighted reviewer (MODEL) counted two, verdict `after-46/VERDICT.md` LEG B/C
+  FAIL; the diagonal is that verdict's own required shape. Second capture SHIP
+  (`after-47/VERDICT.md`, legs A/D/E carried from the first round); cold viewer
+  counts 3, agreeing with HUD and caption. F6's number stays GATED: this fix
+  touches countability and copy, never "should be 2".
 - **F6 · THE CRATE ECONOMY — *GATED*** (decision). `BLANK_STOCK` is 3 and the
   crate draws `cl(stock_on_hand, 0, 3)` castings, and ROADMAP:122 says a shift
   can produce up to three parts. But the first casting is mounted at shift start
@@ -506,6 +526,30 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-18** — F9 SHIPS: EVERY VALUE WEARS ITS NOUN, THE CRATE COUNTS AT A
+  GLANCE (`after-46` NO-SHIP → `after-47`; `index.html`,
+  `INDUSTRIA-single-file.html`, this file). What was wrong before: the floor
+  census spoke in shorthand cold viewers misread two ways each (`crate 3` =
+  count or crate №, `rack 0 of 4` = used or needed, bare `bin` = which bin),
+  and at the count stance the screen-fixed aim label sheared the third
+  casting's bore — two countable under a say-line that said three. Shipped:
+  census values wear nouns (same derivations, only the words moved), and the
+  crate row became a shallow diagonal toward the open lip so all three bores
+  clear the label band at the standing stance. The first cut (straight row,
+  z 0.20) FAILED review — the far casting still rode under the band
+  (`after-46/VERDICT.md`); the diagonal is that verdict's required shape and
+  the second capture SHIPs (`after-47/VERDICT.md`, legs A/D/E carried). Gates:
+  76 / 137 / 69 / 70+1 (the SCRAP failure is the model), bundle 7bd4329fd659 ·
+  9 modules; cold viewer counts 3/3, HUD and caption agree. Repeat signal:
+  a SECOND independent cold reader misread frame 10's fee line £1,850.00 as
+  £1,050.00 — pixels verified right both times, but two-for-two on the same
+  13 px orange line is a legibility candidate (size / contrast / word order).
+  Also new from this cold round: `J1-01` chip read as a range ("J1–J1"), and
+  the drawing's "(Ø36) AS CAST" read as a stray paren — candidates, not
+  defects. F6 stays GATED. Next: the viewers' still-open list
+  (radius-vs-diameter, PRED/EXPECT/DIAL, due-vs-van, Earl never visible,
+  calipers-vs-gauge, 200 µm ladder) or the three legibility candidates above.
 
 - **2026-09-18** — F8 SHIPS: THE FEE WEARS ITS PARENT (`after-45`;
   `index.html`, `INDUSTRIA-single-file.html`, this file). What was wrong
