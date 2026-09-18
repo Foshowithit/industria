@@ -475,12 +475,16 @@ Newest first. One or two lines: what was built, what was found, what is next.
   (323481 bytes both sides). One thing to know for next time: the deploy
   reported success at 05:11:49Z, but the CDN served GitHub Pages' 9115-byte
   "Site not found" page for the WHOLE ACCOUNT — this site, the sibling
-  hog-crankers, and the account root — until ~05:19Z. That was a Pages
+  hog-crankers, and the account root — and it cleared at DIFFERENT TIMES by
+  route: a foreground fetch read 200 from ~05:19Z while a background poll on
+  another path still read 404 until ~05:23Z, so treat the window as up to
+  about twelve minutes. That was a Pages
   propagation window and not a defect in this push: the Pages build's commit
   was exactly 77d897c, raw.githubusercontent.com held the shipped bytes
   throughout, a control account's github.io project page answered 200 while
   ours 404'd, and Pages status said built with the deployment success. Both
-  sites returned 200 afterwards. Do not mutate repo settings for this; poll.
+  sites returned 200 afterwards — foreground and background, with the full
+  323481 bytes. Do not mutate repo settings for this; poll and compare bytes.
 
 - **2026-09-17** — THE HAND FAILS A FIFTH ROUND; STOPPED ON THE TWO-FAILURES
   RULE (`after-32` → `after-33`; nothing pushed but this file). What changed
