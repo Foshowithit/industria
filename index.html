@@ -469,11 +469,23 @@ let revealed = null;                 // truth, and only ever AFTER the part ship
  *  This is the one moment the truth is allowed on screen (R1). */
 function revealLine() {
   if (!revealed) return '';
+  /* THE READING ON THE SAME RULER AS THE TRUTH. The CMM number is µm from
+     nominal, so the gauge reading is printed that way too — the old line
+     printed the reading as an absolute mm beside a µm-from-nominal truth, and
+     a cold viewer had to convert units mid-sentence to compare them. And the
+     gap is YOUR reading being out, never the gauge's fault: heat and a stale
+     read are in the difference as well as the instrument, and the arithmetic
+     is the claim note's own (`claimed − true` on the same two inputs, same
+     order), so the caption and the standing line can never disagree.
+     (`revealed.gauge_err_um` is kept for the record shape; no surface reads
+     it.) */
+  const read_um = (revealed.read_mm - GAME.job.nominal_mm) * 1000;
+  const gap_um = read_um - revealed.err_um;
   return `<span style="color:#8b98a6">Customer CMM: true bore ` +
     `<b style="color:#e8edf2">Ø${revealed.true_mm.toFixed(4)}</b> mm at 20 °C, ` +
     `${revealed.err_um >= 0 ? '+' : ''}${revealed.err_um.toFixed(1)} µm vs nominal. ` +
-    `Your last gauge reading was Ø${revealed.read_mm.toFixed(4)} — ` +
-    `the gauge was out by ${revealed.gauge_err_um.toFixed(1)} µm.</span>`;
+    `Your last gauge reading was ${read_um >= 0 ? '+' : ''}${read_um.toFixed(1)} µm vs nominal — ` +
+    `your reading was ${Math.abs(gap_um).toFixed(1)} µm out.</span>`;
 }
 let phase = 'ARRIVE';
 let earlIdleSince = 0, earlSaid = {}, lastEarlAt = -99;
@@ -2091,8 +2103,15 @@ function takeInHand(partId) {
     (GAME.job.bore_depth_mm * HELD_SCALE_TO_VIEW) / 2);
   camera.add(GLOVE);
   poseHeld();
+  /* THE NAME IS THE PART, NEVER THE FAILED SIZE. The old line said "a Ø40
+     bearing housing, Ø39.9403 mm through the bore" — and a cold viewer stopped:
+     the drawing says Ø40 and the hand says Ø39.9403, so which is it. It is both
+     (a Ø40 housing whose bore came out small), but the sentence has to say so,
+     because the number in the hand is the failure, not the name. */
+  const offUm = (dia - GAME.job.nominal_mm) * 1000;
   say('You', `<b>${partId}</b> — a Ø${GAME.job.nominal_mm} bearing housing, ` +
-    `Ø${dia.toFixed(4)} mm through the bore. Turn your hand to look at it; ` +
+    `bore came out ${Math.abs(offUm).toFixed(1)} µm ${offUm < 0 ? 'small' : 'large'} ` +
+    `(Ø${dia.toFixed(4)} mm). Turn your hand to look at it; ` +
     `<b>E</b> again to put it back on the rack.`);
   /* THE LOG PRINTS EVENTS AND MEASUREMENTS, NEVER A COUNT OF STATE. The header's
      count reads `onShelf` and is current every frame; a count printed here is a
@@ -4092,8 +4111,17 @@ function doInspect() {
     scheduleAchebe();
   } else {
     say('Earl', "\u201cIt's under. Get it on the rack — they can take the rest out at their end.\u201d");
+    /* THE CHARGE IS THEIR TIME, NOT A FINE. The banner says "can still be cut"
+       and the day line reads the same fee, so this line has to name who cuts
+       and what the money is for — in Earl's own words ("they can take the rest
+       out at their end"), so the frame speaks with one voice. The old line
+       ("reworks it and charges you") left the agent out, which is what read
+       as a contradiction beside the verdict. The second pass names the charge
+       as priced rework work, the way the SCRAP banner names its own money
+       ("out the casting and the morning") — "for it" could still read as a
+       fine, "for the rework" cannot. */
     toast(`<b>${v.verdict}</b> — band Ø${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)} mm.` +
-      `<br>The customer reworks it and charges you: ${money(-r.fee)} off the day.` +
+      `<br>They take the rest out at their end and charge you for the rework: ${money(-r.fee)} off the day.` +
       `<br>` + revealLine(), 10000);
     /* AND THE HOUR IT HAPPENED — as a DATELINE, not as `at HH:MM` after the
        verdict. This verdict is a PHRASE (`UNDERSIZE — can still be cut`), so
@@ -4140,8 +4168,17 @@ function doInspect() {
     SHOP.cash += r.net;
     const c = SHOP.book[GAME.job.client_id];
     const d = entry.delivery_delta + entry.claim_delta;
+    /* MONEY AND STANDING ARE TWO DIFFERENT ARITHMETICS. The old line printed
+       the standing total beside the rework charge's money with one pair of
+       brackets between them, and a cold viewer read `−£647.50` against `−10`
+       as two prices for one mistake. So the line now says what each number is
+       FOR: the money is the day line's (their rework), the standing is the
+       client's (a finished-short part with a true word). Deltas untouched. */
+    const moneyWord = entry.kind === 'undersize'
+      ? ` Day line ${money(r.net)} — their rework, already on the bill.`
+      : '';
     logLine(`<b>${GAME.job.client}</b> — standing ${entry.standing_before} → ` +
-      `<b>${entry.standing_after}</b> (${d >= 0 ? '+' : ''}${d}). ${entry.report}`);
+      `<b>${entry.standing_after}</b> (${d >= 0 ? '+' : ''}${d} standing).${moneyWord} ${entry.report}`);
     if (REC) REC.hint({ kind: 'shop', who: GAME.job.client, is_question: false,
       text: `${entry.kind} ${d >= 0 ? '+' : ''}${d} -> ${entry.standing_after}. ${entry.report}` });
     /* Earl has an opinion only when it was expensive. A line for every delivery
@@ -4152,7 +4189,7 @@ function doInspect() {
         "it longer than you will.\u201d"), 3200);
     } else if (entry.kind === 'undersize') {
       setTimeout(() => say('Earl', "\u201cThey'll finish it themselves and they'll " +
-        "charge us for it. Second time and they stop calling.\u201d"), 3200);
+        "charge us for the rework. Second time and they stop calling.\u201d"), 3200);
     } else if (entry.claim_delta >= 8) {
       setTimeout(() => say('Earl', "\u201cTold them a number and the number was right. " +
         "That's the whole job, that is.\u201d"), 3200);

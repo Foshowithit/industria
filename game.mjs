@@ -1801,10 +1801,18 @@ export function ship(g, { silent = false } = {}) {
   } else if (cls.outcome === 'RECOVERABLE') {
     /* THE UNDERSIZE CASE, and it is the recoverable one. The bore is still
        small, so there is metal left to take out — off the machine, by the
-       customer, on their own setup, which is what the fee is. */
+       customer, on their own setup, which is what the fee is.
+       THE WORDING NAMES THE AGENT ON PURPOSE. The verdict says "can still be
+       cut" and the fee reads beside it, so the sentence between them has to
+       say who cuts and what the charge is for — otherwise "cuttable" reads as
+       cuttable here and the fee reads as a fine. It echoes Earl's own line
+       ("they can take the rest out at their end"), so the shop speaks with
+       one voice about whose setup does the work. And the charge is named as
+       THEIR rework, priced work — the SCRAP note says what its money is for
+       ("out the casting and the morning"), so this one must too. */
     fee = g.job.rate * 0.35;
-    note = `Shipped ${v.under_um.toFixed(1)} µm under. The customer reworks it and ` +
-           `charges you for the privilege.`;
+    note = `Shipped ${v.under_um.toFixed(1)} µm under. They take the rest out at their end ` +
+           `and charge you for the rework.`;
   } else {
     /* THE OVERSIZE CASE, and it is the dead one. Cutting only makes a bore
        larger, so metal this far out is metal nobody can put back. */

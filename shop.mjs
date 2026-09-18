@@ -150,8 +150,13 @@ export function claimStandingDelta(claimed_um, true_um, bandWidth_um) {
   const ae = Math.abs(e);
   const band = Math.max(4, bandWidth_um || 16);
   /* One fifth of the band is "you told them the truth". Past a whole band you
-     were not reading the instrument, you were guessing, and the client knows. */
-  if (ae <= band * 0.2) return { delta: 8, note: `Your reading was ${ae.toFixed(1)} µm out — the figure you gave them held, so they trust it.` };
+     were not reading the instrument, you were guessing, and the client knows.
+     THE TRUST IS IN THE WORD, NOT THE PART. The first version ended "so they
+     trust it", and two cold viewers stopped on that "it" beside the rework
+     charge: trust beside a fine reads as a contradiction. The charge is for
+     their rework (the note on the ship says so); this sentence is about the
+     number you gave them, so it names the word and excludes the part. */
+  if (ae <= band * 0.2) return { delta: 8, note: `Your reading was ${ae.toFixed(1)} µm out — the figure you gave them held, so they trust your word, not the part.` };
   if (ae <= band * 0.5) return { delta: 2, note: `Your reading was ${ae.toFixed(1)} µm out. Close enough to be believed.` };
   if (ae <= band) return { delta: -6, note: `Your reading was ${ae.toFixed(1)} µm out. They noticed.` };
   return { delta: -12, note: `Your reading was ${ae.toFixed(1)} µm out — you were not measuring, you were hoping.` };

@@ -298,20 +298,29 @@ is about, which is why it is next. Taken in this order:
   customer); the band comparison is gone, so the measurement ruler and the part
   ruler can never meet. Deltas and ladder untouched; suites assert deltas, not
   strings. Sighted reviewer PASSes the log leg verbatim on `after-41/10`.
-- **F7 · THE END-STATE SENTENCES DISAGREE WITH EACH OTHER** (S–M, open, from
-  the cold-viewer re-run this wave). Both cold viewers, unprompted, stopped on
-  shot 10's co-occurrence: "UNDERSIZE — can still be cut" beside "The customer
-  reworks it and charges you: −£647.50 off the day", and "they trust it" beside
-  that same charge. The fiction underneath is coherent (an undersize bore still
-  has metal to remove, but the recovery is a re-clamp and re-datum on the
+- **F7 · THE END-STATE SENTENCES DISAGREE WITH EACH OTHER** (S–M — DONE,
+  shipped this wave in `game.mjs` + `shop.mjs` + `index.html` + bundle;
+  `after-43`/`after-44`). What was wrong before: both cold viewers, unprompted,
+  stopped on shot 10's co-occurrence: "UNDERSIZE — can still be cut" beside "The
+  customer reworks it and charges you: −£647.50 off the day", and "they trust it"
+  beside that same charge. The fiction underneath is coherent (an undersize bore
+  still has metal to remove, but the recovery is a re-clamp and re-datum on the
   customer's floor, which is why the fee exists — see `game.mjs:1806-1807` and
   the `doFetchBlank` REWORK-vs-SCRAP asymmetry in `index.html`), but no surface
-  says that, so "can still be cut" reads as "cuttable here" and trust reads as
-  incompatible with a fine. Next: one verdict, one number, one instruction on
-  the end-state frame — name WHO cuts (the customer) and WHAT the charge is for
-  (their rework, priced by the fee the day line already reads) — copy first,
-  and only if copy cannot carry it does this touch disposition or economy
-  (which would need tests + a note, and may be GATED).
+  said that, so "can still be cut" read as "cuttable here" and trust read as
+  incompatible with a fine. Shipped, copy-first across six sites: the toast
+  verdict names recoverability + band; toast and Earl name WHO cuts (the
+  customer, at their end) and WHAT the charge is for (THEIR rework, priced work,
+  −£647.50 off the day); the reveal line puts reading and truth on one
+  µm-vs-nominal ruler with the gap as YOUR reading out, never gauge blame; the
+  standing log labels money vs standing as two arithmetics; the claim note
+  trusts the WORD, not the part; the pickup line names the Ø40 part with the
+  failure as deviation. Cold B caught a grammar miss in the new pickup line
+  ("bore come out") — fixed, rebuilt, re-suited, recaptured, re-seen
+  (`after-44/10`). Sighted reviewer (MODEL, full frames) SHIP: all five legs
+  PASS on `after-43`; the white mark on the reveal line is the capture pointer,
+  not page content. Residual ruling in the run log: F7 closes at copy level per
+  its brief — copy carried it, so nothing touches disposition or economy.
 - **F6 · THE CRATE ECONOMY — *GATED*** (decision). `BLANK_STOCK` is 3 and the
   crate draws `cl(stock_on_hand, 0, 3)` castings, and ROADMAP:122 says a shift
   can produce up to three parts. But the first casting is mounted at shift start
@@ -481,6 +490,39 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-18** — F7 SHIPS (`after-43`/`after-44`; `game.mjs`, `shop.mjs`,
+  `index.html`, `INDUSTRIA-single-file.html`, this file). What was wrong before:
+  the end-state sentences disagreed with each other — "UNDERSIZE — can still be
+  cut" beside a −£647.50 customer-rework charge, "they trust it" beside the same
+  charge, the reveal line in absolute mm blaming the gauge, the pickup line
+  naming the part by its failed size. Shipped copy-first at six sites: toast
+  verdict names recoverability + band, toast + Earl name THEIR rework at THEIR
+  end, the reveal line unites reading and truth in µm-vs-nominal with the gap
+  as YOUR reading out, the log labels money vs standing as two arithmetics, the
+  claim note trusts the WORD not the part, the pickup names the Ø40 housing
+  with the miss as deviation. Gates: 76 / 137 / 69 / 70+1 (the one SCRAP
+  failure is the model), bundle 7bd4329fd659 · 9 modules, `after-43` + `after-44`
+  both on disk (Cold B caught "bore come out" → fixed → after-44 re-seen by my
+  own eye). The sighted reviewer (MODEL, full frames) SHIP on after-43: five
+  legs PASS — verdict recoverability, agent + charge naming, one ruler, two
+  arithmetics, Ø40 naming; the white mark on the reveal line is the capture
+  pointer, not page content. Cold A + B (after-43, stills-only, on disk) still
+  stop on shot 10, but the complaint moved up a level: the arithmetic now
+  agrees (B checks 59.7−58.6=1.1, units match) and the residual stops are
+  MEANING, not self-contradiction — salvage-tone vs terminal-money, the
+  unexplained −£647.50 rate card, ±0.46 vs 1.1, 22.8 °C vs 20 °C, crate/rack/bin
+  counts, 4-jobs-vs-3-castings. RESIDUAL RULING: F7 closes at copy level per
+  its brief ("copy first, and only if copy cannot carry it does this touch
+  disposition or economy") — copy DID carry it, so nothing touches disposition
+  or economy. The remaining stops are separate items each: £647.50 wants a rate
+  card the game never prints (suitably a new S-item, sizes S–M), crate/rack/bin
+  counts are the logging-vs-header discipline already owed from the earlier
+  cold round, and jobs-vs-castings is F6's gated sibling. Recorded here so the
+  next wave takes them as named follow-ups, not as F7 reopened. Next: mine the
+  cold viewers' still-open pre-existing lists (radius-vs-diameter wording,
+  PRED/EXPECT/DIAL, due-vs-van, Earl never visible, calipers-vs-gauge, 200 µm
+  prediction ladder) or the next F-item; F6 stays GATED.
 
 - **2026-09-18** — F5 SHIPS, AND THE COLD-VIEWER RE-RUN NAMES F7 (`after-41`;
   `shop.mjs`, `INDUSTRIA-single-file.html`, this file). What was wrong before:
