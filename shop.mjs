@@ -151,7 +151,7 @@ export function claimStandingDelta(claimed_um, true_um, bandWidth_um) {
   const band = Math.max(4, bandWidth_um || 16);
   /* One fifth of the band is "you told them the truth". Past a whole band you
      were not reading the instrument, you were guessing, and the client knows. */
-  if (ae <= band * 0.2) return { delta: 8, note: `Your reading was ${ae.toFixed(1)} µm out — they trust it.` };
+  if (ae <= band * 0.2) return { delta: 8, note: `Your reading was ${ae.toFixed(1)} µm out — the figure you gave them held, so they trust it.` };
   if (ae <= band * 0.5) return { delta: 2, note: `Your reading was ${ae.toFixed(1)} µm out. Close enough to be believed.` };
   if (ae <= band) return { delta: -6, note: `Your reading was ${ae.toFixed(1)} µm out. They noticed.` };
   return { delta: -12, note: `Your reading was ${ae.toFixed(1)} µm out — you were not measuring, you were hoping.` };

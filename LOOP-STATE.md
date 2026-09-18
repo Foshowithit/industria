@@ -285,10 +285,33 @@ is about, which is why it is next. Taken in this order:
   remove 200 µm. Take the cut." banner where 07 reads "not stated". The sighted
   reviewer PASSes the differentiator on `after-39`. Verdict in
   `after-39/VERDICT-legs.md`.
-- **F5 · "they trust it" AFTER A 1.1 µm MISS** (S, copy). Read in place it means
-  the customer trusted a reading that was 1.1 µm out — the sting, not a
-  contradiction — but a cold reader stops on it. Copy, so it waits for a wave
-  that is not structural (COPY-STRUCTURE SEPARATION).
+- **F5 · "they trust it" AFTER A 1.1 µm MISS** (S, copy — DONE, shipped this
+  wave in `shop.mjs` + bundle; `after-41`). What was wrong before: the shipped
+  sentence was "Your reading was 1.1 µm out — they trust it", which a cold
+  reader stops on (a miss beside trust). First fix ("well inside the band, so
+  they trust it") closed the sentence F5 named, but the cold-viewer re-run this
+  wave stopped on the NEW sentence itself: "'out' and 'well inside' cannot both
+  be true in the same clause", and it graded a measurement error against the
+  part band while a −£647.50 rework charge sat two lines below for that same
+  reading. Shipped: "Your reading was 1.1 µm out — the figure you gave them
+  held, so they trust it." The trusted thing is named (the number told to the
+  customer); the band comparison is gone, so the measurement ruler and the part
+  ruler can never meet. Deltas and ladder untouched; suites assert deltas, not
+  strings. Sighted reviewer PASSes the log leg verbatim on `after-41/10`.
+- **F7 · THE END-STATE SENTENCES DISAGREE WITH EACH OTHER** (S–M, open, from
+  the cold-viewer re-run this wave). Both cold viewers, unprompted, stopped on
+  shot 10's co-occurrence: "UNDERSIZE — can still be cut" beside "The customer
+  reworks it and charges you: −£647.50 off the day", and "they trust it" beside
+  that same charge. The fiction underneath is coherent (an undersize bore still
+  has metal to remove, but the recovery is a re-clamp and re-datum on the
+  customer's floor, which is why the fee exists — see `game.mjs:1806-1807` and
+  the `doFetchBlank` REWORK-vs-SCRAP asymmetry in `index.html`), but no surface
+  says that, so "can still be cut" reads as "cuttable here" and trust reads as
+  incompatible with a fine. Next: one verdict, one number, one instruction on
+  the end-state frame — name WHO cuts (the customer) and WHAT the charge is for
+  (their rework, priced by the fee the day line already reads) — copy first,
+  and only if copy cannot carry it does this touch disposition or economy
+  (which would need tests + a note, and may be GATED).
 - **F6 · THE CRATE ECONOMY — *GATED*** (decision). `BLANK_STOCK` is 3 and the
   crate draws `cl(stock_on_hand, 0, 3)` castings, and ROADMAP:122 says a shift
   can produce up to three parts. But the first casting is mounted at shift start
@@ -458,6 +481,24 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-18** — F5 SHIPS, AND THE COLD-VIEWER RE-RUN NAMES F7 (`after-41`;
+  `shop.mjs`, `INDUSTRIA-single-file.html`, this file). What was wrong before:
+  the trust sentence read "they trust it" beside a 1.1 µm miss, and the first
+  fix ("well inside the band") graded a measurement error against the part band
+  while a −£647.50 rework charge sat two lines below for that same reading —
+  both cold viewers stopped on it. The sentence now names the trusted thing
+  ("the figure you gave them held, so they trust it"); deltas and ladder
+  untouched. Gates: 76 / 137 / 69 / 70+1 (the one SCRAP failure is the model),
+  bundle `275f98f0…` · 9 modules, `after-41` manifest differs from `after-40` on
+  shot 10 only (fps noise aside). The sighted reviewer (MODEL, full frame)
+  PASSes the new log sentence verbatim plus banner and no-regression legs; its
+  one FAIL was a wrong-frame expectation (LEG3's gauge strings live on shot 09,
+  seen legible there by my own eye). Both cold viewers' still-open lists stand,
+  extended by new item F7: the end-state sentences disagree with each other
+  ("can still be cut" beside customer-rework charge, trust beside fine) — copy
+  first, model/economy only if copy cannot carry it. Next: F7, or the next
+  viewers'-list item with room; F6 stays GATED.
 
 - **2026-09-18** — F3 + F4 SHIP (`after-39`; `materials.mjs`,
   `INDUSTRIA-single-file.html`, `acceptance/review-set.py`, this file). What was
