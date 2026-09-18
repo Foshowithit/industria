@@ -527,6 +527,26 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-18** — FEE LINE GOES COLD-LEGIBLE (`after-48`; `index.html`,
+  `INDUSTRIA-single-file.html`, this file). What was wrong before: the frame-10
+  fee toast buried both money figures mid-sentence in 13 px warning orange, and
+  two independent cold viewers on different captures both read the parent
+  £1,850.00 as £1,050.00 — pixels right both times, a legibility candidate, not
+  a defect. Shipped, words/order/size/emphasis only, same derivations (`r.fee`,
+  `GAME.job.rate`): the charge stands in ink-white bold on its own clause, the
+  parent leads rate-first ("35% of a £1,850.00 job."), toasts 13→15 px. Gates:
+  76 / 137 / 69 / 70+1 (the SCRAP failure is the model), bundle 7bd4329fd659 ·
+  9 modules (index-only edits leave the module-blob hash unchanged by design).
+  Sighted reviewer (MODEL, full frames) SHIP — charge pops, parent unambiguous
+  at first look, no collision in any toast frame, F9 census intact, no other
+  change (`after-48/VERDICT.md`); cold reader £1,850.00 exact, comma and pence
+  resolved (`after-48/COLD.md`). Commit `c745fdb`; live `index.html` sha256
+  `bba74504…` matches. PATH NOTE: `after-48` sits workspace-level
+  (`industria-visual-pass/after-48/`), unlike repo-internal untracked
+  `industria/industria-visual-pass/after-47/` — both untracked, never added.
+  Remaining: the J1-01-as-range and "(Ø36) AS CAST" candidates, and the
+  viewers' still-open list. F6 stays GATED.
+
 - **2026-09-18** — F9 SHIPS: EVERY VALUE WEARS ITS NOUN, THE CRATE COUNTS AT A
   GLANCE (`after-46` NO-SHIP → `after-47`; `index.html`,
   `INDUSTRIA-single-file.html`, this file). What was wrong before: the floor
