@@ -739,7 +739,11 @@ export function drawingFor(job = JOBS[0], { partO_dia_mm = HOUSING_OD_MM, drawn_
       { id: 'D2', kind: 'depth', feature: 'bore',
         text: `${job.bore_depth_mm}`, tol_text: '±0.2' },
       { id: 'D3', kind: 'diameter_ref', feature: 'as_cast',
-        text: `(Ø${job.start_hole_dia_mm})`, tol_text: 'AS CAST' },
+        /* Reference-dim parentheses are sheet convention, but the sheet never
+           prints this dim — the dashed as-cast circle carries it — so the only
+           place the text rendered was the drawing say-line, in prose, where a
+           cold reader took "(Ø36)" for a stray paren. */
+        text: `Ø${job.start_hole_dia_mm}`, tol_text: 'AS CAST' },
       { id: 'D4', kind: 'diameter', feature: 'od',
         text: `Ø${partO_dia_mm}`, tol_text: '±0.3' },
     ],
