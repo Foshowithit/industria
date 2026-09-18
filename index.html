@@ -208,8 +208,18 @@
     background:var(--panel);border:1px solid #333d47;border-radius:2px;font-size:13px}
   #talk .opt:hover{border-color:var(--warn);color:var(--warn)}
 
-  #ev{left:50%;top:76px;transform:translateX(-50%);text-align:center;font-size:13px;color:var(--warn)}
-  #ev div{margin:3px 0}
+  #ev{left:50%;top:76px;transform:translateX(-50%);text-align:center;font-size:15px;color:var(--warn)}
+  #ev div{margin:4px 0}
+  /* THE CHARGE IS ITS OWN LINE. The fee used to ride inside a sentence —
+     "…charge you for the rework: −£647.50 off the day (£1,850.00 job × 35%)" —
+     and two independent cold viewers misread £1,850.00 as £1,050.00 on
+     different captures of the same 13px orange line. The pixels were right
+     both times; the line was not cold-readable. A money figure that arrives
+     mid-sentence, in warning colour, at caption size, with the shop behind it,
+     is a number nobody can defend the reading of. So the charge now stands on
+     its own line in ink, the way the day line names its own money
+     ("ON THE DAY"), with the derivation under it — the rate first, so the
+     parent lands before the child. Same roots, same order, no new words. */
   /* The session handover. It shares #ev's corner but not its warning colour —
      this is not a problem, it is the way a run gets out of the browser. It must
      also outrank #ev's own colour rule, hence the explicit colour below.
@@ -4138,8 +4148,8 @@ function doInspect() {
        for the parent, `r.fee` for the charge — one derivation, printed twice,
        never computed twice. */
     toast(`<b>${v.verdict}</b> — band Ø${GAME.job.band_low_mm.toFixed(3)}–${GAME.job.band_high_mm.toFixed(3)} mm.` +
-      `<br>They take the rest out at their end and charge you for the rework: ${money(-r.fee)} off the day ` +
-      `(${money(GAME.job.rate)} job × 35%).` +
+      `<br>They take the rest out at their end and charge you <b style="color:var(--ink)">${money(-r.fee)}</b> for the rework — ` +
+      `35% of a ${money(GAME.job.rate)} job.` +
       `<br>` + revealLine(), 10000);
     /* AND THE HOUR IT HAPPENED — as a DATELINE, not as `at HH:MM` after the
        verdict. This verdict is a PHRASE (`UNDERSIZE — can still be cut`), so
