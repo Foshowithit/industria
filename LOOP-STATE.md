@@ -527,6 +527,26 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-18** — GENERIC CHIP BINS GROUNDED (`after-49`; `index.html`,
+  `INDUSTRIA-single-file.html`, this file). What was wrong before: the generic
+  `bin()` placed its 0.62-tall body at y 0.5, but `box()` CENTRES geometry, so
+  every bin except the scrap bin hung about 190 mm above the floor with its
+  contact shadow detached on the concrete below it — COLD-B and COLD-C both
+  named the green bin behind the casting crate on frame 03 of after-48, the
+  two-independent-repeat signal. Fix is the SCRAPBIN grounding numbers
+  verbatim (body centre y 0.34 on its 30 mm skirt, lid y 0.67) — no model,
+  economy, or copy change. The same viewers' paper-hover claim was measured
+  and CLEARED, not "fixed": the TRAVELER plane sits at 0.932 on a 0.930 bench
+  top, a 2 mm seat — contrast artifact, no defect. Gates: 76 / 137 / 69 /
+  70+1 (the SCRAP failure is the model), bundle 7bd4329fd659 · 9 modules,
+  after-49 recapture (ten stills), self-read frame 03 full-frame plus a
+  before/after crop and frame 01 crops (green bin and both rust bins on the
+  floor, shadows attached), sighted reviewer (MODEL, full frames) VERDICT:
+  SHIP, all ten frames, no new defects (`after-49/VERDICT.md`). Commit
+  `cf287fd`; live `index.html` sha256 `5cad83af…`, bundle `fa393f62…`, both
+  match. Remaining: the viewers' still-open list and the three legibility
+  candidates. F6 stays GATED.
+
 - **2026-09-18** — FEE LINE GOES COLD-LEGIBLE (`after-48`; `index.html`,
   `INDUSTRIA-single-file.html`, this file). What was wrong before: the frame-10
   fee toast buried both money figures mid-sentence in 13 px warning orange, and
