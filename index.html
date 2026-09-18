@@ -1543,8 +1543,12 @@ box(0.22, 0.22, 0.03, new THREE.MeshStandardMaterial({ color: 0x2f6f3a, roughnes
     -20.6, 3.4, 2.2, scene);
 
 /* chip conveyor + bins + pallets */
+/* grounded exactly like SCRAPBIN below: box() centres geometry, so the body's
+   y is its CENTRE — 0.34 sits the base 30 mm off the floor on a skirt, 0.5 left
+   the bin floating 190 mm in daylight with its contact shadow detached on the
+   floor below. Two independent cold viewers named it on the same frame. */
 const bin = (x, z, mat) => { const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
-  box(0.8, 0.62, 0.62, mat, 0, 0.5, 0, g); box(0.86, 0.06, 0.68, M.dark, 0, 0.83, 0, g);
+  box(0.8, 0.62, 0.62, mat, 0, 0.34, 0, g); box(0.86, 0.06, 0.68, M.dark, 0, 0.67, 0, g);
   contactShadow(g, 1.1, 0.9, 0, 0.005, 0, 0.5); return g; };
 bin(-4.6, -6.4, M.rust); bin(-5.6, -6.4, M.rust); bin(4.4, -8.6, new THREE.MeshStandardMaterial({ color: 0x3f5a46, roughness: 0.9 }));
 const pallet = (x, z, ry, stack) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
