@@ -1606,24 +1606,31 @@ box(0.9, 0.6, 0.05, M.dark, 0, 1.38, -0.22, board);
   });
 }
 
-/* the CALIPERS, on the machine's own bench. REBUILT AT ITS NAMED SIZE, BECAUSE
-   THE OLD ONE WAS TWO TOOLS AT ONCE: the label said 150 mm and the beam was
-   drawn 300 — the held pose's comment even said "the 300 mm of it" — one fact
-   derived twice, disagreeing. CALIPER_MM is now the only place the size
-   exists; the beam is it in metres and the label prints it. The old object
-   failed as itself besides: eleven fat ticks wide apart on a bright strip
-   read as a ladder of blocks, and blocks is what the review called them. A
-   real scale is hairline ruling — forty ticks at a 2.5 mm step, near the
-   held frame's resolution, so the strip reads as engraving and only
-   sharpens on approach. The rest is the silhouette a vernier is known by:
-   the slider shut near the fixed end so the fork sits slightly open, the
-   thumbwheel under the slider and the lock screw standing on it, ground
-   tips on the measuring faces, the depth rod out along the back. The tool
-   stands on its jaw tips at the bench plane — the beam rides 27 mm up on
-   the prongs, because a caliper cannot lie flat on the fork that measures
-   for it. Nothing hangs below the bench. */
+/* the CALIPERS, on the machine's own bench. REBUILT TWICE, and the second
+   time was the one that mattered: the jaws used to run off the beam's
+   THICKNESS, so from the reading view — the one view a caliper has to
+   survive — the fork pointed straight at the camera. There was no fork to
+   see, only the bar and a blocky grey mass under the hand, which is what
+   the review kept calling it. On the tool the jaws run off the beam's
+   WIDTH, in the plane of the scale, so the reading view gets the silhouette
+   everybody knows: bar across, fork down at the left end, the depth rod
+   along the lower edge. The tool lies flat on the bench now, too, instead
+   of standing on its prongs, because a real caliper's jaws are flush with
+   its back. (The first rebuild was about size: the label said 150 mm and
+   the beam was drawn 300 — one fact derived twice, disagreeing. CALIPER_MM
+   is the only place the size exists; the beam is it in metres, the scale
+   prints it, the label names it.) The rest is the silhouette a vernier is
+   known by: the slider five millimetres open, the thumbwheel under it, the
+   lock screw standing on it where the bar's own shadow cannot hide it,
+   ground tips on the measuring faces, the rod's end flush with the beam's
+   end when the jaws are shut. AND THE SLIDER'S ZERO RIDES AT THE FORK'S
+   OPENING: the old build's slider sat at the 45 while its jaws gapped 23 —
+   one opening, derived twice, disagreeing with itself. The moving prong now
+   hangs off the slider's zero edge, so the scale's 5, the gap and the
+   slider are one fact. */
 const CALIPER_MM = 150;
 const CALIPER_M = CALIPER_MM / 1000;
+const BEAM_T = 0.006, JAW_L = 0.040;   // the bar's thickness, and how far the fork reaches off its width
 /* the machine's own bench. The words have promised "the bench by the machine"
    since the first shift, but no bench was ever built: the calipers and the
    traveler stood a metre over open concrete on pendant-cell numbers pasted
@@ -1636,14 +1643,21 @@ for (const sx of [-0.45, 0.45]) for (const sz of [-0.18, 0.18])
   box(0.07, 0.87, 0.07, M.dark, sx, 0.435, sz, bench);
 contactShadow(bench, 1.35, 0.8, 0, 0.005, 0, 0.5);
 const CALIPERS = new THREE.Group(); bench.add(CALIPERS);
-CALIPERS.position.set(-0.2, 0.93, 0.06); CALIPERS.rotation.y = 0.16;
-box(CALIPER_M, 0.006, 0.024, M.steel, 0, 0.030, 0, CALIPERS);                    // the beam
+/* the tool LIES FLAT, because it can now: the fork runs off the bar's width,
+   in the plate's own plane, so the plate's underside is the lowest surface and
+   the slider's lower ledge clears it by half a millimetre. The old pose stood
+   the tool on jaw tips that no longer exist; the plate is the resting face,
+   as on a real caliper. */
+CALIPERS.position.set(-0.2, 0.9045, 0.06); CALIPERS.rotation.y = 0.16;
 /* THE SCALE IS ENGRAVED, NOT MODELED. Forty separate tick boxes were hairlines
    only by courtesy — at the held distance they collapsed into a striped blur,
    and a scale with no numerals is not a scale; the sighted reviewer called
    exactly that. The engraving is drawn once on a canvas the way the DRO and
-   the drawing already are: 1 mm hairlines, heavier at 5, numerals every 10,
-   the zero at the fixed jaw's measuring face. Every figure on it comes off
+   the drawing already are, in THREE CONTRASTS: light short 1 mm ticks, mid
+   5 mm ticks, heavy 10 mm ticks with numerals — at one weight the whole
+   ruling averaged into a striped blur; at three, the eye picks the decade
+   out. The numerals sit below the tick line, clear of it, the zero at the
+   fixed jaw's measuring face. Every figure on it comes off
    CALIPER_MM, so the strip cannot disagree with the label that names the
    tool. The strip now runs the full beam, because a 150 mm scale needs 150 mm
    of beam; the slider rides over it, as a slider does. */
@@ -1652,13 +1666,14 @@ const scaleC = canvasFor(1600, 320);
   const ctx = scaleC.getContext('2d');
   const pxmm = 1600 / CALIPER_MM, mid = 160;
   ctx.fillStyle = '#c3c7cc'; ctx.fillRect(0, 0, 1600, 320);
-  ctx.strokeStyle = '#26292d'; ctx.fillStyle = '#26292d'; ctx.textAlign = 'center';
+  ctx.textAlign = 'center';
   for (let mm = 0; mm <= CALIPER_MM; mm++) {
     const x = mm * pxmm, major = mm % 10 === 0, five = mm % 5 === 0;
-    ctx.lineWidth = major ? 4 : five ? 2.5 : 1.2;
+    ctx.strokeStyle = major ? '#1d2024' : five ? '#4a4f55' : '#9aa0a6';
+    ctx.lineWidth = major ? 6 : five ? 3 : 1;
     ctx.beginPath(); ctx.moveTo(x, mid);
-    ctx.lineTo(x, mid - (major ? 96 : five ? 64 : 42)); ctx.stroke();
-    if (major) { ctx.font = '600 58px ui-monospace, Menlo, monospace'; ctx.fillText(String(mm), x, mid + 108); }
+    ctx.lineTo(x, mid - (major ? 96 : five ? 56 : 22)); ctx.stroke();
+    if (major) { ctx.fillStyle = '#1d2024'; ctx.font = '600 48px ui-monospace, Menlo, monospace'; ctx.fillText(String(mm), x, 246); }
   }
 }
 const scaleTex = new THREE.CanvasTexture(scaleC); scaleTex.anisotropy = 4;
@@ -1666,37 +1681,84 @@ const scaleFace = new THREE.MeshStandardMaterial({ map: scaleTex, roughness: 0.4
 const SCALE = new THREE.Mesh(new THREE.BoxGeometry(CALIPER_M, 0.009, 0.030),
   [M.ground, M.ground, scaleFace, scaleFace, M.ground, M.ground]);
 SCALE.position.set(0, 0.030, 0); CALIPERS.add(SCALE);
-{                                                                                // slider, shut near the fixed end
-  box(0.036, 0.020, 0.032, M.dark, -0.030, 0.030, 0, CALIPERS);
-  const wheel = cyl(0.0065, 0.0065, 0.012, M.steel, 14);                          // thumbwheel, poking under the slider
-  wheel.position.set(-0.020, 0.019, 0); CALIPERS.add(wheel);
-  const screw = cyl(0.0028, 0.0028, 0.005, M.ground, 10);                         // lock screw, standing on the slider
-  screw.position.set(-0.036, 0.0425, 0); CALIPERS.add(screw);
+{   /* THE SLIDER'S ZERO EDGE IS THE FORK'S MOVING FACE, AND THE FORK GAPS
+       FIVE, so the slider sits with its zero edge at the scale's 5 — the
+       opening, the slider and the scale are one fact (the class-3 note in
+       the header above). The collar rides 14 mm tall: the tool lies flat and
+       the ledge clears the plate by half a millimetre. */
+  box(0.036, 0.014, 0.032, M.dark, -0.052, 0.033, 0, CALIPERS);                  // slider: x -0.070..-0.034, y 0.026..0.040
+  const wheel = cyl(0.0065, 0.0065, 0.006, M.steel, 14);                          // thumbwheel: a knurled disc in the plate's own plane, proud of the bar's lower edge
+  wheel.position.set(-0.042, 0.030, -0.020); CALIPERS.add(wheel);
+  const screw = cyl(0.0028, 0.0028, 0.006, M.ground, 10);                         // lock screw, proud of the slider's upper edge — at the bar's mid-line it hid behind the slider's own lip (a control nobody can see is a model never called)
+  screw.position.set(-0.058, 0.043, 0.018); CALIPERS.add(screw);
 }
-box(0.004, 0.028, 0.024, M.steel, -0.073, 0.016, 0, CALIPERS);                   // fixed lower jaw
-box(0.004, 0.004, 0.024, M.ground, -0.073, 0.004, 0, CALIPERS);                  //   its ground tip
-box(0.004, 0.028, 0.024, M.steel, -0.046, 0.016, 0, CALIPERS);                   // moving lower jaw
-box(0.004, 0.004, 0.024, M.ground, -0.046, 0.004, 0, CALIPERS);                  //   its ground tip
-box(0.003, 0.010, 0.014, M.steel, -0.072, 0.038, 0, CALIPERS);                   // fixed upper jaw
-box(0.003, 0.010, 0.014, M.steel, -0.046, 0.045, 0, CALIPERS);                   // moving upper jaw
-box(0.095, 0.0025, 0.006, M.steel, 0.033, 0.030, -0.015, CALIPERS);              // depth rod, along the back
+box(0.006, BEAM_T, JAW_L, M.steel, -0.078, 0.030, -0.035, CALIPERS);             // fixed prong, off the bar's WIDTH, its +x face the scale's zero
+box(0.0058, 0.0064, 0.0098, M.ground, -0.078, 0.030, -0.050, CALIPERS);          //   its ground tip (inset in x/z against coplanar faces, proud in y)
+box(0.006, BEAM_T, JAW_L, M.steel, -0.067, 0.030, -0.035, CALIPERS);             // moving prong, its -x face the slider's zero edge: the gap is the 5
+box(0.0058, 0.0064, 0.0098, M.ground, -0.067, 0.030, -0.050, CALIPERS);          //   its ground tip
+box(0.095, 0.0025, 0.006, M.steel, 0.0325, 0.030, -0.015, CALIPERS);             // depth rod along the lower edge; its end lands at 0.080, the jaw opening proud
 
-/* THE HAND, WHEN THE TOOL IS TAKEN. A tool held by no one floats, and the
-   held still showed exactly that: the reviewer read a grey mass hanging in
-   air and could not tell glove from metal. This grip lives in the calipers'
-   own frame, so it rides the pickup pose for free — knuckles below the beam,
-   three fingertips curled over the far edge (each axis one finger radius off
-   the edge line, the same tangent rule the casting's fingers follow), the
-   thumb out under the thumbwheel where the wheel is actually worked, the
-   wrist dropping out of the bottom of the frame. The lamp travels with it
-   for the same reason the casting's does: a held thing is a lit thing, or it
-   reads as a hole. The bench copy of the tool never gets a hand — this is
-   built when the tool is taken, and the take is one-way. */
+/* One skin, one cuff, one lamp recipe for BOTH hands: the glove's values were
+   measured once — 0x242b33 under the 0.30 warm lamp lands lit flanks near 68 —
+   and the calipers' hand reuses the exact materials instead of deriving its
+   own, because a second derivation of one value is how two hands end up
+   different colours. dropGlove tears the glove down by disposing what it
+   holds, so it must never see these shared ones. */
+const SKIN = new THREE.MeshStandardMaterial({ color: 0x242b33, roughness: 1.0, metalness: 0.0 });
+const CUFF = new THREE.MeshStandardMaterial({ color: 0x404852, roughness: 0.95, metalness: 0.05 });
+const handLamp = () => new THREE.PointLight(0xfff2dc, 0.30, 1.3, 2.0);
+
+/* THE HAND, WHEN THE TOOL IS TAKEN. A tool held by no one floats, and five
+   grips have died on it: a lamp-lit grey mass (measured: the wrist's own near
+   end, 0.27 m out, with a lamp 0.11 m off its skin), a white frustum with a
+   black rim, a matte black cylinder, three black knobs, and four round balls
+   in a row — the last one measured at 46 px wide against 45 px long, an
+   aspect of 1.0, and a thing whose length equals its width is a ball however
+   it is lit.
+
+   Three facts write this build. The reader looks UP at the tool from below
+   and in front, so the only hand surfaces it can see face down-and-front, and
+   the lamp must stay above the engraved face's plane, because the face reads
+   by being dark against the bright scale. The bar is a box (x ±0.075, y
+   0.0255..0.0345, z ±0.015) and it cuts the frame into three regimes: below it
+   a part is always visible, inside its band a part shows only in front of the
+   near face (z > 0.015), and above it a part shows only in front of a line
+   that falls with height (z > 0.113 − 0.39757·(y + 0.212)). And a tube's
+   visible flank faces +z when its axis is vertical or along x, but faces −y
+   when its axis runs along z — which is why round five's wrist, 0.36 m of
+   cylinder down the −z axis, measured N·L −0.08 and L 0.0 at every sample and
+   read as a black pipe. Length cannot fix a tube that faces away from the
+   lamp, and round five's thumb showed as a bare cap for the same reason: it
+   crossed the bar's band behind the near face.
+
+   So the fingers ARCH and cross in front: each is one capsule from a crown
+   above and in front of the bar (y 0.070, z 0.020) down to a tip below it
+   (y 0.015, z 0.009). On screen they run 80-110 px long against 28-30 px wide
+   — aspect 2.9 to 3.7, tubes instead of balls — and the row's own run across
+   the pose staggers them (crowns 457→436 px, tips 526→510), so no height is
+   authored to avoid a railing. The tips land 17-18 px clear of the numerals:
+   the glyph band and the scale's left half stay clear, and the pinky's tube
+   stops at 1121 px, short of the HUD's 1160 px edge. The knuckle ridge is one
+   capsule along x, deliberately the darkest part of the hand (a horizontal
+   cylinder catches N·L 0.25 against the fingers' 0.80), so the fingers read
+   as emerging from a line rather than as balls on an edge. The thumb crosses
+   the near face the same way and bites the band at 72 px long, aspect 2.35,
+   stopping clear of the lock screw's 799 px. The heel is a capsule along x
+   behind the bar's bottom edge, closing the gap of lit floor that made round
+   five float — its arm's top sat 112 px below the bar. The forearm leaves the
+   heel along a taper (0.020 m at the wrist to 0.029 m) and the cuff covers it
+   at 1.5× the wrist's radius, so the cuff's opening reads as a cuff; the
+   forearm's near cap is buried inside the heel, so no flat cut shows. Skin,
+   cuff and lamp are the glove's recipe at the glove's distance, unchanged — a
+   second derivation is how two hands end up different colours. Take the tool
+   while wearing the glove and both private lamps burn; both are the same dim
+   recipe and the reading gate is shot with the bench clear. The bench copy of
+   the tool never gets a hand — this is built when the tool is taken, and the
+   take is one-way. */
 function buildCaliperGrip() {
   const g = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ color: 0x242b33, roughness: 1.0, metalness: 0.0 });
   const cap = (r, len, at, axis) => {
-    const c = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 14), skin);
+    const c = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 14), SKIN);
     const yv = new THREE.Vector3(axis[0], axis[1], axis[2]).normalize();
     const ref = Math.abs(yv.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
     const xv = new THREE.Vector3().crossVectors(ref, yv).normalize();
@@ -1704,17 +1766,48 @@ function buildCaliperGrip() {
     c.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xv, yv, zv));
     c.position.set(at[0], at[1], at[2]); c.castShadow = false; g.add(c); return c;
   };
-  const knuck = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.032, 0.055), skin);
-  knuck.position.set(0.012, 0.028, -0.048); knuck.castShadow = false; g.add(knuck);
-  cap(0.008, 0.050, [-0.006, 0.028, 0.020], [1, 0, 0]);
-  cap(0.008, 0.042, [0.008, 0.028, 0.020], [1, 0, 0]);
-  cap(0.008, 0.046, [0.022, 0.028, 0.020], [1, 0, 0]);
-  cap(0.012, 0.026, [-0.020, 0.019, -0.0185], [1, 0, 0]);    // the thumb, on the thumbwheel
-  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.048, 0.26, 14), skin);
-  wrist.position.set(0.05, 0.026, -0.15); wrist.rotation.set(1.35, 0, 0.15);
+  /* Every part below is one capsule or one cylinder between two points; len is
+     the axis distance minus both end caps, so a joint is solid skin rather than
+     two discs butting. */
+  const seg = (a, b, r) => {
+    const av = new THREE.Vector3(a[0], a[1], a[2]);
+    const bv = new THREE.Vector3(b[0], b[1], b[2]);
+    const axis = bv.clone().sub(av);
+    const len = Math.max(axis.length() - 2 * r, 0.0005);
+    cap(r, len, av.add(bv).multiplyScalar(0.5).toArray(), axis.toArray());
+  };
+  const lamp = handLamp();
+  /* BELOW AND IN FRONT OF THE FINGERS, at 0.60 — measured, not guessed. This
+     lamp used to sit ABOVE the bar's plane (0, 0.10, 0.40), which lights the
+     faces the camera never sees: the eye is at tool-local y −0.212, below the
+     plane, so it looks at the UNDERSIDES of the tubes, and the frame showed it
+     — the visible tubes averaged L 39.7 with 5% of their pixels in the lit
+     50-90 band, against the accepted glove's L 68. Swept at runtime through
+     `window.INDUSTRIA` (five positions, five intensities), with the mask taken
+     from the projection of the finger capsules themselves, then re-measured on
+     the captured frame with that same mask: at (0, −0.15, 0.30) × 0.60 the
+     tubes read L 74.7 with 84% of their pixels in the band, and the bar's own
+     band sits at 69.5 under the 79.9 background — lit, not blown. The glove
+     keeps the factory's 0.30: its own lamp already measures right. */
+  lamp.position.set(0, -0.15, 0.30);
+  lamp.intensity = 0.60;
+  g.add(lamp);
+  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.070, 0.016, 0.050), SKIN);
+  palm.position.set(0.030, 0.044, -0.022); palm.castShadow = false; g.add(palm);   // back of the hand, wholly inside the bar's sight shadow (its front face reaches z 0.003, behind the 0.0144 the frame shows at y 0.036): it backs the ridge and the heel so the hand stays one body if the pose ever shifts, and it never shows
+  seg([-0.028, 0.066, 0.014], [0.062, 0.066, 0.014], 0.009);   // the knuckle ridge: one capsule along x, its top level with the crowns so the fingers emerge from a line
+  const xs = [-0.020, 0.002, 0.024, 0.046];   // index..pinky, across the scale's right half only; the pinky's tube stops at 1121 px, short of the HUD's 1160 px edge
+  xs.forEach((x) => seg([x, 0.070, 0.020], [x + 0.016, 0.015, 0.009], 0.0058));   // crown above and in front of the bar, tip below it: one capsule, crossing the band in front of the near face
+  seg([-0.030, 0.064, 0.022], [-0.042, 0.010, 0.016], 0.0065);   // the thumb, crossing the same way; it bites the band at 834 px, clear of the lock screw at 799
+  seg([-0.025, 0.014, -0.018], [0.035, 0.014, -0.018], 0.013);   // the heel of the hand: behind the bar, its top just under the far-bottom edge — this is what the arm comes out of
+  const aAxis = new THREE.Vector3(-0.02, -0.80, -0.600).normalize();   // down and back, slight left drift; chosen over the steeper and the shallower axes because its visible flank keeps N·L 0.66→0.53 as it leaves, and it drifts least right
+  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.020, 0.20, 14), SKIN);
+  wrist.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), aAxis);
+  wrist.position.set(0.024, 0.012, -0.024).add(aAxis.clone().multiplyScalar(0.10));   // its near cap sits inside the heel, so the taper starts as skin and no flat cut shows
   wrist.castShadow = false; g.add(wrist);
-  const lamp = new THREE.PointLight(0xfff2dc, 0.30, 1.3, 2.0);
-  lamp.position.set(0.02, -0.02, -0.18); g.add(lamp);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.20, 16), CUFF);
+  cuff.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), aAxis);
+  cuff.position.set(0.024, 0.012, -0.024).add(aAxis.clone().multiplyScalar(0.12));   // wider than the forearm at every t it covers, so the sleeve swallows the arm and only its opening edge reads
+  cuff.castShadow = false; g.add(cuff);
   return g;
 }
 
@@ -1884,8 +1977,8 @@ function buildHeldMesh(dia_mm, depth_mm) {
    reads as a void. */
 function buildGlove(rO, halfH) {
   const g = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ color: 0x242b33, roughness: 1.0, metalness: 0.0 });
-  const cuff = new THREE.MeshStandardMaterial({ color: 0x404852, roughness: 0.95, metalness: 0.05 });
+  const skin = SKIN;
+  const cuff = CUFF;
   const put = (w, h, d, m, x, y, z, into) => {
     const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
     b.position.set(x, y, z); b.castShadow = false; into.add(b); return b;
@@ -1947,7 +2040,7 @@ function buildGlove(rO, halfH) {
      the machine lamp instead of standing in their own shadow. It sits BELOW the
      fingers, not in front of them: at the first position it lit the glove to
      the same value as the casting and the fingers read as part of the part. */
-  const lamp = new THREE.PointLight(0xfff2dc, 0.30, 1.3, 2.0);
+  const lamp = handLamp();
   lamp.position.set(0.02, -0.30, -0.26); g.add(lamp);
   return g;
 }
@@ -1976,7 +2069,9 @@ function dropGlove() {
   camera.remove(GLOVE);
   GLOVE.traverse((o) => {
     if (o.geometry) o.geometry.dispose();
-    if (o.material) o.material.dispose();
+    /* SKIN and CUFF are the calipers' hand's materials too (one derivation of
+       one value); a rebuilt glove must not dispose them out from under it. */
+    if (o.material && o.material !== SKIN && o.material !== CUFF) o.material.dispose();
   });
   GLOVE = null;
 }
@@ -2428,20 +2523,35 @@ add(CALIPERS, `Vernier calipers — ${CALIPER_MM} mm`, 'pick them up', () => {
      shop: at 0.42 m the frame is only ±0.30 m tall, so anything below that is
      under the bottom edge, and pitching the camera cannot rescue it because
      the frame swings down WITH the object. They hang where a right hand
-     actually is: 0.51 m from the eye, a little right and below. AND WHOLE,
-     OR THE FORK IS WHAT GETS CUT: the first of those poses ran the beam
-     across the bottom-right corner, and the near pair of jaws — the ones
-     that close on the work, the reason the object reads as calipers at all
-     — went out through the edge of the frame in both held stills. The pose
-     sits 3.5 cm higher than that, fork inside the corner, both upper jaws
-     up into the frame. */
+     actually is: a little right and below. AND WHOLE, OR THE FORK IS WHAT
+     GETS CUT: the first of those poses ran the beam across the bottom-right
+     corner, and the near pair of jaws — the ones that close on the work, the
+     reason the object reads as calipers at all — went out through the edge
+     of the frame in both held stills.
+
+     AND AT READING DISTANCE, OR NOT AT ALL. Even whole and in the frustum,
+     the 0.51 m pose failed the read twice the same way: the numerals were
+     seven pixels tall, the 1 mm ruling was under the sampling rate, and the
+     still showed "a blocky grey mass with striped-blur scale". Nobody reads
+     a vernier at arm's length; a machinist brings it UP. This pose is the
+     read: 0.24 m from the eye, a little right and below centre, the scale
+     face tipped 28° square-ish to the eye, the beam across a third of the
+     frame, the fork hanging at the left end. */
   camera.add(CALIPERS);
-  CALIPERS.position.set(0.24, -0.175, -0.42);
+  const p = new THREE.Vector3(0.082, -0.041, -0.222);   // ~0.24 m — reading distance
+  CALIPERS.position.copy(p);
   {
-    const jaws = new THREE.Vector3(-0.35, 0.94, 0).normalize();   // out of both jaws
-    const beam = new THREE.Vector3(1, 0, -0.3).normalize();       // the beam of it, the named 150 mm
-    const x = beam.sub(jaws.clone().multiplyScalar(beam.dot(jaws))).normalize();
-    const z = jaws.clone(), y = z.clone().cross(x).normalize();
+    /* THE POSE IS DERIVED FROM THE POSITION, NOT TYPED TWICE: the eye
+       direction d comes off p, the beam runs square across the view, and the
+       face normal is d tipped 28° toward the reader — square-ish to the eye,
+       the way the tool is actually read. One position in, one pose out. */
+    const d = p.clone().negate().normalize();
+    const beam = new THREE.Vector3(0.921, 0.150, 0.360).normalize();
+    const x = beam.sub(d.clone().multiplyScalar(beam.dot(d))).normalize();
+    const down = new THREE.Vector3().crossVectors(x, d).normalize();
+    const face = d.clone().multiplyScalar(Math.cos(0.49)).add(down.clone().multiplyScalar(Math.sin(0.49)));
+    const y = face.clone().negate();
+    const z = new THREE.Vector3().crossVectors(face, x).normalize();
     CALIPERS.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
   }
   CALIPERS.add(buildCaliperGrip());

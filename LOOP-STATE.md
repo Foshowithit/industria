@@ -188,8 +188,10 @@ is about, which is why it is next. Taken in this order:
   diameter the customer will measure, which is right; what was missing was the
   OD, the thickness and the datum face that make it a housing, and the finger
   blocks intersected the metal.
-- **F2 · THE CALIPERS READ AS CRUDE BLOCKS** (S–M, HALF DONE — the pose change
-  is built and the scale and fork now PASS; the hand still fails). *"Oversized
+- **F2 · THE CALIPERS READ AS CRUDE BLOCKS** (S–M, DONE — shipped 09-17; the
+  pose change is built, the scale and fork PASS, and the hand PASSES its review
+  for the first time in four rounds, with one sub-question left unresolved).
+  *"Oversized
   crude blocks with an unreadable scale, no jaws / thumbwheel / lock screw
   identifiable"* — the one tool the game tells you to go and get cannot be
   read as itself. Shipped 09-17: rebuilt at its named 150 mm, the bench under
@@ -241,6 +243,20 @@ is about, which is why it is next. Taken in this order:
   The round-5 build (arched fingers, ray-checked landmarks, shared materials)
   sits ON DISK UNCOMMITTED as the starting point; full verdict in
   `after-33/VERDICT.md`.
+  **CLOSED 09-17 (`after-36`)**: the value axis was the last leg, and its cause
+  was geometric rather than a knob to turn up — the eye sits at tool-local
+  y −0.212, below the bar's plane, so the grip's old above-plane lamp lit the
+  faces the camera never sees. With the lamp moved to the eye's side the tubes
+  measure 38.5 → 73.4 mean and 5% → 84% of pixels inside the lit band (one
+  identical geometry mask, old-lamp frame vs shipped frame) against the
+  accepted glove's L 68, and the sighted reviewer PASSes: elongated tubes not
+  knobs, tips biting the band, a forearm not a pipe, numerals legible, nothing
+  floating, broken, or too dark to read. One sub-question is left UNRESOLVED
+  rather than passed — the reviewer read the left end of the bar as empty where
+  the prompt asked for a thumb reaching past the edge; the built thumb presses
+  the band at the 30 mm mark and overlaps the scale instead of hanging below
+  the silhouette. If a later round re-asks the thumb, that is the question.
+  Full verdict in `after-36/VERDICT.md`.
 - **F3 · HUD-OVER-3D LEGIBILITY COLLISIONS** (S). Shot 03: the pendant's lit
   display sits behind the job header, and the reviewer named the covered sentence
   rather than the panel covering it. Shot 09: the same display behind the gauge
@@ -426,6 +442,33 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-17** — THE HAND PASSES AND THE LAMP FIX SHIPS (`after-36`;
+  `index.html`, `INDUSTRIA-single-file.html`, `acceptance/review-set.py`, this
+  file). What was wrong before: round 5 fixed the SHAPE axis and the frame
+  still came back dark — the visible tubes averaged L 39.7 with 5% of their
+  pixels in the lit 50-90 band, against the accepted glove's L 68. The cause
+  was geometric, not a knob to turn up: the eye sits at tool-local y −0.212,
+  BELOW the bar's plane, so it looks at the undersides of the tubes, and the
+  grip's lamp sat ABOVE that plane at (0, 0.10, 0.40) — it lit the faces the
+  camera never sees. The lamp now sits on the eye's side at (0, −0.15, 0.30)
+  × 0.60 (position first, intensity second), found by a runtime sweep through
+  `window.INDUSTRIA` with the mask taken from the fingers' own projection.
+  Measured on artifacts with ONE identical geometry-derived mask (11081 px
+  fingers+thumb, 9266 px fingers only), old-lamp frame → this build: mean
+  38.5 → 73.4, pixels inside the lit band 6.9% → 83.7% (fingers only 39.7 →
+  74.7, 5.3% → 84.2%), median 41 → 75; nothing blown (4.3% above 110). The
+  sighted reviewer (MODEL, muse-spark-1.3-contributor-free, full frame)
+  PASSes this hand for the first time in four rounds: fingers read as distinct
+  elongated tubes rather than knobs, tips bite the band, the mass below reads
+  as a forearm rather than a pipe, numerals 10-140 legible, nothing floating
+  or broken, nothing too dark to read its form. One item is recorded
+  UNRESOLVED rather than passed: item 4 asked for a thumb reaching past the
+  bar edge and the reviewer read the left end of the bar as empty — the built
+  thumb presses the band at the 30 mm mark, its tip in front of the bar's near
+  face, so it overlaps the scale instead of hanging below the silhouette. My
+  own read at 1:1 and 4x is a digit at the left of the row; the disagreement
+  is over what the digit must do. Full verdict in `after-36/VERDICT.md`.
 
 - **2026-09-17** — THE HAND FAILS A FIFTH ROUND; STOPPED ON THE TWO-FAILURES
   RULE (`after-32` → `after-33`; nothing pushed but this file). What changed
