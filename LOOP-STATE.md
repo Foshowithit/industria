@@ -201,14 +201,32 @@ is about, which is why it is next. Taken in this order:
   three-contrast ruling, the slider's zero edge and the 5 mm gap one fact,
   the tool lying flat on the bench. The sighted reviewer on `after-30/05` read
   the numerals back ("10 20 30 40 50") and saw the fork with its gap — the
-  scale and silhouette legs of this item are CLOSED. The HAND fails a THIRD
-  round: the forearm's near end is ~0.13 m from the eye and subtends half the
-  frame as a featureless cone, and the grip parts hide behind the plate —
-  *"it occludes the tool instead of holding it"*; the subtitle's thumbwheel
-  and lock screw are not visible in the held view. Stopped on the two-failures
-  rule. Next: make the HAND read at reading distance — fingertips visibly
-  over the beam's top edge, thumb visibly on the wheel, the forearm pulled
-  back and slimmer toward the eye.
+  scale and silhouette legs of this item are CLOSED, and re-confirmed on
+  `after-32/05`, where it read the beam's whole scale back and named the two
+  jaws. The HAND fails a FOURTH round, and every round has failed the same
+  way. On `after-32/05` the reviewer saw the three fingertip pads and called
+  them *"three black round knobs on top edge"* — tool parts — and the forearm
+  *"a big matte black cylinder [that] blocks part of the view"*: *"No
+  fingers, no thumb, no palm, no arm … No skin shading, no lighting that
+  suggests fingers wrapping a tool. They read as abstract geometry /
+  placeholder capsules and a dark machine column, not flesh."* The geometry
+  is right, and measured so on that frame — each pad straddles the beam's top
+  edge line (L 1-2 against 79-111 above and 77-90 below), the thumb comes
+  round the lower edge onto the wheel (L 4-51 against 78-90), the forearm
+  runs down the frame from under the palm to the bottom edge with a Δ 65
+  left silhouette against the lit bench — and the reviewer named every one
+  of those shapes as a machine part. Skin is `0x242b33`, which renders L 1-7
+  with no internal gradient at all (the pads measure a flat 1-2) — the same
+  value as the tool's own dark parts. The hand is the same material as the
+  thing it holds, so no amount of anatomy reads. Three builds died on this
+  one axis: a lamp-lit grey mass, a white frustum with a black rim, a matte
+  black cylinder. Stopped on the two-failures rule (two reviewer verdicts on
+  the hand in a row, four builds deep). Next: the value axis, untried in four
+  rounds — a mid warm albedo under the shop's own lights so the cylinders
+  carry a light-to-dark gradient (a private lamp was tried and blew the hand
+  out), and the pass condition is the reviewer reading FINGERS where it now
+  reads knobs. The round-4 build (pads on the edge line, thumb on the wheel,
+  the vertical arm) sits ON DISK UNCOMMITTED as the starting point.
 - **F3 · HUD-OVER-3D LEGIBILITY COLLISIONS** (S). Shot 03: the pendant's lit
   display sits behind the job header, and the reviewer named the covered sentence
   rather than the panel covering it. Shot 09: the same display behind the gauge
@@ -395,6 +413,45 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-17** — THE HAND FAILS A FOURTH ROUND; STOPPED, NOT SHIPPED
+  (`after-31` → `after-32`, loop run; nothing pushed but this file). F2's
+  third leg, the in-hand presentation. What was wrong before: the held grip's
+  forearm ran mostly sideways (screen-right 0.83, down 0.50, away 0.26), so it
+  foreshortened to nothing — its near end a 75 px dark blob above the beam's
+  left-centre, its far end behind the lower-right HUD panel, both dark-on-dark.
+  Built: the arm's axis re-derived from the reading pose's own screen basis
+  (right 0.24, down 0.95, away 0.20 — never toward the eye), slim at the eye's
+  end (r 0.030) and thickening toward the elbow (r 0.042), started under the
+  palm at tool-local (0.045, 0.045, −0.030), 0.36 m long, so it crosses the lit
+  bench and leaves by the frame's bottom edge at x≈1112, left of the HUD
+  panel; the function's comment rewritten to match it, and the apparatus note
+  for shot 05 corrected — it still claimed a lamp travelled with the grip,
+  which has not been true since the lamp came out. Verified by looking at
+  `after-32/05` at native 1:1: the three pads straddle the beam's top edge
+  (L 1-2 against 79-111 above and 77-90 below), the thumb is on the wheel
+  (L 4-51 against 78-90), and the arm reads as a column with a Δ 65 left
+  silhouette against the bench. The sighted muse reviewer on the full frame
+  read the whole scale back off the beam and named the two jaws — the scale
+  and fork legs re-confirmed — and killed the hand: *"No fingers, no thumb,
+  no palm, no arm"*, the pads *"three black round knobs on top edge"*, the
+  forearm *"a big matte black cylinder [that] blocks part of the view"*,
+  *"no skin shading … they read as abstract geometry / placeholder capsules
+  and a dark machine column, not flesh"*. Diagnosis: four builds have failed
+  on one axis — the material and the light. The skin is `0x242b33`, renders
+  L 1-7 flat (the pads measure a uniform 1-2, no gradient), and is the same
+  value as the tool's own dark parts, so every correct shape gets read as
+  tool. Deviations, recorded: the arm's axis and the pads' and thumb's axes
+  are hand-authored constants in tool-local space — they rotate with the tool
+  and so stay consistent with it, but they were chosen against the current
+  reading pose and do not re-derive if the pose moves. Gates: 76 / 137 / 69 /
+  70+1 (the one SCRAP failure is the model), bundle fb2070df2633 · 9 modules,
+  1394 KB. Capture clean: 10 stills + review-set.json, build ec345a82f5b4,
+  clocks 05:55→06:02, gauge Ø39.9414 ±0.46 µm. The failed build does NOT ride
+  to `main`: live still carries the round-3 grip, which the reviewer also
+  killed — stopping does not make the site worse, it leaves it as it was.
+  Next: the value axis — a mid warm albedo under the shop's own lights, no
+  private lamp — and the pass condition is the reviewer reading fingers where
+  it now reads knobs.
 - **2026-09-17** — THE POSE CHANGE BUILT; THE SCALE AND FORK PASS; THE HAND
   FAILS A THIRD ROUND (`after-29` → `after-30`, loop run; NOT SHIPPED —
   stopped on the two-failures rule, nothing pushed but this file). F2's
