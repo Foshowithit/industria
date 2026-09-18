@@ -527,6 +527,26 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-18** — AS-CAST REF DROPS SHEET-FOREIGN PARENS (`after-50`;
+  `game.mjs`, `INDUSTRIA-single-file.html`, this file). What was wrong before:
+  D3 carried reference-dimension parentheses as sheet convention, but the
+  printed sheet carries the as-cast size as a dashed circle and never prints
+  the dim — the only place the text rendered was the drawing say-line, in
+  prose, where a cold reader took "(Ø36)" for a stray paren. Now "Ø36 AS
+  CAST", one data line plus the why-comment; no suite pins D3 text, no other
+  change. Second candidate J1-01 RETIRED on pixel evidence: the part id
+  renders crisp with a short hyphen in the frame-10 crop — a single misread,
+  not the two-independent-repeat signal, so the `J1-01` format is untouched.
+  Gates: 76 / 137 / 69 / 70+1 with the disposition exit-1 proven identical
+  pre/post edit via stash (71 PASS both ways — the documented SCRAP honest
+  gap), bundle `10ce99aa43d7` · 9 modules, after-50 recapture, self-read
+  frame 02 full-frame plus a crop, sighted reviewer (MODEL, full frames +
+  pixel diff vs after-49) VERDICT: SHIP — changed pixels confined to the
+  say-line band, no new defects (`after-50/VERDICT.md`). Commit `6072353`;
+  live `index.html` sha256 `5cad83af…` (unchanged by design), bundle
+  `98bd6a98…`, both match. Remaining: the still-open list and remaining
+  legibility candidates. F6 stays GATED.
+
 - **2026-09-18** — GENERIC CHIP BINS GROUNDED (`after-49`; `index.html`,
   `INDUSTRIA-single-file.html`, this file). What was wrong before: the generic
   `bin()` placed its 0.62-tall body at y 0.5, but `box()` CENTRES geometry, so
