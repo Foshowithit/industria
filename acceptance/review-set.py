@@ -34,7 +34,7 @@ and fails loudly if none arrive: THE BROWSER IS OFTEN OCCLUDED AND rAF STOPS, an
 a screenshot taken off a stopped renderer is a still of the last frame, which
 looks exactly like a working build. Anything frame-dependent goes through it.
 """
-import argparse, hashlib, json, math, os, shutil, subprocess, sys, time, urllib.request
+import argparse, hashlib, json, math, os, re, shutil, subprocess, sys, time, urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -76,22 +76,74 @@ LAUNCH_ARGS = [
 SIZES = [(1440, 900), (1280, 720)]
 
 
-# ── serving ──────────────────────────────────────────────────────────────────
-def _sha_local():
-    return hashlib.sha256((REPO / "index.html").read_bytes()).hexdigest()
+# ── the build, and the bytes it is ───────────────────────────────────────────
+_BUILD_FILES = None
+
+
+def _build_files():
+    """Every local file the page loads, transitively, in import order.
+
+    index.html is NOT the build. Measured 2026-09-18: after `materials.mjs` was
+    fixed, this run's manifest still carried the previous run's sha, because the
+    sha covered index.html alone — so the manifest could not say which build a
+    frame came from, and a port serving a stale copy of the MODULES under a
+    current index.html passed the check that exists to refuse exactly that.
+    The list is read out of the page's own import statements, so there is one
+    derivation of which files this build is, and it is the same source the
+    browser reads. The list is frozen at first use: local and served sides must
+    hash the SAME list, or a file that appeared mid-run would compare unequal
+    for the wrong reason."""
+    global _BUILD_FILES
+    if _BUILD_FILES is not None:
+        return _BUILD_FILES
+    seen, order = set(), []
+
+    def walk(rel):
+        if rel in seen:
+            return
+        seen.add(rel)
+        order.append(rel)
+        src = (REPO / rel).read_text()
+        for m in re.finditer(r"""^\s*import\b[^\n]*?from\s+['"]([^'"]+)['"]""", src, re.M):
+            spec = m.group(1)
+            if not spec.startswith("."):
+                raise SystemExit("%s imports %r — not a relative path, so a file"
+                                 " digest cannot cover this build" % (rel, spec))
+            walk(os.path.normpath(os.path.join(os.path.dirname(rel), spec)).replace(os.sep, "/"))
+
+    walk("index.html")
+    _BUILD_FILES = order
+    return _BUILD_FILES
+
+
+def _digest(pairs):
+    """One hash of (path, bytes) pairs — the local build and what a port serves
+    go through this same function, so the two sides of the comparison are one
+    derivation rather than two."""
+    h = hashlib.sha256()
+    for rel, blob in pairs:
+        h.update(rel.encode()); h.update(b"\0"); h.update(blob); h.update(b"\0")
+    return h.hexdigest()
+
+
+def build_sha():
+    return _digest([(rel, (REPO / rel).read_bytes()) for rel in _build_files()])
 
 
 def _served_sha(base):
-    """The sha of what a port is actually serving, or None if nothing is there.
+    """The build sha of what a port is actually serving, or None if any of it
+    is not there.
 
     A port that ANSWERS is not a port that answers with this build. A stale
     `http.server` from another job was listening on 8799 while this file was
     written, serving a different directory entirely, and a readiness check that
     only asked `is something there?` would have photographed the wrong site and
-    reported it as this one. The bytes are the check."""
+    reported it as this one. The bytes are the check — and the bytes are the
+    modules as well as the page: a stale copy of the modules under a fresh
+    index.html is the same wrong site wearing the right cover."""
     try:
-        blob = urllib.request.urlopen(base + "/index.html", timeout=1.5).read()
-        return hashlib.sha256(blob).hexdigest()
+        return _digest([(rel, urllib.request.urlopen(base + "/" + rel, timeout=1.5).read())
+                        for rel in _build_files()])
     except Exception:
         return None
 
@@ -101,7 +153,7 @@ def serve_up(proc_box):
     loaded from disk takes a different path through the module graph than the
     one the player loads, which is a difference worth not having."""
     global BASE, PORT
-    want = _sha_local()
+    want = build_sha()
     for port in [PORT] + [p for p in range(8801, 8812)]:
         BASE = "http://127.0.0.1:%d" % port
         have = _served_sha(BASE)
@@ -123,10 +175,6 @@ def serve_up(proc_box):
         raise SystemExit("started a server on %d and it is not serving this build"
                          " — see /tmp/review-set-server.log" % port)
     raise SystemExit("no free port in 8799, 8801-8811 that serves this build")
-
-
-def build_sha():
-    return _sha_local()
 
 
 # ── the page ─────────────────────────────────────────────────────────────────
@@ -511,8 +559,10 @@ SHOTS = [
               " 0.9 m sheet is a thumbnail in a black door and its own dimensions"
               " are 4 px of type, which is what two cold-viewer rounds reported"),
     dict(n="03", title="the casting crate", drive=["I.act('Casting crate')"],
-         eye=(3.4, 1.60, -3.4), target=(3.4, 0.90, -5.3),
-         note="the stock on the floor, at the count the HUD is reporting"),
+         eye=(2.6, 1.42, -4.1), target=(3.45, 0.62, -5.35),
+         note="the stock on the floor, at the count the HUD is reporting —"
+              " from the east side, so the pendant's lit screen is out of the"
+              " frame instead of sitting behind the job header"),
     dict(n="04", title="the bar in the machine, nothing decided", drive=[
             "I.tool('bar20')", "I.fetchBlank()", "I.act('Holding fixture')"],
          eye=(1.05, 1.62, -4.9), target=(0.0, 1.30, -6.65),
@@ -547,12 +597,16 @@ SHOTS = [
     dict(n="07", title="the roughing pass", drive=["I.rough()"],
          eye=(1.2, 1.62, -3.6), target=(0.0, 1.45, -6.9),
          note="after the pass: the log's own line for it, and the machine still running"),
-    dict(n="08", title="the readout after the pass", drive=["I.act('Machine control — pendant')"],
+    dict(n="08", title="the readout after the pass", drive=["I.act('Machine control — pendant')",
+            "I.predict(200)"],
          eye=(-1.6, 1.62, -4.4), target=(0.2, 1.35, -6.6),
-         note="from the other side, so the error budget is the near column"),
+         note="from the other side, with the prediction now STATED — the EXPECT"
+              " row carries a number, so this frame owns a fact shot 07 lacks"),
     dict(n="09", title="the gauge", drive=["I.measure()"],
-         eye=(1.4, 1.62, -4.6), target=(0.1, 1.32, -6.6),
-         note="the reading, with the clock that says when it was taken"),
+         eye=(0.8, 1.62, -4.5), target=(-0.2, 1.30, -6.6),
+         note="the reading, with the clock that says when it was taken —"
+              " from further west, so the pendant's lit keys sit right of the"
+              " frame instead of behind the gauge box"),
     dict(n="10", title="the part in hand", drive=[
             "I.ship()", "I.act('Finished-part rack')", "__CLICK_PICKUP__"],
          eye=(2.6, 1.62, -1.0), target=(0.4, 1.35, -6.9),
@@ -579,7 +633,8 @@ def capture(pg, out):
     out.mkdir(parents=True, exist_ok=True)
     pg.set_viewport_size({"width": SIZES[0][0], "height": SIZES[0][1]})
     wait_frames(pg, 3, why="before the set")
-    manifest = {"build_sha256": build_sha(), "viewport": list(SIZES[0]),
+    manifest = {"build_sha256": build_sha(), "build_files": _build_files(),
+                "viewport": list(SIZES[0]),
                 "url": BASE + "/index.html", "shots": []}
     for s in SHOTS:
         # stand still first, then do the shot's own thing (see SETTLE_MS)

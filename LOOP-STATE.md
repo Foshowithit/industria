@@ -257,18 +257,34 @@ is about, which is why it is next. Taken in this order:
   the band at the 30 mm mark and overlaps the scale instead of hanging below
   the silhouette. If a later round re-asks the thumb, that is the question.
   Full verdict in `after-36/VERDICT.md`.
-- **F3 · HUD-OVER-3D LEGIBILITY COLLISIONS** (S). Shot 03: the pendant's lit
-  display sits behind the job header, and the reviewer named the covered sentence
-  rather than the panel covering it. Shot 09: the same display behind the gauge
-  box, read as a cropped header — FALSE as diagnosed, nothing is clipped, two
-  surfaces overlap, but the frame is unreadable either way. Shot 02: the
-  drawing's small labels alias into "PSLEACNTION" — the source text is correct
-  (`materials.mjs:1273`, `1314`), so this is texture resolution, not a wrong
-  fact.
-- **F4 · SHOT 08 ADDS NOTHING TO SHOT 07** (S). *"Effectively a duplicate … the
-  same fact printed twice across two frames with zero change."* An apparatus
-  problem in the capture set rather than a page defect: a set must not spend a
-  frame on no new fact, which is the same rule the log lines are now held to.
+- ~~**F3 · HUD-OVER-3D LEGIBILITY COLLISIONS**~~ ✅ 2026-09-18 (`after-39`;
+  `materials.mjs`, `INDUSTRIA-single-file.html`, `acceptance/review-set.py`).
+  What was wrong before: one leg was a real page defect and two were capture
+  framings. Shot 02's two view titles interleaved into "PSLEACNTION" — the old
+  height-derived scale put a 355 px view in a 339 px column, so the title block's
+  full-height reserve overlapped the views, hatch ran through the plan circles,
+  and the notes ran past the frame. Shots 03 and 09 aimed the camera so the
+  pendant's lit display sat behind fixed HUD chrome (the job header in 03, the
+  gauge box in 09) — the reviewer named the covered sentence in 03 and read 09
+  as a cropped header (FALSE as diagnosed: nothing clipped, two surfaces
+  overlapped, but the frame unreadable either way). Built: the sheet rebuilt
+  full-width with unequal columns and a width-derived scale (views 355→504
+  units, +42%; CROSS_OUT 1.15 overhang, plan arm 1.08R, section cross
+  tbTop-clamped, depth dimension at a fixed offset, notes raised); 03 and 09
+  re-aimed in the apparatus only, no page change. Sighted reviewer (MODEL, full
+  frames) PASSes all three legs on `after-39` (02: "VIEW A - PLAN" /
+  "SECTION B - B" separated; 03: header legible, crate visible; 09: gauge box
+  clear, EXPECT numbered) plus the five regression frames. Verdicts in
+  `after-39/VERDICT-legs.md` and `VERDICT-regression.md`.
+- ~~**F4 · SHOT 08 ADDS NOTHING TO SHOT 07**~~ ✅ 2026-09-18 (apparatus:
+  `acceptance/review-set.py`). What was wrong before: the capture set spent a
+  frame on no new fact — shot 08 carried the same clock, log lines, gauge state
+  and talk line as 07 with zero change, the same rule the log lines are now held
+  to. Built: shot 08 now states the prediction (`I.predict(200)` in its drive
+  list), so its EXPECT row carries "200 µm" plus the "You expect the dial to
+  remove 200 µm. Take the cut." banner where 07 reads "not stated". The sighted
+  reviewer PASSes the differentiator on `after-39`. Verdict in
+  `after-39/VERDICT-legs.md`.
 - **F5 · "they trust it" AFTER A 1.1 µm MISS** (S, copy). Read in place it means
   the customer trusted a reading that was 1.1 µm out — the sting, not a
   contradiction — but a cold reader stops on it. Copy, so it waits for a wave
@@ -442,6 +458,25 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-18** — F3 + F4 SHIP (`after-39`; `materials.mjs`,
+  `INDUSTRIA-single-file.html`, `acceptance/review-set.py`, this file). What was
+  wrong before: the wall drawing squeezed a 355 px sheet into a 339 px column so
+  its two view titles interleaved into "PSLEACNTION", two capture cameras aimed
+  the pendant's lit display behind fixed HUD chrome (job header in 03, gauge box
+  in 09), and the readout shot carried no fact the roughing shot lacked. The
+  sheet is rebuilt full-width at a width-derived scale (+42% view area), the two
+  cameras re-aimed in the apparatus, and shot 08 now states the prediction
+  ("200 µm"). Gates: 76 / 137 / 69 / 70+1 (the one SCRAP failure is the model),
+  bundle ca9d04877238 · 9 modules. The sighted reviewer (MODEL, full frames)
+  PASSes all four legs plus the five regression frames; verdicts in
+  `after-39/VERDICT-legs.md` and `VERDICT-regression.md`. Note for next time:
+  all five direct sighted gateway lanes were down at once (cc/cc2 403, merge and
+  orca out of credits, openrouter guardrail-blocked, opencode balance
+  insufficient) — the in-app vision-eyes lane carried the gate. Next: F5 is
+  copy, F6 is GATED, so the next wave needs the cold-viewer pass re-run
+  (LOOP-STATE asks for one after any wave that changes what is on screen) or a
+  fresh item from the viewers' still-open list.
 
 - **2026-09-17** — THE HAND PASSES AND THE LAMP FIX SHIPS (`after-36`;
   `index.html`, `INDUSTRIA-single-file.html`, `acceptance/review-set.py`, this

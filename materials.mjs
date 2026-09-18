@@ -1213,23 +1213,44 @@ export function drawingSheet(d, { width = 1400 } = {}) {
     label(NUMBERS[i], W - M - Z / 2, cy, W * 0.011, FAINT, 'center');
   }
 
-  /* ── geometry, in sheet millimetres, scaled to fit the drawing area ────── */
+  /* ── geometry, in sheet millimetres, scaled to fit the drawing area ──────
+     TWO VIEWS IN TWO COLUMNS, ONE SCALE, DERIVED FROM THE WIDTH. The sheet is
+     wider than it is tall and the views stand side by side, so the width is
+     what bounds how big they can be. The scale used to come off the HEIGHT —
+     `(area.h * 0.62) / (od_dia_mm * 1.6)` — while the views were centred at
+     0.30 and 0.60 of a column that stopped 46% short of the right edge to keep
+     clear of the title block. That put a 355 px view in a 339 px column: the
+     section's hatch band was painted across the plan's circles, the two
+     centre-line crosses ran through each other, and the two view titles — both
+     letter-spaced at 24.5 px and both at the same y — interleaved into one
+     word, "PSLEACNTION", which read off the sheet as a broken label and was
+     blamed on the texture. The title block only occupies the BOTTOM of its
+     column, so what the views have to clear is the paper below y ≈ 0.70 H, not
+     the whole right-hand strip. */
   const g = d.geometry;
   const TBW = W * 0.46, TBH = H * 0.26;                 // title block
-  const area = { x: M + Z, y: M + Z, w: W - (M + Z) * 2 - TBW, h: H - (M + Z) * 2 };
-  const planCx = area.x + area.w * 0.30, planCy = area.y + area.h * 0.52;
-  const sectX = area.x + area.w * 0.60, sectY = planCy;
-  const scale = (area.h * 0.62) / (g.od_dia_mm * 1.6);  // one scale for both views
+  const tbTop = H - M - Z - TBH;                        // its top edge
+  const area = { x: M + Z, y: M + Z, w: W - (M + Z) * 2, h: H - (M + Z) * 2 };
+  const gutter = W * 0.014;                             // between the two views
+  const dimRoom = W * 0.078;                            // the depth dim, right of the section
+  const CROSS_OUT = 1.15;                               // centre-line overhang past the OD, both views
+  const colW = (area.w - gutter - dimRoom) / 2;
+  const scale = ((colW / 2) - W * 0.006) / ((g.od_dia_mm / 2) * CROSS_OUT);
+  const planCx = area.x + colW * 0.5, planCy = area.y + area.h * 0.52;
+  const sectX = area.x + colW + gutter + colW * 0.5, sectY = planCy;
   const R = (mm) => mm * scale;
 
   /* ── VIEW 1: the plan — the bore seen down its axis ────────────────────── */
   const cl = W * 0.0011;
-  const cross = (x, y, r) => {                          // a centre line cross
+  const cross = (x, y, r, rv = r) => {                  // a centre line cross
     lineDash(cl, [W * 0.012, W * 0.004, W * 0.002, W * 0.004], FAINT);
     ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x + r, y); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x, y + r); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, y - rv); ctx.lineTo(x, y + rv); ctx.stroke();
   };
-  cross(planCx, planCy, R(g.od_dia_mm / 2) * 1.16);
+  /* the vertical arm stops at 1.08 R — the same offset the OD dimension's
+     extension lines start from — so the centre line does not run through the
+     dimension text sitting just above the dimension line */
+  cross(planCx, planCy, R(g.od_dia_mm / 2) * CROSS_OUT, R(g.od_dia_mm / 2) * 1.08);
   line(W * 0.0032); ctx.beginPath();
   ctx.arc(planCx, planCy, R(g.od_dia_mm / 2), 0, Math.PI * 2); ctx.stroke();
   lineDash(W * 0.0016, [W * 0.008, W * 0.005], FAINT); ctx.beginPath();
@@ -1254,7 +1275,7 @@ export function drawingSheet(d, { width = 1400 } = {}) {
   }
   /* the outside diameter, dimensioned across the view */
   {
-    const y = planCy + R(g.od_dia_mm / 2) * 1.30;
+    const y = planCy + R(g.od_dia_mm / 2) * 1.22;  // the notes block needs the room below
     line(W * 0.0016);
     ctx.beginPath(); ctx.moveTo(planCx - R(g.od_dia_mm / 2), planCy + R(g.od_dia_mm / 2) * 1.08);
     ctx.lineTo(planCx - R(g.od_dia_mm / 2), y + W * 0.006);
@@ -1296,9 +1317,16 @@ export function drawingSheet(d, { width = 1400 } = {}) {
     lineDash(W * 0.0016, [W * 0.008, W * 0.005], FAINT);
     ctx.beginPath(); ctx.moveTo(sectX, y0); ctx.lineTo(sectX, y0 - R(6));
     ctx.moveTo(sectX, y0 + hgt); ctx.lineTo(sectX, y0 + hgt + R(6)); ctx.stroke();
-    cross(sectX, y0 + hgt / 2, halfW * 1.12);
-    /* the depth, dimensioned on the right */
-    const dx = sectX + halfW * 1.45;
+    /* the centre line runs out past the OD on both arms, but the paper below
+       the section belongs to the title block: a dash-dot line printed through
+       the CLIENT cell is the same class of mistake as the views overlapping */
+    cross(sectX, y0 + hgt / 2, halfW * CROSS_OUT,
+      Math.min(halfW * CROSS_OUT, tbTop - (y0 + hgt / 2) - W * 0.012));
+    /* the depth, dimensioned on the right — a FIXED sheet distance off the
+       cross's arm, not a fraction of the rectangle's half-width, so the
+       dimension line and its label stay on the paper and clear of the centre
+       line when the views get bigger */
+    const dx = sectX + halfW * CROSS_OUT + W * 0.012;
     line(W * 0.0016);
     ctx.beginPath();
     ctx.moveTo(sectX + halfW, y0); ctx.lineTo(dx + W * 0.006, y0);
@@ -1328,12 +1356,12 @@ export function drawingSheet(d, { width = 1400 } = {}) {
 
   /* ── the notes block ──────────────────────────────────────────────────── */
   {
-    let y = area.y + area.h * 0.925;
+    let y = area.y + area.h * 0.885;                  // the last note lands inside the frame
     label('NOTES:', M + Z + W * 0.012, y, W * 0.0125, INK, 'left', 700);
     y += W * 0.019;
     for (const n of d.notes) {
       label(n, M + Z + W * 0.012, y, W * 0.0115, FAINT);
-      y += W * 0.0165;
+      y += W * 0.0155;
     }
   }
 
