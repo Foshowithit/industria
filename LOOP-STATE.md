@@ -203,7 +203,7 @@ is about, which is why it is next. Taken in this order:
   the numerals back ("10 20 30 40 50") and saw the fork with its gap — the
   scale and silhouette legs of this item are CLOSED, and re-confirmed on
   `after-32/05`, where it read the beam's whole scale back and named the two
-  jaws. The HAND fails a FOURTH round, and every round has failed the same
+  jaws. The HAND fails a FIFTH round, and every round has failed the same
   way. On `after-32/05` the reviewer saw the three fingertip pads and called
   them *"three black round knobs on top edge"* — tool parts — and the forearm
   *"a big matte black cylinder [that] blocks part of the view"*: *"No
@@ -220,13 +220,27 @@ is about, which is why it is next. Taken in this order:
   value as the tool's own dark parts. The hand is the same material as the
   thing it holds, so no amount of anatomy reads. Three builds died on this
   one axis: a lamp-lit grey mass, a white frustum with a black rim, a matte
-  black cylinder. Stopped on the two-failures rule (two reviewer verdicts on
-  the hand in a row, four builds deep). Next: the value axis, untried in four
-  rounds — a mid warm albedo under the shop's own lights so the cylinders
-  carry a light-to-dark gradient (a private lamp was tried and blew the hand
-  out), and the pass condition is the reviewer reading FINGERS where it now
-  reads knobs. The round-4 build (pads on the edge line, thumb on the wheel,
-  the vertical arm) sits ON DISK UNCOMMITTED as the starting point.
+  black cylinder. Round 5 tried exactly that axis and it was NOT enough: the
+  glove's recipe transplanted whole (one SKIN/CUFF/handLamp now serves both
+  hands, dropGlove guarded so it cannot dispose the shared materials) and the
+  frame measures like the accepted glove — crowns L 58-59, descender bodies
+  L 16-26, tip bite L 4 on the L 90 band, wrist rim L 47 over body L 5 — yet
+  `after-33/05` still FAILed with the same read: *"short round black
+  knobs/balls, not distinct elongated tubes"*, the wrist *"a floating black
+  pipe"*, no thumb. The measured cause is SHAPE, not value: the visible
+  descender is 45 px long × 46 px wide — aspect 1.0, which reads as a ball
+  whatever its shading does; the glove's accepted fingers run aspect ≥ 3,
+  and the steep arch that catches the above-plane lamp is what hides most of
+  each tube behind the beam's silhouette. Stopped on the two-failures rule
+  (two reviewer verdicts in a row, five builds deep). Next: the visible tube
+  must run ≥ 2.5× its width — a shallower, more oblique arch with the crown
+  further back in z so the tube runs diagonally across the frame, or thinner
+  tubes (r ~0.006, crown y ~0.075, tips to mid-band just short of the
+  numerals); the thumb needs ≥ 15 mm of visible tube, not a bare cap; the
+  wrist needs an internal read — a rim alone reads as a pipe at 120 px wide.
+  The round-5 build (arched fingers, ray-checked landmarks, shared materials)
+  sits ON DISK UNCOMMITTED as the starting point; full verdict in
+  `after-33/VERDICT.md`.
 - **F3 · HUD-OVER-3D LEGIBILITY COLLISIONS** (S). Shot 03: the pendant's lit
   display sits behind the job header, and the reviewer named the covered sentence
   rather than the panel covering it. Shot 09: the same display behind the gauge
@@ -412,6 +426,30 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-17** — THE HAND FAILS A FIFTH ROUND; STOPPED ON THE TWO-FAILURES
+  RULE (`after-32` → `after-33`; nothing pushed but this file). What changed
+  from round 4: the value axis WORKED — one SKIN/CUFF/handLamp now serves
+  both hands (the class-3 fold-in; dropGlove guarded so a rebuilt glove can't
+  dispose the shared materials), and the frame measures like the accepted
+  glove: crowns L 58-59, descender bodies L 16-26, tip bite L 4 on the L 90
+  band, wrist rim L 47 over body L 5, wheel sliver L 29. The geometry was
+  ray-checked before any render: tips bite ~10 px into the bright band
+  without covering the numerals, pinky bottom clears the HUD at 1150.8,
+  the thumb leaves a 13 px steel sliver on the wheel, the wrist runs
+  near-vertical through the lit floor, the palm wholly hidden. The reviewer
+  still FAILed in round 4's language: *"short round black knobs/balls, not
+  distinct elongated tubes"*, the wrist *"a floating black pipe"*, the thumb
+  invisible. Measured cause: the visible descender is 45 px long × 46 px
+  wide — aspect 1.0 reads as a ball whatever its shading does (the glove's
+  accepted fingers run aspect ≥ 3); the steep arch that catches the
+  above-plane lamp hides most of each tube behind the beam's silhouette.
+  Next: shape, not value — the visible tube needs ≥ 2.5× its width (a
+  shallower, more oblique arch with the crown further back in z, or thinner
+  tubes r ~0.006 with crown y ~0.075 and tips to mid-band short of the
+  numerals); ≥ 15 mm of visible thumb tube; a wrist with an internal read —
+  a rim alone reads as a pipe at 120 px wide. The round-5 build sits ON DISK
+  UNCOMMITTED as the starting point; full verdict in `after-33/VERDICT.md`.
 
 - **2026-09-17** — THE HAND FAILS A FOURTH ROUND; STOPPED, NOT SHIPPED
   (`after-31` → `after-32`, loop run; nothing pushed but this file). F2's
