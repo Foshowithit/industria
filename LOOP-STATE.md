@@ -357,6 +357,25 @@ is about, which is why it is next. Taken in this order:
   (`after-47/VERDICT.md`, legs A/D/E carried from the first round); cold viewer
   counts 3, agreeing with HUD and caption. F6's number stays GATED: this fix
   touches countability and copy, never "should be 2".
+- **F10 · EVERY BORE NUMBER WEARS ITS AXIS** ✅ 2026-09-19 (`index.html`,
+  `shop.mjs`, `INDUSTRIA-single-file.html`; `after-52` NO-SHIP → `after-53`
+  NO-SHIP → `after-54` SHIP). What was wrong before: the head of the viewers'
+  still-open list — dial, bite, stock, stock-to-band, EXPECT, gauge, sneak-up,
+  and disposition surfaces mixed radius mm/µm and diameter Ø/mm/µm with nominal
+  vs top-of-band references swapping mid-screen and no warning; two independent
+  cold viewers stopped on it. Shipped copy-only, 52 lines out and 52 back, no
+  derivation touched: every dial/bite/stock/EXPECT surface now names radius,
+  every gauge/CMM/claim/disposition surface now names diameter, and the
+  touch-off log states the bridge once ("The band is a diameter; the dial moves
+  radius, half of it."). Axis mapping verified at the roots first (`world.mjs`
+  stock_to_band_um radial by comment, `kernel.mjs` errorBudget radial,
+  `game.mjs` h_cmd/h_act radial vs removed_um diametral, `shop.mjs`
+  claimed/true diametral). After-52 FAILED on the frame-10 disposition trio
+  left bare (own verdict required them labelled); after-53 FAILED on the vault
+  ledger what/said lines left bare (plus an awkward doubling the verdict
+  named); after-54 SHIP 10/10, tree build-sha `d34fd571…` identical to the
+  manifest. Residual P2: "Band is 16 µm" (drawing note, tolerance width tied to
+  the Ø40 H6 callout) could read "16 µm on the diameter" in a later pass.
 - **F6 · THE CRATE ECONOMY — *GATED*** (decision). `BLANK_STOCK` is 3 and the
   crate draws `cl(stock_on_hand, 0, 3)` castings, and ROADMAP:122 says a shift
   can produce up to three parts. But the first casting is mounted at shift start
@@ -526,6 +545,28 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-19** — RADIUS-vs-DIAMETER SHIPS: EVERY BORE NUMBER WEARS ITS AXIS
+  (`after-54`; `index.html`, `shop.mjs`, `INDUSTRIA-single-file.html`, this
+  file). What was wrong before: the dial, the bite, the stock, the EXPECT row,
+  the gauge, and the disposition letter mixed radius mm/µm and diameter Ø/mm/µm
+  with nominal and top-of-band references swapping mid-screen and no warning —
+  two independent cold viewers stopped on it, the repeat signal that makes a
+  wording complaint actionable. Shipped copy-only, 52 lines out and 52 back, no
+  derivation touched: every dial/bite/stock/EXPECT surface now says radius, every
+  gauge/CMM/claim/disposition surface now says diameter, and the touch-off log
+  states the bridge once ("The band is a diameter; the dial moves radius, half
+  of it."). Axis mapping verified at the roots first (`world.mjs`
+  stock_to_band_um is radial by comment, `kernel.mjs` errorBudget radial,
+  `game.mjs` h_cmd/h_act radial vs removed_um diametral, `shop.mjs` claimed/true
+  diametral). Gates: 76 / 137 / 69 / 70+1 (the SCRAP failure is the model),
+  bundle `186a6888b081` · 9 modules, tree build-sha `d34fd571…` identical to the
+  `after-54` manifest. Sighted reviewer (MODEL, full frames) SHIP 10/10
+  (`after-54/VERDICT.md`); all ten frames self-read this run. Residual P2: "Band
+  is 16 µm" (drawing note, tolerance width tied to the Ø40 H6 callout) could read
+  "16 µm on the diameter" in a later pass. Next: the still-open list minus its
+  head (PRED/EXPECT/DIAL, due-vs-van, Earl never visible, calipers-vs-gauge,
+  200 µm ladder). F6 stays GATED.
 
 - **2026-09-18** — AS-CAST REF DROPS SHEET-FOREIGN PARENS (`after-50`;
   `game.mjs`, `INDUSTRIA-single-file.html`, this file). What was wrong before:
