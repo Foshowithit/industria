@@ -1036,7 +1036,7 @@ function paintPendant() {
     ctx.fillStyle = hi ? '#e8a33d' : '#a8e6bd'; ctx.textAlign = 'right'; ctx.fillText(v, 494, y);
   };
   row(46, 'DIAL', `${biteCmd_um} um radius`);
-  row(96, 'EXPECT', predicted_um === null ? '-- not said --' : `${predicted_um} um radius`, predicted_um === null);
+  row(96, 'EXPECT', predicted_um === null ? '-- PRED keys say it --' : `${predicted_um} um radius`, predicted_um === null);
   row(146, 'PASSES', String(g.passes));
   row(192, 'SPINDLE', g.machine.spindle_on ? 'RUNNING' : 'STOPPED',
       g.machine.spindle_on);
@@ -2804,7 +2804,7 @@ function pressKey(id) {
   }
 }
 add(pendPad, 'Machine control — pendant', 'press a key', () => {
-  if (!pendHover) { say('You', 'A membrane keypad. Point at a key and press E.'); return; }
+  if (!pendHover) { say('You', 'A membrane keypad. DIAL −/+ sets the cut, PRED −/+ states your guess, both in µm of radius. Point at a key and press E.'); return; }
   if (REC) REC.action('pendant_key', { key: pendHover.id, label: pendHover.label,
     clock_min: GAME ? GAME.clock_min : null });
   pressKey(pendHover.id);
@@ -3364,7 +3364,7 @@ function setPrediction(um) {
   predicted_um = um;
   if (REC) REC.action('predict', { predicted_um: um, dial_um: biteCmd_um,
     pass_index: GAME ? GAME.history.length : 0, clock_min: GAME ? GAME.clock_min : null });
-  toast(`You expect the dial to remove <b>${um} µm of radius</b>. Take the cut.`, 2200);
+  toast(`You expect this cut to take off <b>${um} µm of radius</b> — your guess, now on the EXPECT row. Take the cut.`, 2200);
 }
 
 
@@ -3443,7 +3443,7 @@ function machinePanel() {
          work — a machinist who knows them should not be slowed down — but the
          thing the game POINTS AT is the machine in front of you.
          WIDE, because it is a sentence: see the note beside `FW`. */
-      ? FW('you expect', '<i>not stated — aim at <b>PRED −</b> or <b>PRED +</b> on the pendant and press <kbd>E</kbd></i>')
+      ? FW('you expect', '<i>not stated — PRED −/+ steps your guess in µm of radius, not the dial. Aim at a PRED key on the pendant and press <kbd>E</kbd></i>')
       : F('you expect', `${predicted_um} µm of radius`)) +
     (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm of radius <span class="pair"><i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} µm of radius vs dialled in)</i></span>`) : '') +
     /* THE LEGEND IS GONE. It was three rows of `kbd` tags teaching a control
@@ -3991,7 +3991,7 @@ function doCut() {
   if (predicted_um === null) {
     if (REC) REC.refusal('cut', 'NO_PREDICTION', { clock_min: g.clock_min, dial_um: biteCmd_um });
     toast('<b>How much will it take off?</b> Say what you expect first — ' +
-      'the pendant\u2019s <b>PRED \u2212 / PRED +</b> keys — then cut.', 5200);
+      'the pendant\u2019s <b>PRED \u2212 / PRED +</b> keys step your guess, not the dial — then cut.', 5200);
     return;
   }
   if (g.machine.edgeR_cold_mm === null) doTouchOff();

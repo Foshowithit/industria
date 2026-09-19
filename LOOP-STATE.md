@@ -546,6 +546,36 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-19** — PRED/EXPECT/DIAL COPY WAVE (`after-55`; `index.html`,
+  `INDUSTRIA-single-file.html`, this file). What was wrong before: PRED was
+  never defined on first read — the pendant's EXPECT row read "-- not said --",
+  the no-key say line named no keys, the prediction toast said "the dial [will]
+  remove" (the guess wearing the dial's verb), and the NO_PREDICTION refusal
+  named the PRED keys without saying what they step; two independent cold
+  viewers stopped on it. Shipped copy-only at five sites, no derivation touched:
+  the EXPECT row names its source ("-- PRED keys say it --"), the no-key say
+  binds DIAL to the cut and PRED to the guess in µm of radius, the toast answers
+  where the number lives ("your guess, now on the EXPECT row"), the refusal says
+  the keys "step your guess, not the dial". Gates: 76 / 137 / 69 / 70+1 (the
+  SCRAP failure is the model), bundle `63d99371b488` · 9 modules, tree build-sha
+  `f8434a07217d…` identical to the `after-55` manifest. Sighted reviewer (MODEL,
+  full frames) SHIP 10/10, legs A–E PASS (`after-55/VERDICT.md`); all ten frames
+  self-read this run. ADJUDICATION vs the cold re-run (`after-55/COLD.md`, on
+  disk): its seven stops are none of them this wave — the clipped scoring
+  readout ("of r" / "dialle") and the log fade are proven pre-existing by stash
+  test on the clean tip (identical PROBE FAIL with the wave stashed); the 08
+  "expect 200 with 0 dialled" triple is drive state (`I.predict(200)` stepped
+  with no dial command, the F4 differentiator), not a game derivation; dial
+  polysemy, EXPECT triple-naming, instrument fiction, agency gaps, and the
+  frame-10 payoff are separate named items. Residuals, recorded as follow-ups
+  not reopenings: DIAL still means position, command, and pending value in one
+  noun; PRED/EXPECT/"you expect" still triple-name the guess; the scoring row
+  still overflows ~66px (pre-existing layout item); shot 08's drive should step
+  PRED from a calibrated value or show the stepping; PRED's purpose (what the
+  guess feeds) is still never stated — the 200 µm ladder meaning item. Next:
+  due-vs-van, Earl never visible, calipers-vs-gauge, 200 µm ladder, or those
+  residuals. F6 stays GATED.
+
 - **2026-09-19** — RADIUS-vs-DIAMETER SHIPS: EVERY BORE NUMBER WEARS ITS AXIS
   (`after-54`; `index.html`, `shop.mjs`, `INDUSTRIA-single-file.html`, this
   file). What was wrong before: the dial, the bite, the stock, the EXPECT row,
