@@ -3199,7 +3199,9 @@ add(RACK, 'Finished-part rack — by the roll-up door', 'check it', () => {
     (GAME.courier.left
       ? (send.length || rework.length || GONE_SENT ? 'It has been and gone — with the part.'
                                   : 'It has been and gone — <b>with nothing</b>.')
-      : `${W.hhmm(G.departsMin(GAME.job))} is when it stops mattering what you are about to do.`));
+      : `The job is due ${W.hhmm(GAME.job.deadline_min)} — ship after that and it pays ` +
+        `${(GAME.job.late_credit * 100).toFixed(0)}%, not full. Anything not on the rack by ` +
+        `${W.hhmm(G.departsMin(GAME.job))} does not go at all.`));
 }, () => true);
 
 add(SCRAPBIN, 'Scrap bin — rust, dents, dead parts', 'look in it', () => {
