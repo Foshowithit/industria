@@ -156,10 +156,10 @@ export function claimStandingDelta(claimed_um, true_um, bandWidth_um) {
      charge: trust beside a fine reads as a contradiction. The charge is for
      their rework (the note on the ship says so); this sentence is about the
      number you gave them, so it names the word and excludes the part. */
-  if (ae <= band * 0.2) return { delta: 8, note: `Your reading was ${ae.toFixed(1)} µm out — the figure you gave them held, so they trust your word, not the part.` };
-  if (ae <= band * 0.5) return { delta: 2, note: `Your reading was ${ae.toFixed(1)} µm out. Close enough to be believed.` };
-  if (ae <= band) return { delta: -6, note: `Your reading was ${ae.toFixed(1)} µm out. They noticed.` };
-  return { delta: -12, note: `Your reading was ${ae.toFixed(1)} µm out — you were not measuring, you were hoping.` };
+  if (ae <= band * 0.2) return { delta: 8, note: `Your reading was ${ae.toFixed(1)} µm out on the diameter — the figure you gave them held, so they trust your word, not the part.` };
+  if (ae <= band * 0.5) return { delta: 2, note: `Your reading was ${ae.toFixed(1)} µm out on the diameter. Close enough to be believed.` };
+  if (ae <= band) return { delta: -6, note: `Your reading was ${ae.toFixed(1)} µm out on the diameter. They noticed.` };
+  return { delta: -12, note: `Your reading was ${ae.toFixed(1)} µm out on the diameter — you were not measuring, you were hoping.` };
 }
 
 /* ── THE RATE ──────────────────────────────────────────────────────────────
@@ -272,9 +272,9 @@ export function recordDelivery(shop, {
      numbers, in their voice, so the player can see what the office saw. */
   const width = band_um || 16;
   const measured = true_um === null ? 'no measurement came back'
-    : `${true_um >= 0 ? '+' : ''}${true_um.toFixed(1)} µm on a ${width.toFixed(0)} µm band`;
+    : `${true_um >= 0 ? '+' : ''}${true_um.toFixed(1)} µm on the diameter (${width.toFixed(0)} µm band)`
   const said = claimed_um === null ? 'you did not say what you thought it was'
-    : `you told them ${claimed_um >= 0 ? '+' : ''}${claimed_um.toFixed(1)} µm`;
+    : `you told them ${claimed_um >= 0 ? '+' : ''}${claimed_um.toFixed(1)} µm on the diameter`
   c.last_report = entry;
   entry.report = `${true_um === null ? 'Measured' : 'Their gauge read ' + measured}, and ${said}.` +
     (claim.note ? ' ' + claim.note : '');
@@ -385,9 +385,9 @@ export function letterFor(shop, { client, entries }) {
     lines.push({
       job: e.job_id,
       what: measured === null ? 'not measured by us'
-        : `we made ${measured >= 0 ? '+' : ''}${measured.toFixed(1)} µm of a ${band.toFixed(0)} µm band`,
+        : `we made ${measured >= 0 ? '+' : ''}${measured.toFixed(1)} µm on the diameter (${band.toFixed(0)} µm band)`,
       said: claimed === null ? 'you gave us no figure'
-        : `you gave us ${claimed >= 0 ? '+' : ''}${claimed.toFixed(1)} µm`,
+        : `you gave us ${claimed >= 0 ? '+' : ''}${claimed.toFixed(1)} µm on the diameter`,
       verdict,
       money: e.net,
       agreed: e.claim_error_um !== null && Math.abs(e.claim_error_um) <= band * 0.2,

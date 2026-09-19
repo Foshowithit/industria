@@ -496,9 +496,9 @@ function revealLine() {
   const gap_um = read_um - revealed.err_um;
   return `<span style="color:#8b98a6">Customer CMM: true bore ` +
     `<b style="color:#e8edf2">Ø${revealed.true_mm.toFixed(4)}</b> mm at 20 °C, ` +
-    `${revealed.err_um >= 0 ? '+' : ''}${revealed.err_um.toFixed(1)} µm vs nominal. ` +
-    `Your last gauge reading was ${read_um >= 0 ? '+' : ''}${read_um.toFixed(1)} µm vs nominal — ` +
-    `your reading was ${Math.abs(gap_um).toFixed(1)} µm out.</span>`;
+    `${revealed.err_um >= 0 ? '+' : ''}${revealed.err_um.toFixed(1)} µm on the diameter vs nominal. ` +
+    `Your last gauge reading was ${read_um >= 0 ? '+' : ''}${read_um.toFixed(1)} µm on the diameter vs nominal — ` +
+    `your reading was ${Math.abs(gap_um).toFixed(1)} µm out on the diameter.</span>`;
 }
 let phase = 'ARRIVE';
 let earlIdleSince = 0, earlSaid = {}, lastEarlAt = -99;
@@ -1035,8 +1035,8 @@ function paintPendant() {
     ctx.font = '700 30px ui-monospace, Menlo, monospace';
     ctx.fillStyle = hi ? '#e8a33d' : '#a8e6bd'; ctx.textAlign = 'right'; ctx.fillText(v, 494, y);
   };
-  row(46, 'DIAL', `${biteCmd_um} um`);
-  row(96, 'EXPECT', predicted_um === null ? '-- not said --' : `${predicted_um} um`, predicted_um === null);
+  row(46, 'DIAL', `${biteCmd_um} um radius`);
+  row(96, 'EXPECT', predicted_um === null ? '-- not said --' : `${predicted_um} um radius`, predicted_um === null);
   row(146, 'PASSES', String(g.passes));
   row(192, 'SPINDLE', g.machine.spindle_on ? 'RUNNING' : 'STOPPED',
       g.machine.spindle_on);
@@ -2135,7 +2135,7 @@ function takeInHand(partId) {
      because the number in the hand is the failure, not the name. */
   const offUm = (dia - GAME.job.nominal_mm) * 1000;
   say('You', `<b>${partId}</b> — a Ø${GAME.job.nominal_mm} bearing housing, ` +
-    `bore came out ${Math.abs(offUm).toFixed(1)} µm ${offUm < 0 ? 'small' : 'large'} ` +
+    `bore came out ${Math.abs(offUm).toFixed(1)} µm ${offUm < 0 ? 'small' : 'large'} on the diameter ` +
     `(Ø${dia.toFixed(4)} mm). Turn your hand to look at it; ` +
     `<b>E</b> again to put it back on the rack.`);
   /* THE LOG PRINTS EVENTS AND MEASUREMENTS, NEVER A COUNT OF STATE. The header's
@@ -2759,7 +2759,7 @@ function pressKey(id) {
     case 'dial_up': {
       const up = id === 'dial_up';
       const v = stepIn(DIALS, biteCmd_um, up ? 1 : -1);
-      if (v === biteCmd_um) { toast(`Dial is already at its ${up ? 'deepest' : 'finest'}: <b>${v} µm</b>.`, 1800); return; }
+      if (v === biteCmd_um) { toast(`Dial is already at its ${up ? 'deepest' : 'finest'}: <b>${v} µm of radius</b>.`, 1800); return; }
       biteCmd_um = v;
       if (REC) REC.action('set_dial', { dial_um: v, key: 'pendant', clock_min: GAME ? GAME.clock_min : null });
       toast(`Dial set to <b>${v} µm</b> on the radius.`, 1800);
@@ -2839,12 +2839,12 @@ add(CHIP_TRAY, 'Chip tray — what came off the last pass', 'look in it', () => 
   say('Chip tray',
     `<b>${c.colour_name}</b> chip · <b>${c.t2_um.toFixed(0)} µm</b> thick · ` +
     `<b>${c.width_um.toFixed(0)} µm</b> wide · ${c.mass_g.toFixed(1)} g<br>` +
-    `the dial said <b>${c.bite_cmd_um.toFixed(0)} µm</b> and the bar took ` +
-    `<b>${c.bite_realised_um.toFixed(1)} µm</b>` +
+    `the dial said <b>${c.bite_cmd_um.toFixed(0)} µm of radius</b> and the bar took ` +
+    `<b>${c.bite_realised_um.toFixed(1)} µm of radius</b>` +
     (Math.abs(surplus) >= 0.05
       ? surplus > 0
-        ? ` — <b>+${surplus.toFixed(1)} µm</b> wider than you asked for`
-        : ` — <b>${Math.abs(surplus).toFixed(1)} µm</b> short of what you asked for`
+        ? ` — <b>+${surplus.toFixed(1)} µm of radius</b> wider than you asked for`
+        : ` — <b>${Math.abs(surplus).toFixed(1)} µm of radius</b> short of what you asked for`
       : '') +
     `<br><br>` +
     (c.breaks
@@ -2854,7 +2854,7 @@ add(CHIP_TRAY, 'Chip tray — what came off the last pass', 'look in it', () => 
   logLine(`Chip: <b>${c.colour_name}</b>, <b>${c.t2_um.toFixed(0)} µm</b> thick, ` +
     `<b>${c.width_um.toFixed(0)} µm</b> wide (` +
     (surplus >= 0 ? `+${surplus.toFixed(1)}` : `${Math.abs(surplus).toFixed(1)} short of`) +
-    ` the dial), ${c.mass_g.toFixed(1)} g.`);
+    ` of radius on the dial), ${c.mass_g.toFixed(1)} g.`);
   if (REC) REC.action('read_chip', { colour: c.colour_name,
     t2_um: c.t2_um, width_um: c.width_um, mass_g: c.mass_g,
     surplus_um: surplus, breaks: c.breaks });
@@ -2968,12 +2968,12 @@ add(TERMINAL, 'Shop system — console', 'read it', () => {
   } else {
     const f = G.forecastPass(GAME, { bite_mm: biteCmd_um / 1000, feed_mm_rev: roughFeed_mm_rev });
     if (!f) body += `<br><br>I cannot model that.`;
-    else if (f.refused) body += `<br><br>At <b>${biteCmd_um} µm</b> the machine will refuse it ` +
+    else if (f.refused) body += `<br><br>At <b>${biteCmd_um} µm of radius</b> the machine will refuse it ` +
       `(${String(f.why).replace(/_/g, ' ').toLowerCase()}). If you take that cut you will get a ` +
       `refusal, not a part.`;
     else {
       G.claimPass(GAME, f.coldDia_mm, { dial_um: biteCmd_um });
-      body += `<br><br>At <b>${biteCmd_um} µm</b> on the dial, I make that ` +
+      body += `<br><br>At <b>${biteCmd_um} µm of radius</b> on the dial, I make that ` +
         `<b>Ø${f.coldDia_mm.toFixed(4)} mm</b> cold.`;
       body += `<br><br><i>I will be told whether I was right when you cut it.</i>`;
     }
@@ -3045,7 +3045,7 @@ function readBook() {
   const agree = Math.abs(mine - theirs) < 0.6;
   const body =
     `<b>${b.bar}</b> in ${GAME.mat.label}<br>` +
-    `Take <b>${b.bite_mm.toFixed(2)} mm</b> at <b>${b.feed_mm_rev.toFixed(2)} mm/rev</b>.<br><br>` +
+    `Take <b>${b.bite_mm.toFixed(2)} mm of radius</b> at <b>${b.feed_mm_rev.toFixed(2)} mm/rev</b>.<br><br>` +
     `<i>Recommended for ${b.assumes.note}: condition ` +
     `${b.assumes.machineCondition}, bar at ${(GAME.toolSpec.D * 2.5).toFixed(0)} mm out.</i><br>` +
     `<i>This machine is at condition ${GAME.machine.condition.toFixed(0)} — ` +
@@ -3057,8 +3057,8 @@ function readBook() {
       roughFeed_mm_rev = b.feed_mm_rev;
       roughBite_mm = b.bite_mm;
       refreshLoadMeter();
-      logLine(`Set to the book: bite <b>${b.bite_mm.toFixed(2)} mm</b> ` +
-        `(${biteCmd_um} µm on the dial) at <b>${b.feed_mm_rev.toFixed(2)} mm/rev</b>.`);
+      logLine(`Set to the book: bite <b>${b.bite_mm.toFixed(2)} mm of radius</b> ` +
+        `(${biteCmd_um} µm of radius on the dial) at <b>${b.feed_mm_rev.toFixed(2)} mm/rev</b>.`);
       /* The next thing the player should do is check it against the meter, so
          the game says so once and then never again. */
       if (!earlSaid.bookChecked) {
@@ -3364,7 +3364,7 @@ function setPrediction(um) {
   predicted_um = um;
   if (REC) REC.action('predict', { predicted_um: um, dial_um: biteCmd_um,
     pass_index: GAME ? GAME.history.length : 0, clock_min: GAME ? GAME.clock_min : null });
-  toast(`You expect the dial to remove <b>${um} µm</b>. Take the cut.`, 2200);
+  toast(`You expect the dial to remove <b>${um} µm of radius</b>. Take the cut.`, 2200);
 }
 
 
@@ -3444,8 +3444,8 @@ function machinePanel() {
          thing the game POINTS AT is the machine in front of you.
          WIDE, because it is a sentence: see the note beside `FW`. */
       ? FW('you expect', '<i>not stated — aim at <b>PRED −</b> or <b>PRED +</b> on the pendant and press <kbd>E</kbd></i>')
-      : F('you expect', `${predicted_um} µm`)) +
-    (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm <span class="pair"><i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} vs dialled in)</i></span>`) : '') +
+      : F('you expect', `${predicted_um} µm of radius`)) +
+    (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm of radius <span class="pair"><i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} µm of radius vs dialled in)</i></span>`) : '') +
     /* THE LEGEND IS GONE. It was three rows of `kbd` tags teaching a control
        scheme, which is the one thing §48 forbids outright — and the build's own
        gate report counted it as its largest remaining debt. The controls are on
@@ -3478,7 +3478,7 @@ function machinePanel() {
          19.970 only reads as that subtraction if both are carried to the third
          place. Two decimals turned a defence into a coincidence. */
       `<div class="row"><i>stock</i><span>${(GAME.part.holeDia_cold_mm / 2).toFixed(3)} mm radius</span></div>` +
-      `<div class="row"><i>stock to band top</i><span>${bore.stock_to_band_um.toFixed(0)} µm</span></div>` +
+      `<div class="row"><i>stock to band top</i><span>${bore.stock_to_band_um.toFixed(0)} µm of radius</span></div>` +
       /* three thermometers, one row: a machine's thermal state is read as a
          set, and the three rows it took were the difference between this
          column fitting above the log and printing through it */
@@ -3497,10 +3497,10 @@ function machinePanel() {
               .filter((t) => Math.abs(t.um) >= 0.05)
               .map((t) => [String(t.name).replace(/\s*\(.*\)$/, ''), t.um.toFixed(1)]);
             const total = printed.reduce((a, r) => a + Number(r[1]), 0).toFixed(1);
-            return `<div class="row" style="margin-top:6px"><i>why the bore is wrong</i><span></span></div>` +
+            return `<div class="row" style="margin-top:6px"><i>why the bore is wrong (radius)</i><span></span></div>` +
               printed.map(([name, um]) => `<div class="row"><i>${name}</i>` +
                 `<span>${Number(um) > 0 ? '+' : ''}${um} µm</span></div>`).join('') +
-              `<div class="row"><i><b>total</b></i><span><b>${total} µm</b></span></div>`;
+              `<div class="row"><i><b>total</b></i><span><b>${total} µm of radius</b></span></div>`;
           })()
         : '');
     /* AN EMPTY PANEL IS A DARK RECTANGLE ON THE WALL. It appears when the
@@ -3559,7 +3559,7 @@ function doMeasure() {
      machine's truth (the whole subject of this shop) could not be worked out
      from the two printed numbers. */
   logLine(`Gauge says <b>Ø${r.reading_mm.toFixed(4)}</b> mm at ${r.partC.toFixed(1)} °C ` +
-    `(±${r.sigma_um.toFixed(2)} µm) — ${(off * 1000).toFixed(1)} µm from nominal. ` +
+    `(±${r.sigma_um.toFixed(2)} µm) — ${(off * 1000).toFixed(1)} µm on the diameter from nominal. ` +
     `The dial has <b>${bore.stock_to_band_um.toFixed(0)} µm</b> of radius left under the top of the band.`);
   if (!earlSaid.corrected && Math.abs(off) > 2) {
     earlSaid.corrected = true; SEEN.corrected = true;
@@ -3578,7 +3578,7 @@ function doTouchOff() {
     if (REC) REC.action('touch_off', { clock_min: g.clock_min, first: true,
       coldDia_mm: g.part.holeDia_cold_mm });
     logLine('<b>Touch-off.</b> Dial zeroed on the wall as it stands. Every number from ' +
-      'here is relative to this datum.');
+      'here is relative to this datum. The band is a diameter; the dial moves radius, half of it.');
     say('You', 'The bar just kissed the wall. Dial is zero here.');
   } else { if (REC) REC.action('touch_off', { clock_min: g.clock_min, first: false }); toast('Already touched off.', 1600); }
 }
@@ -3710,7 +3710,7 @@ function loadMeterHTML() {
     const bar = (label) => `<div class="lm"><i>${label}</i>` +
       `<span class="lmt"><b style="width:0%"></b></span><em>—</em></div>`;
     return bar('power') + bar('torque') + bar('rpm') + bar('chatter') +
-      `<div class="lmsub">bite ${roughBite_mm.toFixed(2)} feed ${roughFeed_mm_rev.toFixed(2)}<br>${plate}</div>`;
+      `<div class="lmsub">bite ${roughBite_mm.toFixed(2)} (radius) feed ${roughFeed_mm_rev.toFixed(2)}<br>${plate}</div>`;
   }
   /* TRIED: the meter reports the last REAL cut at this setting. */
   const bar = (label, frac) => {
@@ -3725,7 +3725,7 @@ function loadMeterHTML() {
     bar('rpm', t.rpm_frac) + bar('chatter', t.chatter_frac) +
     `<div class="lmsub">${t.F_mean_N.toFixed(0)} N · sag ${t.sag_um.toFixed(1)} µm · ` +
     `${t.cut_min.toFixed(2)} min/pass<br>` +
-    `<span style="opacity:.7">bite ${roughBite_mm.toFixed(2)} feed ${roughFeed_mm_rev.toFixed(2)} — ` +
+    `<span style="opacity:.7">bite ${roughBite_mm.toFixed(2)} (radius) feed ${roughFeed_mm_rev.toFixed(2)} — ` +
     `${tried.n} attempt${tried.n === 1 ? '' : 's'}${tried.refused && tried.refused_n ? `, ${tried.refused_n} refused` : ''}</span></div>`;
 }
 
@@ -3776,7 +3776,7 @@ function stepRoughBite(dir) {
   roughBite_mm = ROUGH_BITES_MM[n];
   if (REC) REC.action('set_rough', { bite_mm: roughBite_mm, feed_mm_rev: roughFeed_mm_rev,
     clock_min: GAME ? GAME.clock_min : null });
-  toast(`Roughing bite <b>${roughBite_mm.toFixed(2)} mm</b>` +
+  toast(`Roughing bite <b>${roughBite_mm.toFixed(2)} mm of radius</b>` +
     (roughBite_mm >= 2 ? ' — that is a serious cut.' : '.'), 1800);
   refreshLoadMeter();
 }
@@ -3979,9 +3979,9 @@ function doRough() {
   const nomR_mm = g.job.nominal_mm / 2;
   logLine(`Roughed <b>${r.passes.length} passes</b> in ${r.minutes.toFixed(1)} min. ` +
     `Dial now reads <b>${dialR_mm.toFixed(2)} mm</b> radius. ` +
-    `Last pass: dial ${last.bite_cmd_um.toFixed(1)} µm, removed ${last.bite_realised_um.toFixed(1)} µm.`);
+    `Last pass: dial ${last.bite_cmd_um.toFixed(1)} µm of radius, removed ${last.bite_realised_um.toFixed(1)} µm of radius.`);
   toast(`Roughing done. The dial reads ${dialR_mm.toFixed(2)} mm radius. ` +
-    `Measure, then sneak up on ${nomR_mm.toFixed(2)} mm.`, 5600);
+    `Measure, then sneak up on ${nomR_mm.toFixed(2)} mm of radius.`, 5600);
 }
 function doCut() {
   const g = GAME;
@@ -4024,8 +4024,8 @@ function doCut() {
   g.machine.spindle_on = true;
   if (audioReady) { AUD.cutEnter('mine', { tooth_Hz: 60, gain: 0.3 }); AUD.clack({ gain: 0.4, pitch: 1200 }); }
   const surplus = rec.bite_realised_um - rec.bite_cmd_um;
-  logLine(`Pass ${rec.n}: dial <b>${rec.bite_cmd_um.toFixed(1)} µm</b> → removed ` +
-    `<b>${rec.bite_realised_um.toFixed(1)} µm</b> (${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)}). ` +
+  logLine(`Pass ${rec.n}: dial <b>${rec.bite_cmd_um.toFixed(1)} µm of radius</b> → removed ` +
+    `<b>${rec.bite_realised_um.toFixed(1)} µm of radius</b> (${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)}). ` +
     `Dial is now at <b>${g.machine.edgeR_cold_mm.toFixed(2)} mm</b> radius. ` +
     `Measure it if you want to know where it actually is.`);
   /* THE CHIP'S THICKNESS AND THE DIAL ARE DIFFERENT DIMENSIONS, and this line
@@ -4036,7 +4036,7 @@ function doCut() {
      the real number the line would teach a false comparison. The surplus lives
      on the WIDTH, so that is what is set against the dial. */
   if (rec.n === 1) toast(`<b>${info.colour_name} chip.</b> ${info.t2_um.toFixed(0)} µm thick. ` +
-    `The dial said ${rec.bite_cmd_um.toFixed(0)} µm and it came off ` +
+    `The dial said ${rec.bite_cmd_um.toFixed(0)} µm of radius and it came off ` +
     `<b>${info.width_um.toFixed(0)} µm wide</b>.`, 5200);
   /* ── YOUR PREDICTION AGAINST THE MACHINE ──────────────────────────────────
    * The design lead's exact form: "You expected 20.0 µm. Machine removed
@@ -4044,11 +4044,11 @@ function doCut() {
    * game says nothing about it — discovering that the difference is a constant
    * is the player's inference to make, and it is the one the round measures. */
   const diff = rec.bite_realised_um - predicted;
-  logLine(`You expected <b>${predicted.toFixed(1)} µm</b>. Machine removed ` +
-    `<b>${rec.bite_realised_um.toFixed(1)} µm</b>. Difference: ` +
-    `<b>${diff >= 0 ? '+' : ''}${diff.toFixed(1)} µm</b>.`);
-  if (Math.abs(diff) >= 1) toast(`Expected <b>${predicted.toFixed(1)} µm</b> · removed ` +
-    `<b>${rec.bite_realised_um.toFixed(1)} µm</b> · difference <b>${diff >= 0 ? '+' : ''}${diff.toFixed(1)} µm</b>`, 4200);
+  logLine(`You expected <b>${predicted.toFixed(1)} µm of radius</b>. Machine removed ` +
+    `<b>${rec.bite_realised_um.toFixed(1)} µm of radius</b>. Difference: ` +
+    `<b>${diff >= 0 ? '+' : ''}${diff.toFixed(1)} µm of radius</b>.`);
+  if (Math.abs(diff) >= 1) toast(`Expected <b>${predicted.toFixed(1)} µm of radius</b> · removed ` +
+    `<b>${rec.bite_realised_um.toFixed(1)} µm of radius</b> · difference <b>${diff >= 0 ? '+' : ''}${diff.toFixed(1)} µm of radius</b>`, 4200);
 
   /* And the system's claim, settled in the same breath. See reportSystemClaim. */
   reportSystemClaim(claimBefore);
@@ -4672,7 +4672,7 @@ const BEATS = [
   { at: 369, done: false, run() {
       if (GAME.tool) return;
       say('Earl', "\u201cBar's on the board. Take the \u00d820 and keep it short \u2014 long bars " +
-        "sing. Dial it and sneak up on it. Job's due half ten.\u201d");
+        "sing. That dial\u2019s radius, not diameter \u2014 sneak up on it. Job's due half ten.\u201d");
       logLine('Job: <b>\u00d840 H6, 30 deep</b> \u2014 band is 16 \u00b5m wide. Due 10:30. Rate \u00a31,850.');
   } },
   { at: 373, done: false, run() {
