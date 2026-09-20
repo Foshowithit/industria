@@ -1378,29 +1378,36 @@ export function drawingSheet(d, { width = 1400 } = {}) {
     ctx.moveTo(col(0.78), row(2)); ctx.lineTo(col(0.78), by + TBH);
     ctx.stroke();
     const p = W * 0.010;
-    label('CLIENT', bx + p, row(0) + TBH * 0.12, W * 0.0085, FAINT, 'left', 400, W * 0.012);
-    label(String(d.client).toUpperCase(), bx + p, row(0) + TBH * 0.30, W * 0.0135, INK, 'left', 700);
-    label('TITLE', bx + p, row(1) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
-    label(String(d.title).slice(0, 40), bx + p, row(1) + TBH * 0.28, W * 0.0125, INK, 'left', 600);
-    label('MATERIAL', bx + p, row(2) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
-    label(String(d.material).toUpperCase(), bx + p, row(2) + TBH * 0.28, W * 0.0115, INK, 'left', 600);
+    /* Every caption sits at the TOP of its own cell with its value directly
+       beneath it, both inside the same band. Before, the value sat ~0.30 of a
+       block below its cell's top rule — past the rule into the next cell —
+       while the next caption sat 0.10 below that same rule, so each caption
+       overlapped the value ABOVE it (same x, glyph edges crossing) and read as
+       that cell's footnote. Now own-pair gaps (~11 px glyph edge) run tighter
+       than neighbour gaps (~18 px): the caption belongs to what is under it. */
+    label('CLIENT', bx + p, row(0) + TBH * 0.07, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(String(d.client).toUpperCase(), bx + p, row(0) + TBH * 0.18, W * 0.0135, INK, 'left', 700);
+    label('TITLE', bx + p, row(1) + TBH * 0.07, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(String(d.title).slice(0, 40), bx + p, row(1) + TBH * 0.18, W * 0.0125, INK, 'left', 600);
+    label('MATERIAL', bx + p, row(2) + TBH * 0.07, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(String(d.material).toUpperCase(), bx + p, row(2) + TBH * 0.18, W * 0.0115, INK, 'left', 600);
     /* the last row keeps its own figures inside its band: every band above
        pairs label with value across the rule BELOW the band, but there is no
        band below the last one — at the straddle offsets the DRAWN, SCALE and
        UNITS figures landed past the block's bottom border, across the zone
        strip and the sheet's own frame line. */
-    label('DRAWN', bx + p, row(3) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label('DRAWN', bx + p, row(3) + TBH * 0.07, W * 0.0085, FAINT, 'left', 400, W * 0.012);
     label(d.drawn_by, bx + p, row(3) + TBH * 0.175, W * 0.0115, INK, 'left', 600);
     /* the right-hand cells: the numbers a shop actually reads */
-    label('DWG No.', col(0.54) + p, row(1) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
-    label(d.number, col(0.54) + p, row(1) + TBH * 0.30, W * 0.0155, INK, 'left', 700);
-    label('REV', col(0.54) + p, row(2) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
-    label(d.rev, col(0.54) + p, row(2) + TBH * 0.30, W * 0.017, INK, 'left', 700);
-    label('SCALE', col(0.54) + p, row(3) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label('DWG No.', col(0.54) + p, row(1) + TBH * 0.07, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(d.number, col(0.54) + p, row(1) + TBH * 0.18, W * 0.0155, INK, 'left', 700);
+    label('REV', col(0.54) + p, row(2) + TBH * 0.07, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(d.rev, col(0.54) + p, row(2) + TBH * 0.18, W * 0.017, INK, 'left', 700);
+    label('SCALE', col(0.54) + p, row(3) + TBH * 0.07, W * 0.0085, FAINT, 'left', 400, W * 0.012);
     label(d.scale, col(0.54) + p, row(3) + TBH * 0.175, W * 0.0125, INK, 'left', 600);
-    label('SHEET', col(0.80) + p, row(2) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
-    label(d.sheet, col(0.80) + p, row(2) + TBH * 0.30, W * 0.0125, INK, 'left', 600);
-    label('UNITS', col(0.80) + p, row(3) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label('SHEET', col(0.80) + p, row(2) + TBH * 0.07, W * 0.0085, FAINT, 'left', 400, W * 0.012);
+    label(d.sheet, col(0.80) + p, row(2) + TBH * 0.18, W * 0.0125, INK, 'left', 600);
+    label('UNITS', col(0.80) + p, row(3) + TBH * 0.07, W * 0.0085, FAINT, 'left', 400, W * 0.012);
     label(d.units, col(0.80) + p, row(3) + TBH * 0.175, W * 0.0125, INK, 'left', 600);
     /* the third-angle projection symbol: two circles and a trapezoid, which is
        the single most recognisable mark on any drawing. It lives in the CLIENT

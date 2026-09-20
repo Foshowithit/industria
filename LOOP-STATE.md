@@ -566,6 +566,27 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-19** — CAPTION TOPS SHIP (`after-60`; `materials.mjs`,
+  `INDUSTRIA-single-file.html`, this file). What was wrong before: the
+  drawing sheet's title block set every caption at the BOTTOM of the cell
+  above its value (captions +0.10/+0.12 of a block below their cell's top
+  rule, values +0.28/+0.30 — past the rule into the next cell), so each
+  caption overlapped the value above it and read as that cell's footnote
+  ("HALVORSEN PUMPS / TITLE"). Same canvas-texture class as the last wave:
+  the leakwatch watches DOM text, a caption drawn into a texture is on its
+  own honour. Shipped copy-layout only, no sheet fact moved: captions to
+  +0.07 with values directly beneath at +0.18, own-pair gaps tighter than
+  neighbour gaps; last row (DRAWN / SCALE / UNITS at +0.175) and the
+  third-angle symbol untouched, still inside the border. Gates: 76 / 137 /
+  69 / 70+1 (the SCRAP failure is the model), bundle `cc11d571772d` · 9
+  modules, tree build-sha `66be5078…` identical to the `after-60` manifest.
+  Own eyes at 3x zoom first, then sighted reviewer (MODEL, all ten full
+  frames + title-block zoom) SHIP 10/10 (`after-60/VERDICT.md`), retiring
+  the after-59 P2. Two P2 nits carried, not this wave: frame-03 speech line
+  ~3 px from the log panel edge; frame-06 held calipers occlude half the
+  keypad. Next: Earl never visible, calipers-vs-gauge, 200 µm ladder, the
+  named residuals. F6 stays GATED.
+
 - **2026-09-19** — PENDANT CLIP + THE CANVAS-TEXTURE CLASS (`after-57` NO-SHIP
   → `after-59` SHIP; `index.html`, `materials.mjs`,
   `INDUSTRIA-single-file.html`, this file). What was wrong before: the
