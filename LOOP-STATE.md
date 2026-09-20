@@ -376,6 +376,26 @@ is about, which is why it is next. Taken in this order:
   named); after-54 SHIP 10/10, tree build-sha `d34fd571…` identical to the
   manifest. Residual P2: "Band is 16 µm" (drawing note, tolerance width tied to
   the Ø40 H6 callout) could read "16 µm on the diameter" in a later pass.
+- ~~**F11 · TWO DEADLINES TWENTY MINUTES APART, NEVER EXPLAINED**~~ ✅ 2026-09-19
+  (`index.html`; `after-56` SHIP). What was wrong before: the header says the
+  job is DUE at one time and the census says the van leaves twenty minutes
+  later, and the only line that could bridge them said the van time was when
+  it "stops mattering what you are about to do" — fatalistic, and it made the
+  van clock the only deadline; two cold viewers stopped asking which clock is
+  money (COLD-A:8, COLD-B:12, COLD-B:48, COLD-A:85, COLD-A:103). Shipped
+  copy-only, one sentence, no derivation touched: the rack line's not-left
+  branch now states both stakes in the settlement register — the due clock is
+  money ("ship after that and it pays NN%, not full", echoing ship()'s own
+  "Paid at NN%") and the van clock is physical ("anything not on the rack by
+  HH:MM does not go at all", agreeing with courierBeat). Values come only from
+  fields that already exist (`deadline_min`, `late_credit`, `departsMin`);
+  header, floor corner and rack line now agree in one frame. Sighted reviewer
+  (MODEL, full frames) SHIP 10/10 (`after-56/VERDICT.md`), which recomputed
+  06:02 + 288 min = 10:50 from the screen. Residual P2, not this wave: the
+  reviewer read the pendant panel's last/realised rows clipping at the right
+  edge in frames 07–09 — pre-existing per the reviewer, same panel family as
+  the after-55 scoring-row overflow that WAS stash-proven on the clean tip;
+  one layout item covers both.
 - **F6 · THE CRATE ECONOMY — *GATED*** (decision). `BLANK_STOCK` is 3 and the
   crate draws `cl(stock_on_hand, 0, 3)` castings, and ROADMAP:122 says a shift
   can produce up to three parts. But the first casting is mounted at shift start
@@ -545,6 +565,28 @@ A run that stops and says why is worth more than one that ships a guess.
 ## 7. RUN LOG
 
 Newest first. One or two lines: what was built, what was found, what is next.
+
+- **2026-09-19** — DUE-vs-VAN BRIDGE SHIPS: THE RACK LINE SAYS WHICH CLOCK IS
+  MONEY (`after-56`; `index.html`, `INDUSTRIA-single-file.html`, this file).
+  What was wrong before: header said DUE, census said the van, and the one
+  line that could have bridged them ("HH:MM is when it stops mattering what
+  you are about to do") made the van clock the only deadline and told the
+  player when to give up; two cold viewers stopped on the pair (COLD-A:8,
+  COLD-B:12, COLD-B:48, COLD-A:85, COLD-A:103). Shipped copy-only, one
+  sentence at the rack verb: the not-left branch now states the due clock as
+  money ("ship after that and it pays NN%, not full" — ship()'s own register)
+  and the van clock as physical ("anything not on the rack by HH:MM does not
+  go at all" — courierBeat's own wording); fields already on the job
+  (`deadline_min`, `late_credit`, `departsMin`), no new derivation. Gates:
+  76 / 137 / 69 / 70+1 (the SCRAP failure is the model), bundle
+  `4979df8eb979` · 9 modules, tree build-sha `907c5c3181e0…` identical to the
+  `after-56` manifest. Sighted reviewer (MODEL, full frames) SHIP 10/10
+  (`after-56/VERDICT.md`); frames 01 and 10 self-read this run; live bytes
+  byte-identical (cmp) for both files after push. Residual P2 (reviewer,
+  pre-existing): pendant panel last/realised rows clip at the right edge in
+  07–09 — same family as the after-55 scoring-row overflow, one layout item.
+  Next: Earl never visible, calipers-vs-gauge, 200 µm ladder, the pendant
+  clip, or the named residuals. F6 stays GATED.
 
 - **2026-09-19** — PRED/EXPECT/DIAL COPY WAVE (`after-55`; `index.html`,
   `INDUSTRIA-single-file.html`, this file). What was wrong before: PRED was
