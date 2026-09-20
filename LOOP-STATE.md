@@ -566,6 +566,40 @@ A run that stops and says why is worth more than one that ships a guess.
 
 Newest first. One or two lines: what was built, what was found, what is next.
 
+- **2026-09-19** — PENDANT CLIP + THE CANVAS-TEXTURE CLASS (`after-57` NO-SHIP
+  → `after-59` SHIP; `index.html`, `materials.mjs`,
+  `INDUSTRIA-single-file.html`, this file). What was wrong before: the
+  pendant's last/realised rows clipped 66 px past the right edge at both
+  viewports (the after-56 residual — one layout fix, and it covered the
+  after-55 scoring-row family too), and the log's fade mask ate the last 6 px
+  of every final line. Then two NO-SHIP defects of the SAME class: canvas
+  textures, the blind spot LOOP-STATE §1 names — the leakwatch watches DOM
+  text, a number drawn into a texture is on its own honour. The drawing
+  sheet's title block sliced its bottom rows (DRAWN / SCALE / UNITS) across
+  the sheet border and zone strip, and the third-angle symbol crossed SHEET
+  "1 of 1" while its label ran off the sheet. The caliper scale clipped "150"
+  to "15" — end numerals centred on decade ticks sat half off the canvas.
+  Shipped: row spans shrink inside their panel (min-width:0), fade floor 6 →
+  8 px; DRAWN row moved into the last band and the symbol relocated beside
+  its own THIRD ANGLE label in the CLIENT band (mark s = TBH*0.058, centred
+  in band 0); caliper numerals clamped 6 px inside both canvas ends and
+  dropped 48 → 32 px for daylight between figures — ticks untouched, the
+  engraving still agrees with the 150 mm beam (one fact derived twice,
+  respected). Reviewer prescriptions to shorten the scale past 140 or
+  lengthen the beam were REJECTED on those same grounds. after-58 was an
+  intermediate: own eyes caught the first relocation overflowing its band
+  before any reviewer saw it. Gates: 76 / 137 / 69 / 70+1 (the SCRAP failure
+  is the model), bundle `ec0e486941df` · 9 modules, tree build-sha
+  `9558aea6…` identical to the `after-59` manifest. Sighted reviewer (MODEL,
+  full frames, zoom on both fixes) SHIP 10/10 (`after-59/VERDICT.md`), three
+  P2 nits recorded as candidates, not this wave: title-block captions sit at
+  the bottom of the cell ABOVE their value (mispairing invitation — move each
+  caption to the top of its own cell); frame-03 speech line ~3 px from the
+  log panel edge (zero spare clearance); frame-06 held calipers occlude half
+  the keypad (natural occlusion, noted only because the shot is titled "the
+  pendant"). Next: caption tops, Earl never visible, calipers-vs-gauge,
+  200 µm ladder, the named residuals. F6 stays GATED.
+
 - **2026-09-19** — DUE-vs-VAN BRIDGE SHIPS: THE RACK LINE SAYS WHICH CLOCK IS
   MONEY (`after-56`; `index.html`, `INDUSTRIA-single-file.html`, this file).
   What was wrong before: header said DUE, census said the van, and the one
