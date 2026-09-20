@@ -137,6 +137,17 @@
      and its qualifier. */
   #panel .row > span > .pair,#cutpanel .row > span > .pair,
   #budget .row > span > .pair{white-space:nowrap}
+  /* THE MOVE-DOWN THE PAIR PROMISES. The rule above says the pair rides to its
+     own line when it does not fit — but a flex item's automatic minimum is its
+     min-content, so the value span could not shrink below the pair's width and
+     the row overflowed instead: `last realised … (−0.4 µm of radius vs dialled
+     in)` ran 66 px past the panel's right edge at every viewport, measured by
+     the review-set probe at both sizes. `min-width:0` lets the span take the
+     space left over from the label, the pair wraps down whole (it is nowrap),
+     and nothing is hidden — the same discipline that removed the label
+     ellipsis: overflow is a layout bug, not something to truncate. */
+  #panel .row > span,#cutpanel .row > span,
+  #budget .row > span{min-width:0}
   #cutpanel kbd{background:#1b2229;border:1px solid #333d47;border-radius:2px;padding:0 4px;font-size:11px;color:var(--ink)}
   #panel h4{margin:0 0 8px;font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;font-weight:500}
   #panel .cut,#cutpanel .cut{margin-top:8px;padding-top:8px;border-top:1px solid #2a333d}
@@ -268,8 +279,8 @@
     display:flex;flex-direction:column-reverse;gap:2px;font-size:12px;
     padding:2px 16px 14px;
     background:linear-gradient(to top,rgba(10,14,18,.88) 0,rgba(10,14,18,.70) 56%,rgba(10,14,18,0));
-    -webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,.3) 0,#000 6px);
-    mask-image:linear-gradient(to bottom,rgba(0,0,0,.3) 0,#000 6px)}
+    -webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,.3) 0,#000 8px);
+    mask-image:linear-gradient(to bottom,rgba(0,0,0,.3) 0,#000 8px)}
   #log div{color:#aeb8c3}
   #log div b{color:var(--ink);font-weight:500}
   #log .new{color:var(--ink)}
@@ -1698,6 +1709,16 @@ CALIPERS.position.set(-0.2, 0.9045, 0.06); CALIPERS.rotation.y = 0.16;
    CALIPER_MM, so the strip cannot disagree with the label that names the
    tool. The strip now runs the full beam, because a 150 mm scale needs 150 mm
    of beam; the slider rides over it, as a slider does. */
+/* END FIGURES GET PULLED INSIDE; TICKS NEVER MOVE. The old numerals were
+   centred on their decade ticks, so the 0 sat half off the canvas's left edge
+   and the 150 half off the right — the reviewer read "…140 15" on the beam.
+   The figures are clamped 6 px inside instead. The ticks stay exactly where
+   they are — zero at the jaw face, 150 at the beam's end — because pulling a
+   TICK in would make the engraving disagree with the beam it measures, one
+   fact derived twice. The numerals drop two steps (48 to 32 px) for the same
+   reason: a pulled-in 150 at 48 px cannot sit clear of the 140 before the
+   strip runs out — at 36 px they still read as one run-on figure under the
+   held view's foreshortening; at 32 px there is daylight between them. */
 const scaleC = canvasFor(1600, 320);
 {
   const ctx = scaleC.getContext('2d');
@@ -1710,7 +1731,11 @@ const scaleC = canvasFor(1600, 320);
     ctx.lineWidth = major ? 6 : five ? 3 : 1;
     ctx.beginPath(); ctx.moveTo(x, mid);
     ctx.lineTo(x, mid - (major ? 96 : five ? 56 : 22)); ctx.stroke();
-    if (major) { ctx.fillStyle = '#1d2024'; ctx.font = '600 48px ui-monospace, Menlo, monospace'; ctx.fillText(String(mm), x, 246); }
+    if (major) {
+      ctx.fillStyle = '#1d2024'; ctx.font = '600 32px ui-monospace, Menlo, monospace';
+      const t = String(mm), half = ctx.measureText(t).width / 2 + 6;
+      ctx.fillText(t, Math.min(1600 - half, Math.max(half, x)), 246);
+    }
   }
 }
 const scaleTex = new THREE.CanvasTexture(scaleC); scaleTex.anisotropy = 4;
@@ -3447,7 +3472,14 @@ function machinePanel() {
          WIDE, because it is a sentence: see the note beside `FW`. */
       ? FW('you expect', '<i>not stated — PRED −/+ steps your guess in µm of radius, not the dial. Aim at a PRED key on the pendant and press <kbd>E</kbd></i>')
       : F('you expect', `${predicted_um} µm of radius`)) +
-    (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm of radius <span class="pair"><i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} µm of radius vs dialled in)</i></span>`) : '') +
+    /* THE QUALIFIER DOES NOT RE-STATE THE AXIS. `(−0.4 µm of radius vs dialled
+       in)` repeated the unit phrase its own row opens with, and the pair — kept
+       whole by the .pair rule above — needs to fit the span's leftover width
+       once it wraps down (~182 px): at ~245 px it could not, and the row ran
+       66 px past the panel edge. The difference is on the radius axis by
+       inheritance: the value it qualifies says "µm of radius" one phrase back,
+       and the `dialled in` row above states the axis again. */
+    (last ? F('last realised', `${last.bite_realised_um.toFixed(1)} µm of radius <span class="pair"><i>(${surplus >= 0 ? '+' : ''}${surplus.toFixed(1)} µm vs dialled in)</i></span>`) : '') +
     /* THE LEGEND IS GONE. It was three rows of `kbd` tags teaching a control
        scheme, which is the one thing §48 forbids outright — and the build's own
        gate report counted it as its largest remaining debt. The controls are on

@@ -1384,31 +1384,45 @@ export function drawingSheet(d, { width = 1400 } = {}) {
     label(String(d.title).slice(0, 40), bx + p, row(1) + TBH * 0.28, W * 0.0125, INK, 'left', 600);
     label('MATERIAL', bx + p, row(2) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
     label(String(d.material).toUpperCase(), bx + p, row(2) + TBH * 0.28, W * 0.0115, INK, 'left', 600);
+    /* the last row keeps its own figures inside its band: every band above
+       pairs label with value across the rule BELOW the band, but there is no
+       band below the last one — at the straddle offsets the DRAWN, SCALE and
+       UNITS figures landed past the block's bottom border, across the zone
+       strip and the sheet's own frame line. */
     label('DRAWN', bx + p, row(3) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
-    label(d.drawn_by, bx + p, row(3) + TBH * 0.28, W * 0.0115, INK, 'left', 600);
+    label(d.drawn_by, bx + p, row(3) + TBH * 0.175, W * 0.0115, INK, 'left', 600);
     /* the right-hand cells: the numbers a shop actually reads */
     label('DWG No.', col(0.54) + p, row(1) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
     label(d.number, col(0.54) + p, row(1) + TBH * 0.30, W * 0.0155, INK, 'left', 700);
     label('REV', col(0.54) + p, row(2) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
     label(d.rev, col(0.54) + p, row(2) + TBH * 0.30, W * 0.017, INK, 'left', 700);
     label('SCALE', col(0.54) + p, row(3) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
-    label(d.scale, col(0.54) + p, row(3) + TBH * 0.30, W * 0.0125, INK, 'left', 600);
+    label(d.scale, col(0.54) + p, row(3) + TBH * 0.175, W * 0.0125, INK, 'left', 600);
     label('SHEET', col(0.80) + p, row(2) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
     label(d.sheet, col(0.80) + p, row(2) + TBH * 0.30, W * 0.0125, INK, 'left', 600);
     label('UNITS', col(0.80) + p, row(3) + TBH * 0.10, W * 0.0085, FAINT, 'left', 400, W * 0.012);
-    label(d.units, col(0.80) + p, row(3) + TBH * 0.30, W * 0.0125, INK, 'left', 600);
+    label(d.units, col(0.80) + p, row(3) + TBH * 0.175, W * 0.0125, INK, 'left', 600);
     /* the third-angle projection symbol: two circles and a trapezoid, which is
-       the single most recognisable mark on any drawing */
+       the single most recognisable mark on any drawing. It lives in the CLIENT
+       band's free right side, beside its own name: where this used to hang —
+       down the SHEET/UNITS column from row 1 — the big circle crossed the SHEET
+       figure, the trapezoid framed the UNITS figure, and the THIRD ANGLE label
+       ran past the block's bottom border into the sheet's margin. No sheet
+       fact moved; the mark just sits where there was room for it. */
     {
-      const sx = col(0.80) + p * 2, sy = row(1) + TBH * 0.34, s = TBH * 0.16;
+      const s = TBH * 0.058, gap = W * 0.012;
+      const my = row(0) + (TBH / 4 - s * 3.4) / 2 + s;
+      const labelW = W * 0.0075 * 0.6 * 11 + W * 0.003 * 10;
+      const labelCx = bx + TBW - p - labelW / 2;
+      const mx = labelCx - labelW / 2 - gap - s * 2.6;
       line(W * 0.0016);
-      ctx.beginPath(); ctx.arc(sx, sy, s, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(sx + s * 2.1, sy, s * 0.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(mx, my, s, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(mx + s * 2.1, my, s * 0.5, 0, Math.PI * 2); ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(sx - s * 0.7, sy + s * 1.6); ctx.lineTo(sx + s * 0.7, sy + s * 1.6);
-      ctx.lineTo(sx + s * 0.35, sy + s * 2.4); ctx.lineTo(sx - s * 0.35, sy + s * 2.4);
+      ctx.moveTo(mx - s * 0.7, my + s * 1.6); ctx.lineTo(mx + s * 0.7, my + s * 1.6);
+      ctx.lineTo(mx + s * 0.35, my + s * 2.4); ctx.lineTo(mx - s * 0.35, my + s * 2.4);
       ctx.closePath(); ctx.stroke();
-      label('THIRD ANGLE', sx + s * 1.0, sy + s * 3.1, W * 0.0075, FAINT, 'center', 400, W * 0.0105);
+      label('THIRD ANGLE', labelCx, row(0) + TBH * 0.125, W * 0.0075, FAINT, 'center', 400, W * 0.003);
     }
   }
 
